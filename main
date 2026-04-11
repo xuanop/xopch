@@ -1,4 +1,4 @@
---[[ 🔑 XUAN Commander ]]--
+--[[ 🔑 XUAN Commander - 稳定单例版 ]]--
 
 -- 作者列表
 local AUTHOR_USERNAMES = {
@@ -10,7 +10,7 @@ local AUTHOR_USERNAMES = {
 local DC_CODE = "6bcp6StHey"
 local DC_URL = "https://discord.gg/" .. DC_CODE
 
--- 无头效果使用的 Mesh ID (R6 专用)
+-- 无头效果使用的 Mesh ID (仅 R6)
 local HEADLESS_MESH_ID = "rbxassetid://6686307858"
 
 -- 全局错误捕获
@@ -22,16 +22,16 @@ local function safeCall(func, ...)
     return result
 end
 
-print("[MyCommander] 脚本开始加载")
+print("[MyCommander] 脚本正在加载...")
 
--- 确保 LocalPlayer 存在
+-- 确保本地玩家存在
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer
 if not lp then
-    print("[MyCommander] 等待 LocalPlayer...")
+    print("[MyCommander] 等待本地玩家...")
     lp = Players.PlayerAdded:Wait()
 end
-print("[MyCommander] LocalPlayer 已获取:", lp.Name)
+print("[MyCommander] 本地玩家已获取:", lp.Name)
 
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -61,7 +61,7 @@ local headlessEnabled = false
 local antiAfkEnabled = false
 local antiAfkConnection = nil
 
--- 新版边缘弹射变量
+-- 边缘弹射变量 (V7)
 local edgeBoostEnabled = true
 local edgeBoostPower = 100
 local edgeBoostMinYVelocity = 1.0
@@ -88,7 +88,7 @@ end)
 local timeControlWindowActive = false
 local timeControlGui = nil
 
--- ==================== 自制重命名器状态 ====================
+-- ==================== 自定义重命名器状态 ====================
 local renamerWindowActive = false
 local renamerGui = nil
 
@@ -158,7 +158,7 @@ task.spawn(function()
         local data = HttpService:JSONDecode(res.Body)
         if data and data.msg then
             _G.lastBroadcast = data.msg
-            print("[MyCommander] 初始化广播记录:", _G.lastBroadcast)
+            print("[MyCommander] 广播记录已初始化:", _G.lastBroadcast)
         end
     end
     task.wait(1)
@@ -244,7 +244,7 @@ local function createBroadcastWindow()
     inputLabel.Size = UDim2.new(0.9, 0, 0, 25)
     inputLabel.Position = UDim2.new(0.05, 0, 0.15, 0)
     inputLabel.BackgroundTransparency = 1
-    inputLabel.Text = "输入广播消息："
+    inputLabel.Text = "输入广播消息:"
     inputLabel.TextColor3 = Color3.new(1,1,1)
     inputLabel.TextSize = 18
     inputLabel.Font = Enum.Font.GothamSemibold
@@ -258,7 +258,7 @@ local function createBroadcastWindow()
     inputBox.TextColor3 = Color3.new(1,1,1)
     inputBox.Font = Enum.Font.Gotham
     inputBox.TextSize = 16
-    inputBox.PlaceholderText = "例如：大家好！"
+    inputBox.PlaceholderText = "例如: 大家好!"
     inputBox.ClearTextOnFocus = false
     Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 8)
 
@@ -373,7 +373,7 @@ local function createTimeControlWindow()
     local restoreBtn = Instance.new("TextButton", main)
     restoreBtn.Size = UDim2.new(0.9, 0, 0, 40)
     restoreBtn.Position = UDim2.new(0.05, 0, 0.72, 0)
-    restoreBtn.Text = "还原原始时间"
+    restoreBtn.Text = "恢复原始时间"
     restoreBtn.BackgroundColor3 = Color3.fromRGB(30,30,40)
     restoreBtn.BackgroundTransparency = 0.3
     restoreBtn.TextColor3 = Color3.new(1,1,1)
@@ -450,7 +450,7 @@ local function createTimeControlWindow()
     timeControlGui = sg
 end
 
--- ==================== Toxic Inferno 自动套用 ====================
+-- ==================== 自动应用 Toxic Inferno ====================
 local function applyToxicInferno(character)
     if not character then return end
     local cosmeticsFolder = ReplicatedStorage:FindFirstChild("Items") and ReplicatedStorage.Items:FindFirstChild("Cosmetics")
@@ -478,10 +478,10 @@ local function applyToxicInferno(character)
         cloned.Parent = character
     end
 
-    print("[MyCommander] Toxic Inferno 已套用")
+    print("[MyCommander] Toxic Inferno 已应用")
 end
 
--- ==================== Headless 无头效果核心 ====================
+-- ==================== 无头效果核心 ====================
 local function applyHeadlessToCharacter(char)
     if not char then return end
 
@@ -595,7 +595,7 @@ local function applyBestKorblox()
             applyToCharacter(char)
         end)
 
-        showNotice("💀 最佳 Korblox 断脚已套用", true)
+        showNotice("💀 最佳 Korblox 已应用", true)
     end)
 end
 
@@ -614,12 +614,14 @@ local function resetKorblox()
     end)
 end
 
--- ==================== Notice 系统 ====================
+-- ==================== 通知系统 ====================
 function showNotice(msg, isPrivate)
     safeCall(function()
         local sg = PlayerGui:FindFirstChild("MyNotice") or Instance.new("ScreenGui", PlayerGui)
-        sg.Name = "MyNotice"; sg.IgnoreGuiInset = true; sg.ResetOnSpawn = false
+        sg.Name = "MyNotice"
         sg.DisplayOrder = 9999
+        sg.IgnoreGuiInset = true
+        sg.ResetOnSpawn = false
         local container = Instance.new("Frame", sg)
         container.Size = UDim2.new(0,0,0,50); container.Position = UDim2.new(0.5,0,0.08,0)
         container.BackgroundColor3 = Color3.fromRGB(15,15,20); container.BackgroundTransparency = 0.3; container.BorderSizePixel = 0
@@ -803,16 +805,16 @@ end
 local function toggleBhop(btn)
     bhopEnabled = not bhopEnabled
     if btn then
-        btn.Text = "Bhop 跳跃: " .. (bhopEnabled and "ON ✅" or "OFF ❌")
+        btn.Text = "Bhop 连跳: " .. (bhopEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = bhopEnabled and 0.5 or 0.85
     end
-    showNotice("Bhop 跳跃 " .. (bhopEnabled and "已开启" or "已关闭"), true)
+    showNotice("Bhop 连跳 " .. (bhopEnabled and "已开启" or "已关闭"), true)
 end
 
 local function toggleInfiniteJump(btn)
     infiniteJumpEnabled = not infiniteJumpEnabled
     if btn then
-        btn.Text = "🦘 无限跳跃: " .. (infiniteJumpEnabled and "ON ✅" or "OFF ❌")
+        btn.Text = "🦘 无限跳跃: " .. (infiniteJumpEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = infiniteJumpEnabled and 0.5 or 0.85
     end
     showNotice("无限跳跃 " .. (infiniteJumpEnabled and "已开启" or "已关闭"), true)
@@ -821,7 +823,7 @@ end
 local function togglePlayerEsp(btn)
     playerEspEnabled = not playerEspEnabled
     if btn then
-        btn.Text = "👤 玩家ESP: " .. (playerEspEnabled and "ON ✅" or "OFF ❌")
+        btn.Text = "👤 玩家 ESP: " .. (playerEspEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = playerEspEnabled and 0.5 or 0.85
     end
 
@@ -830,21 +832,21 @@ local function togglePlayerEsp(btn)
         table.insert(playerEspConnections, Players.PlayerAdded:Connect(function(plr)
             handlePlayerEsp(plr)
         end))
-        showNotice("👤 玩家ESP 已开启", true)
+        showNotice("👤 玩家 ESP 已开启", true)
     else
         for _, conn in ipairs(playerEspConnections) do
             conn:Disconnect()
         end
         playerEspConnections = {}
         clearPlayerEsp()
-        showNotice("👤 玩家ESP 已关闭", true)
+        showNotice("👤 玩家 ESP 已关闭", true)
     end
 end
 
 local function toggleBotEsp(btn)
     botEspEnabled = not botEspEnabled
     if btn then
-        btn.Text = "🤖 机器人ESP: " .. (botEspEnabled and "ON ✅" or "OFF ❌")
+        btn.Text = "🤖 机器人 ESP: " .. (botEspEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = botEspEnabled and 0.5 or 0.85
     end
 
@@ -852,21 +854,21 @@ local function toggleBotEsp(btn)
         refreshBotEsp()
         if botEspLoop then botEspLoop:Disconnect() end
         botEspLoop = RunService.Heartbeat:Connect(refreshBotEsp)
-        showNotice("🤖 机器人ESP 已开启", true)
+        showNotice("🤖 机器人 ESP 已开启", true)
     else
         if botEspLoop then
             botEspLoop:Disconnect()
             botEspLoop = nil
         end
         clearBotEsp()
-        showNotice("🤖 机器人ESP 已关闭", true)
+        showNotice("🤖 机器人 ESP 已关闭", true)
     end
 end
 
 local function toggleDistanceEsp(btn)
     distanceEspEnabled = not distanceEspEnabled
     if btn then
-        btn.Text = "📏 距离显示: " .. (distanceEspEnabled and "ON ✅" or "OFF ❌")
+        btn.Text = "📏 距离显示: " .. (distanceEspEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = distanceEspEnabled and 0.5 or 0.85
     end
     showNotice("📏 距离显示 " .. (distanceEspEnabled and "已开启" or "已关闭"), true)
@@ -875,7 +877,7 @@ end
 local function toggleAntiAFK(btn)
     antiAfkEnabled = not antiAfkEnabled
     if btn then
-        btn.Text = "🛡️ 防踢 AFK: " .. (antiAfkEnabled and "ON ✅" or "OFF ❌")
+        btn.Text = "🛡️ 防踢 AFK: " .. (antiAfkEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = antiAfkEnabled and 0.5 or 0.85
     end
 
@@ -901,16 +903,16 @@ end
 local function toggleAutoRevive(btn)
     autoReviveEnabled = not autoReviveEnabled
     if btn then
-        btn.Text = "🔄 强效复活: " .. (autoReviveEnabled and "ON ✅" or "OFF ❌")
+        btn.Text = "🔄 自动复活: " .. (autoReviveEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = autoReviveEnabled and 0.5 or 0.85
     end
-    showNotice("🔄 强效自动复活 " .. (autoReviveEnabled and "已开启" or "已关闭"), true)
+    showNotice("🔄 自动复活 " .. (autoReviveEnabled and "已开启" or "已关闭"), true)
 end
 
 local function toggleHeadless(btn)
     headlessEnabled = not headlessEnabled
     if btn then
-        btn.Text = "👤 无头效果: " .. (headlessEnabled and "ON ✅" or "OFF ❌")
+        btn.Text = "👤 无头效果: " .. (headlessEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = headlessEnabled and 0.5 or 0.85
     end
     showNotice("无头效果 " .. (headlessEnabled and "已开启" or "已关闭"), true)
@@ -924,7 +926,7 @@ local function toggleHeadless(btn)
     end
 end
 
--- ==================== 新版边缘弹射（触碰检测V7） ====================
+-- ==================== 边缘弹射 (触碰检测 V7) ====================
 local function isBouncePart(part)
     local bounceKeywords = {"bounce", "boost", "launch", "jump", "pad", "ramp", "platform"}
     local name = string.lower(part.Name)
@@ -984,11 +986,11 @@ end
 local function toggleEdgeBoost(btn)
     edgeBoostEnabled = not edgeBoostEnabled
     if btn then
-        btn.Text = "⚡ 边缘弹射(V7): " .. (edgeBoostEnabled and "ON ✅" or "OFF ❌")
+        btn.Text = "⚡ 边缘弹射 (V7): " .. (edgeBoostEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = edgeBoostEnabled and 0.5 or 0.85
     end
     refreshEdgeBoostConnection()
-    showNotice("边缘弹射(V7) " .. (edgeBoostEnabled and "已开启" or "已关闭"), true)
+    showNotice("边缘弹射 (V7) " .. (edgeBoostEnabled and "已开启" or "已关闭"), true)
 end
 
 refreshEdgeBoostConnection()
@@ -999,11 +1001,11 @@ edgeBoostInputConnection = UIS.InputBegan:Connect(function(input, gameProcessed)
         toggleEdgeBoost()
         local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
         if panel then
-            local otherCont = panel:FindFirstChild("其他Container")
+            local otherCont = panel:FindFirstChild("OtherContainer")
             if otherCont then
                 for _, btn in ipairs(otherCont:GetChildren()) do
-                    if btn:IsA("TextButton") and btn.Text:find("边缘弹射(V7)") then
-                        btn.Text = "⚡ 边缘弹射(V7): " .. (edgeBoostEnabled and "ON ✅" or "OFF ❌")
+                    if btn:IsA("TextButton") and btn.Text:find("边缘弹射") then
+                        btn.Text = "⚡ 边缘弹射 (V7): " .. (edgeBoostEnabled and "开启 ✅" or "关闭 ❌")
                         btn.BackgroundTransparency = edgeBoostEnabled and 0.5 or 0.85
                         break
                     end
@@ -1085,7 +1087,7 @@ local function createTeleportWindow()
         tipLabel.Size = UDim2.new(0.9, 0, 0, 30)
         tipLabel.Position = UDim2.new(0.05, 0, 0.15, 0)
         tipLabel.BackgroundTransparency = 1
-        tipLabel.Text = "选择要传送的玩家："
+        tipLabel.Text = "选择要传送的玩家:"
         tipLabel.TextColor3 = Color3.new(1,1,1)
         tipLabel.TextSize = 18
         tipLabel.Font = Enum.Font.GothamSemibold
@@ -1214,7 +1216,7 @@ local function createTeleportWindow()
     end)
 end
 
--- ==================== 自制重命名器 ====================
+-- ==================== 自定义重命名器 ====================
 local function createRenamerWindow()
     safeCall(function()
         if renamerWindowActive and renamerGui and renamerGui.Parent then
@@ -1506,12 +1508,12 @@ local function createRenamerWindow()
 
         applyBtn.MouseButton1Click:Connect(function()
             if not targetItem then
-                statusLabel.Text = "请选择目标物品！"
+                statusLabel.Text = "请选择目标物品!"
                 statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
                 return
             end
             if not sourceName then
-                statusLabel.Text = "请选择新名称！"
+                statusLabel.Text = "请选择新名称!"
                 statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
                 return
             end
@@ -1521,13 +1523,13 @@ local function createRenamerWindow()
             end)
 
             if success then
-                statusLabel.Text = "✅ 改名成功！"
+                statusLabel.Text = "✅ 改名成功!"
                 statusLabel.TextColor3 = Color3.new(0.3, 1, 0.3)
                 refreshLists()
                 leftBtn.Text = sourceName
                 updatePreview()
             else
-                statusLabel.Text = "❌ 改名失败（权限不足）"
+                statusLabel.Text = "❌ 改名失败 (权限不足)"
                 statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
                 warn("[Renamer]", err)
             end
@@ -1539,7 +1541,7 @@ local function createRenamerWindow()
     end)
 end
 
--- ==================== 创建滑杆的辅助函数 ====================
+-- ==================== 辅助函数: 创建滑杆 ====================
 local function createSlider(container, name, range, increment, suffix, defaultValue, callback)
     return safeCall(function()
         local sliderFrame = Instance.new("Frame", container)
@@ -1660,7 +1662,7 @@ local function updateCanvas(container)
     end)
 end
 
--- ==================== 辅助函数：创建按钮 ====================
+-- ==================== 辅助函数: 创建按钮 ====================
 local function createButtonSafe(container, text, callback, color)
     local btn = nil
     pcall(function()
@@ -1678,12 +1680,13 @@ local function createButtonSafe(container, text, callback, color)
     return btn
 end
 
--- ==================== 多分页面板 ====================
-local function createAdminPanel()
-    return safeCall(function()
-        local existing = PlayerGui:FindFirstChild("MyCommanderPanel")
-        if existing then return existing end
+-- ==================== 多分页面板 (稳定单例) ====================
+local mainPanel = nil  -- 全局唯一引用
 
+local function createAdminPanel()
+    if mainPanel then return mainPanel end
+
+    return safeCall(function()
         local sg = Instance.new("ScreenGui")
         sg.Name = "MyCommanderPanel"
         sg.DisplayOrder = 10
@@ -1702,8 +1705,8 @@ local function createAdminPanel()
         end
 
         local main = Instance.new("Frame", sg)
-        main.Size = UDim2.new(0, 450, 0, 700)
-        main.Position = UDim2.new(1, -470, 0, 350)
+        main.Size = UDim2.new(0, 600, 0, 700)
+        main.Position = UDim2.new(1, -620, 0, 350)
         main.BackgroundColor3 = Color3.fromRGB(10,10,15)
         main.BackgroundTransparency = 0.15
         main.BorderSizePixel = 0
@@ -1729,7 +1732,7 @@ local function createAdminPanel()
         tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
         tabLayout.Padding = UDim.new(0, 10)
 
-        local tabs = {"主要功能", "Korblox", "其他"}
+        local tabs = {"主要", "Korblox", "其他", "其他 2"}
         local tabButtons = {}
         local contentContainers = {}
 
@@ -1777,29 +1780,20 @@ local function createAdminPanel()
             tabButtons[name] = btn
         end
 
-        -- 主要功能分页
-        local mainCont = contentContainers["主要功能"]
-
-        local bhopBtn = createButtonSafe(mainCont, "Bhop 跳跃: "..(bhopEnabled and "ON ✅" or "OFF ❌"), function(btn)
-            toggleBhop(btn)
-        end)
+        -- 主要分页
+        local mainCont = contentContainers["主要"]
+        local bhopBtn = createButtonSafe(mainCont, "Bhop 连跳: "..(bhopEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleBhop(btn) end)
         bhopBtn.BackgroundTransparency = bhopEnabled and 0.5 or 0.85
 
-        local infiniteJumpBtn = createButtonSafe(mainCont, "🦘 无限跳跃: "..(infiniteJumpEnabled and "ON ✅" or "OFF ❌"), function(btn)
-            toggleInfiniteJump(btn)
-        end, Color3.fromRGB(150,100,200))
+        local infiniteJumpBtn = createButtonSafe(mainCont, "🦘 无限跳跃: "..(infiniteJumpEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleInfiniteJump(btn) end, Color3.fromRGB(150,100,200))
         infiniteJumpBtn.BackgroundTransparency = infiniteJumpEnabled and 0.5 or 0.85
 
+        createButtonSafe(mainCont, "⏱️ 时间控制", function() createTimeControlWindow() end, Color3.fromRGB(100,150,200))
+
         pcall(function()
-            local gravitySlider = createSlider(mainCont, "重力值", {0, 1000}, 1, "", 50, function(value)
-                workspace.Gravity = value
-            end)
+            local gravitySlider = createSlider(mainCont, "重力值", {0, 1000}, 1, "", 50, function(value) workspace.Gravity = value end)
             if gravitySlider then
-                createButtonSafe(mainCont, "🔄 重置重力", function()
-                    workspace.Gravity = 50
-                    gravitySlider:Set(50)
-                    showNotice("⚖️ 重力已重置为 50", true)
-                end, Color3.fromRGB(150,150,100))
+                createButtonSafe(mainCont, "🔄 重置重力", function() workspace.Gravity = 50; gravitySlider:Set(50); showNotice("⚖️ 重力已重置为 50", true) end, Color3.fromRGB(150,150,100))
             else
                 local gravBox = Instance.new("TextBox", mainCont)
                 gravBox.Size = UDim2.new(0.95, 0, 0, 35)
@@ -1808,61 +1802,40 @@ local function createAdminPanel()
                 gravBox.BackgroundColor3 = Color3.fromRGB(30,30,40)
                 gravBox.TextColor3 = Color3.new(1,1,1)
                 Instance.new("UICorner", gravBox)
-
                 createButtonSafe(mainCont, "设定重力", function()
                     local val = tonumber(gravBox.Text)
-                    if val then
-                        workspace.Gravity = clamp(val, 0, 1000)
-                        showNotice("重力已设为 " .. val, true)
-                    end
+                    if val then workspace.Gravity = clamp(val, 0, 1000); showNotice("重力已设为 " .. val, true) end
                 end, Color3.fromRGB(70,120,70))
-                showNotice("⚠️ 滑杆建立失败，使用输入框替代", true)
+                showNotice("⚠️ 滑杆创建失败，使用输入框替代", true)
             end
         end)
 
-        local antiAfkBtn = createButtonSafe(mainCont, "🛡️ 防踢 AFK: " .. (antiAfkEnabled and "ON ✅" or "OFF ❌"), function(btn)
-            toggleAntiAFK(btn)
-        end, Color3.fromRGB(100,100,150))
+        local antiAfkBtn = createButtonSafe(mainCont, "🛡️ 防踢 AFK: " .. (antiAfkEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleAntiAFK(btn) end, Color3.fromRGB(100,100,150))
         antiAfkBtn.BackgroundTransparency = antiAfkEnabled and 0.5 or 0.85
 
-        local playerEspBtn = createButtonSafe(mainCont, "👤 玩家ESP: " .. (playerEspEnabled and "ON ✅" or "OFF ❌"), function(btn)
-            togglePlayerEsp(btn)
-        end, Color3.fromRGB(100,150,100))
+        local playerEspBtn = createButtonSafe(mainCont, "👤 玩家 ESP: " .. (playerEspEnabled and "开启 ✅" or "关闭 ❌"), function(btn) togglePlayerEsp(btn) end, Color3.fromRGB(100,150,100))
         playerEspBtn.BackgroundTransparency = playerEspEnabled and 0.5 or 0.85
 
-        local botEspBtn = createButtonSafe(mainCont, "🤖 机器人ESP: " .. (botEspEnabled and "ON ✅" or "OFF ❌"), function(btn)
-            toggleBotEsp(btn)
-        end, Color3.fromRGB(200,100,100))
+        local botEspBtn = createButtonSafe(mainCont, "🤖 机器人 ESP: " .. (botEspEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleBotEsp(btn) end, Color3.fromRGB(200,100,100))
         botEspBtn.BackgroundTransparency = botEspEnabled and 0.5 or 0.85
 
-        local distanceEspBtn = createButtonSafe(mainCont, "📏 距离显示: " .. (distanceEspEnabled and "ON ✅" or "OFF ❌"), function(btn)
-            toggleDistanceEsp(btn)
-        end, Color3.fromRGB(150,150,100))
+        local distanceEspBtn = createButtonSafe(mainCont, "📏 距离显示: " .. (distanceEspEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleDistanceEsp(btn) end, Color3.fromRGB(150,150,100))
         distanceEspBtn.BackgroundTransparency = distanceEspEnabled and 0.5 or 0.85
 
         updateCanvas(mainCont)
 
         -- Korblox 分页
         local korCont = contentContainers["Korblox"]
-        createButtonSafe(korCont, "💀 套用最佳 Korblox", applyBestKorblox, Color3.fromRGB(100,150,200))
+        createButtonSafe(korCont, "💀 应用最佳 Korblox", applyBestKorblox, Color3.fromRGB(100,150,200))
         createButtonSafe(korCont, "🔄 重置 Korblox", resetKorblox, Color3.fromRGB(150,100,100))
 
-        local headlessBtn = createButtonSafe(korCont, "👤 无头效果: " .. (headlessEnabled and "ON ✅" or "OFF ❌"), function(btn)
-            toggleHeadless(btn)
-        end, Color3.fromRGB(150,150,200))
+        local headlessBtn = createButtonSafe(korCont, "👤 无头效果: " .. (headlessEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleHeadless(btn) end, Color3.fromRGB(150,150,200))
         headlessBtn.BackgroundTransparency = headlessEnabled and 0.5 or 0.85
 
         createButtonSafe(korCont, "🔄 重置无头", function()
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character then
-                    resetHeadlessForCharacter(player.Character)
-                end
-            end
+            for _, player in ipairs(Players:GetPlayers()) do if player.Character then resetHeadlessForCharacter(player.Character) end end
             headlessEnabled = false
-            if headlessBtn then
-                headlessBtn.Text = "👤 无头效果: OFF ❌"
-                headlessBtn.BackgroundTransparency = 0.85
-            end
+            if headlessBtn then headlessBtn.Text = "👤 无头效果: 关闭 ❌"; headlessBtn.BackgroundTransparency = 0.85 end
             showNotice("无头效果已重置", true)
         end, Color3.fromRGB(150,100,100))
 
@@ -1882,93 +1855,52 @@ local function createAdminPanel()
         end)
         updateCanvas(korCont)
 
-        -- 其他功能分页
+        -- 其他分页
         local otherCont = contentContainers["其他"]
         createButtonSafe(otherCont, "🔄 重新加入服务器", function() TeleportService:Teleport(game.PlaceId, lp) end, Color3.fromRGB(150,100,200))
         createButtonSafe(otherCont, "📋 复制 USER ID", function()
-            if setclipboard then
-                setclipboard(tostring(lp.UserId))
-                showNotice("✅ 已复制 UserID: " .. lp.UserId, true)
-            end
+            if setclipboard then setclipboard(tostring(lp.UserId)); showNotice("✅ 已复制 UserID: " .. lp.UserId, true) end
         end, Color3.fromRGB(80,120,150))
         createButtonSafe(otherCont, "🔄 复活自己", function()
-            local remote = ReplicatedStorage:FindFirstChild("Events") and
-                           ReplicatedStorage.Events:FindFirstChild("Player") and
-                           ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
+            local remote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Player") and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
             if remote then
                 local character = lp.Character
                 if character and character:GetAttribute("Downed") then
-                    local success, err = pcall(function()
-                        remote:FireServer(true)
-                    end)
-                    if success then
-                        showNotice("🔄 已尝试复活", true)
-                    else
-                        showNotice("⚠️ 复活失败: " .. tostring(err), true)
-                    end
-                else
-                    showNotice("⚠️ 当前角色未倒地或无角色", true)
-                end
-            else
-                showNotice("⚠️ 找不到复活事件", true)
-            end
+                    local success, err = pcall(function() remote:FireServer(true) end)
+                    if success then showNotice("🔄 已尝试复活", true) else showNotice("⚠️ 复活失败: " .. tostring(err), true) end
+                else showNotice("⚠️ 未倒地或无角色", true) end
+            else showNotice("⚠️ 找不到复活事件", true) end
         end, Color3.fromRGB(100,200,100))
 
-        local autoReviveBtn = createButtonSafe(otherCont, "🔄 强效复活: " .. (autoReviveEnabled and "ON ✅" or "OFF ❌"), function(btn)
-            toggleAutoRevive(btn)
-        end, Color3.fromRGB(70,150,70))
+        local autoReviveBtn = createButtonSafe(otherCont, "🔄 自动复活: " .. (autoReviveEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleAutoRevive(btn) end, Color3.fromRGB(70,150,70))
         autoReviveBtn.BackgroundTransparency = autoReviveEnabled and 0.5 or 0.85
 
-        createButtonSafe(otherCont, "📛 自制重命名器", function()
-            createRenamerWindow()
-        end, Color3.fromRGB(180, 130, 200))
+        createButtonSafe(otherCont, "📛 物品重命名器", function() createRenamerWindow() end, Color3.fromRGB(180, 130, 200))
+        createButtonSafe(otherCont, "📍 玩家传送", function() createTeleportWindow() end, Color3.fromRGB(100,150,200))
 
-        createButtonSafe(otherCont, "⏱️ 时间控制", function()
-            createTimeControlWindow()
-        end, Color3.fromRGB(100,150,200))
-
-        createButtonSafe(otherCont, "📍 玩家传送", function()
-            createTeleportWindow()
-        end, Color3.fromRGB(100,150,200))
-
-        -- 新版边缘弹射开关
-        local edgeBoostBtn = createButtonSafe(otherCont, "⚡ 边缘弹射(V7): " .. (edgeBoostEnabled and "ON ✅" or "OFF ❌"), toggleEdgeBoost, Color3.fromRGB(200, 180, 100))
+        local edgeBoostBtn = createButtonSafe(otherCont, "⚡ 边缘弹射 (V7): " .. (edgeBoostEnabled and "开启 ✅" or "关闭 ❌"), toggleEdgeBoost, Color3.fromRGB(200, 180, 100))
         edgeBoostBtn.BackgroundTransparency = edgeBoostEnabled and 0.5 or 0.85
 
-        -- 弹射力度滑杆
-        pcall(function()
-            createSlider(otherCont, "弹射力度", {50, 200}, 5, "", edgeBoostPower, function(val)
-                edgeBoostPower = val
-            end)
-        end)
-
-        -- 触发灵敏度滑杆（最小下落速度阈值，值越小越灵敏）
-        pcall(function()
-            createSlider(otherCont, "触发灵敏度", {0.0, 5.0}, 0.2, "", edgeBoostMinYVelocity, function(val)
-                edgeBoostMinYVelocity = val
-            end)
-        end)
+        pcall(function() createSlider(otherCont, "弹射力度", {50, 200}, 5, "", edgeBoostPower, function(val) edgeBoostPower = val end) end)
+        pcall(function() createSlider(otherCont, "触发灵敏度", {0.0, 5.0}, 0.2, "", edgeBoostMinYVelocity, function(val) edgeBoostMinYVelocity = val end) end)
 
         local isAuthor = false
-        for _, name in ipairs(AUTHOR_USERNAMES) do
-            if lp.Name == name then
-                isAuthor = true
-                break
-            end
-        end
+        for _, name in ipairs(AUTHOR_USERNAMES) do if lp.Name == name then isAuthor = true break end end
         if isAuthor then
-            createButtonSafe(otherCont, "📢 发送广播", function()
-                createBroadcastWindow()
-            end, Color3.fromRGB(200,150,100))
+            createButtonSafe(otherCont, "📢 发送广播", function() createBroadcastWindow() end, Color3.fromRGB(200,150,100))
         end
 
         updateCanvas(otherCont)
 
-        if contentContainers["主要功能"] then contentContainers["主要功能"].Visible = true end
-        if tabButtons["主要功能"] then
-            tabButtons["主要功能"].BackgroundTransparency = 0.1
-            tabButtons["主要功能"].TextColor3 = Color3.new(1,1,1)
+        -- 其他 2 分页
+        local other2Cont = contentContainers["其他 2"]
+        if other2Cont then
+            createButtonSafe(other2Cont, "⏱️ 时间控制", function() createTimeControlWindow() end, Color3.fromRGB(100,150,200))
+            updateCanvas(other2Cont)
         end
+
+        if contentContainers["主要"] then contentContainers["主要"].Visible = true end
+        if tabButtons["主要"] then tabButtons["主要"].BackgroundTransparency = 0.1; tabButtons["主要"].TextColor3 = Color3.new(1,1,1) end
 
         local closeBtn = Instance.new("TextButton", main)
         closeBtn.Size = UDim2.new(0.3, 0, 0, 40)
@@ -1980,14 +1912,29 @@ local function createAdminPanel()
         closeBtn.Font = Enum.Font.GothamBold
         closeBtn.TextSize = 16
         Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 8)
-        closeBtn.MouseButton1Click:Connect(function() sg:Destroy() end)
+        closeBtn.MouseButton1Click:Connect(function() 
+            mainPanel = nil
+            sg:Destroy() 
+        end)
 
-        print("[MyCommander] 控制面板建立成功")
+        print("[MyCommander] 控制面板已创建")
+        mainPanel = sg
         return sg
     end)
 end
 
--- ==================== 强效自动复活循环 ====================
+function toggleAdminPanel()
+    if mainPanel then
+        pcall(function() mainPanel:Destroy() end)
+        mainPanel = nil
+        print("[MyCommander] 面板已关闭")
+    else
+        createAdminPanel()
+        print("[MyCommander] 面板已打开")
+    end
+end
+
+-- ==================== 自动复活循环 ====================
 task.spawn(function()
     while true do
         if autoReviveEnabled and reviveRemote then
@@ -2018,20 +1965,10 @@ task.spawn(function()
 end)
 
 -- ==================== 快捷键与聊天命令 ====================
-local function toggleAdminPanel()
-    local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
-    if panel then
-        panel:Destroy()
-        print("[MyCommander] 面板已关闭")
-    else
-        createAdminPanel()
-    end
-end
-
 UIS.InputBegan:Connect(function(i, gpe)
     if gpe then return end
     if i.KeyCode == Enum.KeyCode.P then
-        print("[MyCommander] 检测到按键 P")
+        print("[MyCommander] 检测到 P 键")
         toggleAdminPanel()
     end
     if i.KeyCode == Enum.KeyCode.Space then spaceHeld = true end
@@ -2083,7 +2020,7 @@ if items then
     end
 end
 
--- ==================== 自动改名（多组 + 重试） ====================
+-- ==================== 自动改名 (多组 + 重试) ====================
 task.spawn(function()
     local RENAME_PAIRS = {
         { "Broom", "SwagWalk" },
@@ -2105,7 +2042,7 @@ task.spawn(function()
         return
     end
 
-    print("[MyCommander] 当前 Emotes 中的物品：")
+    print("[MyCommander] 当前 Emotes 物品:")
     for _, v in ipairs(emotes:GetChildren()) do
         print("  - " .. v.Name)
     end
@@ -2128,7 +2065,7 @@ task.spawn(function()
     local function renameSingle(sourceName, targetName)
         local sourceItem = findItem(sourceName)
         if not sourceItem then
-            warn("[MyCommander] 找不到来源表情：", sourceName, "，跳过此项")
+            warn("[MyCommander] 找不到来源表情:", sourceName, "，跳过此项")
             return
         end
 
@@ -2146,27 +2083,27 @@ task.spawn(function()
                 print("[MyCommander] 成功将", sourceName, "改名为", targetName)
                 return true
             else
-                warn("[MyCommander] 改名失败 (尝试", retry, "/", maxRetries, ")：", err)
+                warn("[MyCommander] 改名失败 (尝试", retry, "/", maxRetries, "):", err)
                 task.wait(2)
             end
         end
 
-        warn("[MyCommander] 改名失败（已达最大重试次数）：", sourceName, "→", targetName)
+        warn("[MyCommander] 改名失败 (已达最大重试次数):", sourceName, "→", targetName)
         return false
     end
 
     for i, pair in ipairs(RENAME_PAIRS) do
         local source, target = pair[1], pair[2]
         if source and target then
-            print(string.format("[MyCommander] 开始处理第 %d 组：%s → %s", i, source, target))
+            print(string.format("[MyCommander] 处理第 %d 组: %s → %s", i, source, target))
             renameSingle(source, target)
             task.wait(1)
         else
-            warn("[MyCommander] 第", i, "组设定无效，跳过")
+            warn("[MyCommander] 第", i, "组无效，跳过")
         end
     end
 
-    print("[MyCommander] 所有改名作业执行完毕")
+    print("[MyCommander] 所有改名操作已完成")
 end)
 
 local reviveRemote2 = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Player") and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
@@ -2273,32 +2210,32 @@ task.spawn(function()
     end
 end)
 
--- ==================== 初始化 Headless ====================
+-- ==================== 初始化无头效果 ====================
 for _, player in ipairs(Players:GetPlayers()) do
     setupHeadlessForPlayer(player)
 end
 Players.PlayerAdded:Connect(setupHeadlessForPlayer)
 
 print("[MyCommander] 脚本初始化完成")
-showNotice("✅ 脚本已启动！按 P 开启面板", true)
+showNotice("✅ 脚本已启动！按 P 打开面板", true)
 
 -- [[ 📡 Module 4: Social Daemon ]]
 task.spawn(function()
-    print("//// [M4] STARTING SOCIAL_DAEMON ////////")
+    print("//// [M4] 启动社交模块 ////////")
     local bindable = Instance.new("BindableFunction")
     bindable.OnInvoke = function(answer)
         if answer == "YES" then
-            print("|||| [SOCIAL] ACCEPTED ////////")
+            print("|||| [SOCIAL] 已接受 ////////")
             local req = (syn and syn.request) or (http and http.request) or http_request or request
             if req then pcall(function() req({Url = "http://127.0.0.1:6463/rpc?v=1", Method = "POST", Headers = {["Content-Type"] = "application/json", ["Origin"] = "https://discord.com"}, Body = game:GetService("HttpService"):JSONEncode({cmd = "INVITE_BROWSER", args = {code = DC_CODE}, nonce = game:GetService("HttpService"):GenerateGUID(false)})}) end) end
             if setclipboard then setclipboard(DC_URL) end
         elseif answer == "NO" then
-            print("|||| [SOCIAL] DECLINED :-( ////////")
+            print("|||| [SOCIAL] 已拒绝 :-( ////////")
             task.delay(0.5, function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = ":("; Text = "好吧..."; Duration = 5; }) end)
         end
     end
     local function sendInvite()
-        return pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = "xuan - DISCORD", Text = "是否加入 Discord 服务器？点击「YES」尝试跳转并复制链接", Duration = 99999, Button1 = "YES", Button2 = "NO", Callback = bindable }) end)
+        return pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = "xuan - DISCORD", Text = "是否加入 Discord 服务器？点击 YES 尝试跳转并复制链接", Duration = 99999, Button1 = "YES", Button2 = "NO", Callback = bindable }) end)
     end
     task.wait(5)
     local sent = false
