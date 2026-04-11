@@ -84,10 +84,6 @@ local reviveRemote = safeCall(function()
         and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
 end)
 
--- ==================== 新 AFK 功能变量 ====================
-local autoClickEnabled = false
-local autoClickCircle = nil
-
 -- ==================== 时间控制窗口状态 ====================
 local timeControlWindowActive = false
 local timeControlGui = nil
@@ -820,40 +816,6 @@ local function toggleInfiniteJump(btn)
         btn.BackgroundTransparency = infiniteJumpEnabled and 0.5 or 0.85
     end
     showNotice("无限跳跃 " .. (infiniteJumpEnabled and "已开启" or "已关闭"), true)
-end
-
--- ==================== 自动点击功能 ====================
-local function createAutoClickCircle()
-    if autoClickCircle and autoClickCircle.Parent then return end
-    autoClickCircle = Instance.new("Frame")
-    autoClickCircle.Name = "AutoClickCircle"
-    autoClickCircle.Parent = PlayerGui
-    autoClickCircle.Size = UDim2.new(0, 50, 0, 50)
-    autoClickCircle.Position = UDim2.new(0.8, 0, 0.55, 0)
-    autoClickCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-    autoClickCircle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-    autoClickCircle.BackgroundTransparency = 0.5
-    autoClickCircle.Active = true
-    autoClickCircle.Draggable = true
-    Instance.new("UICorner", autoClickCircle).CornerRadius = UDim.new(1, 0)
-    local label = Instance.new("TextLabel", autoClickCircle)
-    label.Size = UDim2.new(1,0,1,0)
-    label.BackgroundTransparency = 1
-    label.Text = "点击目标"
-    label.TextColor3 = Color3.new(1,1,1)
-    label.TextSize = 10
-    autoClickCircle.Visible = false
-end
-
-local function toggleAutoClick(btn)
-    autoClickEnabled = not autoClickEnabled
-    if btn then
-        btn.Text = "🔴 自动选票: " .. (autoClickEnabled and "ON ✅" or "OFF ❌")
-        btn.BackgroundTransparency = autoClickEnabled and 0.5 or 0.85
-    end
-    if not autoClickCircle then createAutoClickCircle() end
-    autoClickCircle.Visible = autoClickEnabled
-    showNotice("自动选票 " .. (autoClickEnabled and "已开启" or "已关闭"), true)
 end
 
 local function togglePlayerEsp(btn)
@@ -1828,9 +1790,6 @@ local function createAdminPanel()
         end, Color3.fromRGB(150,100,200))
         infiniteJumpBtn.BackgroundTransparency = infiniteJumpEnabled and 0.5 or 0.85
 
-        local autoClickBtn = createButtonSafe(mainCont, "🔴 自动选票: OFF ❌", toggleAutoClick, Color3.fromRGB(200,100,100))
-        autoClickBtn.BackgroundTransparency = autoClickEnabled and 0.5 or 0.85
-
         pcall(function()
             local gravitySlider = createSlider(mainCont, "重力值", {0, 1000}, 1, "", 50, function(value)
                 workspace.Gravity = value
@@ -2209,29 +2168,6 @@ task.spawn(function()
 
     print("[MyCommander] 所有改名作业执行完毕")
 end)
-
--- ==================== 新 AFK 背景功能 ====================
-local voteEvent = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Player") and ReplicatedStorage.Events.Player:FindFirstChild("Vote")
-if voteEvent then
-    local hasVotedThisRound = false
-    task.spawn(function()
-        while true do
-            task.wait(0.5)
-            local choicesFolder = PlayerGui:FindFirstChild("Global") and PlayerGui.Global:FindFirstChild("CanDisable") and PlayerGui.Global.CanDisable:FindFirstChild("Vote") and PlayerGui.Global.CanDisable.Vote:FindFirstChild("Choices")
-            if choicesFolder then
-                local firstOption = choicesFolder:FindFirstChild("1")
-                if firstOption and not hasVotedThisRound then
-                    voteEvent:FireServer(1)
-                    task.wait(0.1)
-                    voteEvent:FireServer(1, true)
-                    hasVotedThisRound = true
-                elseif not firstOption then
-                    hasVotedThisRound = false
-                end
-            end
-        end
-    end)
-end
 
 local reviveRemote2 = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Player") and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
 task.spawn(function()
