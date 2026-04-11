@@ -1789,6 +1789,10 @@ local function createAdminPanel()
             toggleInfiniteJump(btn)
         end, Color3.fromRGB(150,100,200))
         infiniteJumpBtn.BackgroundTransparency = infiniteJumpEnabled and 0.5 or 0.85
+        
+        createButtonSafe(otherCont, "⏱️ 时间控制", function()
+            createTimeControlWindow()
+        end, Color3.fromRGB(100,150,200))
 
         pcall(function()
             local gravitySlider = createSlider(mainCont, "重力值", {0, 1000}, 1, "", 50, function(value)
