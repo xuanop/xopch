@@ -1,32 +1,34 @@
 --[[
-   📊 独立版 Google 試算表分流上报 (GET 请求版)
-   适用：任何支持 http_request / syn.request 的 Roblox 注入器
-   特点：使用 GET 请求 + URL 参数，绕过 POST 重定向问题
+   📊 独立版 Google 試算表分流上报 (极致兼容版)
+   适用：任何支持 syn.request / http_request 的 Roblox 注入器
+   特点：不使用 HttpService、不使用 string.gsub，纯手工 JSON
+   功能：每30秒上报玩家状态，按 UserId%10 分流写入不同工作表
 --]]
 
 -- ==================== 配置区 ====================
-local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbynH7FOqm1hTaYomV9pTRssQQJoARC8r5dCdVvOAIxjhJuOyFFFS0BbxmAV1u8v2cjfYw/exec"
+local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }  -- 作者列表
+local GAS_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AWDtjMUfpTEMSdq_QmpIFOm15XYToj6ayHnoZy7sskrycasIvFdnw7yTDc3mAAm1JoatbKabDG98R0hCxh6QBO9GBErIXsBwvkmO50e92p8gpmjp5_10DTe0tEtGU0U2i2QzgROewItu6jP538Le7uDmUtKwYSzeNsZ_q8XLthsaBQQWqGQC-5ea4XY7QSNtfqYELNOGFOATYzSgn41jAXcve8WS-QO4AYI200eBYyDvZib7zjdmK5X4L96YQ4MIxWn7Aak_VeDXPWiqQ-VjAYanYz4-QU0nbw&lib=MksKXL85p0UmBWMJQl1vC0CYm-_H7rWTw"  -- 替换为你的部署网址
 
 -- ==================== 环境初始化 ====================
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local SCRIPT_START_TIME = os.time()
 
--- 作者验证
+-- 作者验证（非作者直接退出）
 local isAuthor = false
 for _, name in ipairs(AUTHOR_USERNAMES) do
     if lp.Name == name then isAuthor = true break end
 end
 if not isAuthor then return end
 
--- ==================== 纯手工 JSON 构建 ====================
+-- ==================== 纯手工 JSON 构建（零依赖） ====================
 local function buildJson(data)
     local parts = {}
     for k, v in pairs(data) do
         local valueStr
         local vType = type(v)
         if vType == "string" then
+            -- 手动转义双引号和反斜杠（不使用 gsub）
             local escaped = ""
             for i = 1, #v do
                 local c = v:sub(i, i)
@@ -51,46 +53,30 @@ local function buildJson(data)
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
--- ==================== URL 编码（纯 Lua） ====================
-local function urlEncode(s)
-    local result = ""
-    for i = 1, #s do
-        local c = s:sub(i, i)
-        local b = string.byte(c)
-        if (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or c == '-' or c == '_' or c == '.' or c == '~' then
-            result = result .. c
-        else
-            result = result .. string.format("%%%02X", b)
-        end
-    end
-    return result
-end
-
--- ==================== HTTP GET 请求 ====================
-local function httpGet(url)
-    local req = http_request or syn.request or request or (http and http.request)
+-- ==================== HTTP POST 请求（使用注入器自带函数） ====================
+local function httpPost(url, data)
+    local req = syn and syn.request or http_request or request or (http and http.request)
     if not req then
         warn("[GAS] 找不到 HTTP 请求函数")
         return false
     end
 
-    local success, result = pcall(function()
-        return req({
+    local jsonBody = buildJson(data)
+    local success, err = pcall(function()
+        req({
             Url = url,
-            Method = "GET"
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = jsonBody
         })
     end)
-    
     if not success then
-        warn("[GAS] GET 请求失败:", result)
-    else
-        print("[GAS] 响应码:", result.StatusCode)
-        print("[GAS] 响应体:", result.Body)
+        warn("[GAS] 上报失败:", err)
     end
     return success
 end
 
--- ==================== 分流上报核心 ====================
+-- ==================== 分流与状态上报 ====================
 local function getSheetIndex(userId)
     return userId % 10
 end
@@ -115,15 +101,11 @@ local function sendToGoogleSheet()
         sheetIndex = getSheetIndex(lp.UserId)
     }
 
-    local jsonBody = buildJson(data)
-    local encodedData = urlEncode(jsonBody)
-    local fullUrl = GAS_URL .. "?data=" .. encodedData
-
-    httpGet(fullUrl)
+    httpPost(GAS_URL, data)
 end
 
--- ==================== 启动定时上报 ====================
-print("[独立GAS] GET 版脚本已启动，每30秒上报一次")
+-- ==================== 启动定时上报（每30秒） ====================
+print("[独立GAS] 脚本已启动，每30秒上报一次")
 task.spawn(function()
     while true do
         sendToGoogleSheet()
@@ -131,11 +113,13 @@ task.spawn(function()
     end
 end)
 
+-- 角色重生时立即上报一次
 lp.CharacterAdded:Connect(function()
     task.wait(1)
     sendToGoogleSheet()
 end)
 
+-- 初次加载后立即上报一次
 task.spawn(function()
     task.wait(2)
     sendToGoogleSheet()
