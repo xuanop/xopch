@@ -68,6 +68,8 @@ local function httpPost(url, data)
             Method = "POST",
             Headers = {["Content-Type"] = "application/json"},
             Body = jsonBody
+            FollowRedirects = false   -- 禁止跟随重定向
+
         })
     end)
     
