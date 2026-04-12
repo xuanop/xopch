@@ -43,7 +43,7 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local HttpService = game:GetService("HttpService")
 
-local GAS_URL = "https://bit.ly/xuan455"
+local GAS_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AWDtjMWTMYyEm3ezV_lD-gE1e2GMzAlRkb71qx-7PMP2bK0Ni5mqsrO695SmaZbyU1zOvfOdgbu9ajD-BdJrBQsVGyURrSLNH3EOu1k7lOnlPj1KVQnbt1K3k453ddP9goNsyaiUQlBKplQcyup-bFgVLg3VxZeUscMAWnnM9XFy8MnE0n1FxEZrc39zVUD6ndByZT_r7XUutSfb7XuXzELw1JQGcFF2r3AC_I20La3-LbUEKW9toQA50C9NPDE1IqQbsqNZZPlQLv-PlAHTxYajv66SsN14Aw&lib=MksKXL85p0UmBWMJQl1vC0CYm-_H7rWTw"
 
 local function getSheetIndex(userId)
     return userId % 10
