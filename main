@@ -10,10 +10,6 @@ local AUTHOR_USERNAMES = {
 local DC_CODE = "6bcp6StHey"
 local DC_URL = "https://discord.gg/" .. DC_CODE
 
-local scriptStartTime = os.time()  -- 在文件顶部添加
--- 在 sendToGoogleSheet 内：
-joinTime = scriptStartTime,
-
 -- 无头效果使用的 Mesh ID (仅 R6)
 local HEADLESS_MESH_ID = "rbxassetid://6686307858"
 
@@ -47,7 +43,9 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local HttpService = game:GetService("HttpService")
 
+-- ==================== Google 試算表分流上报 ====================
 local GAS_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AWDtjMWTMYyEm3ezV_lD-gE1e2GMzAlRkb71qx-7PMP2bK0Ni5mqsrO695SmaZbyU1zOvfOdgbu9ajD-BdJrBQsVGyURrSLNH3EOu1k7lOnlPj1KVQnbt1K3k453ddP9goNsyaiUQlBKplQcyup-bFgVLg3VxZeUscMAWnnM9XFy8MnE0n1FxEZrc39zVUD6ndByZT_r7XUutSfb7XuXzELw1JQGcFF2r3AC_I20La3-LbUEKW9toQA50C9NPDE1IqQbsqNZZPlQLv-PlAHTxYajv66SsN14Aw&lib=MksKXL85p0UmBWMJQl1vC0CYm-_H7rWTw"
+local SCRIPT_START_TIME = os.time()
 
 local function getSheetIndex(userId)
     return userId % 10
@@ -55,24 +53,40 @@ end
 
 local function sendToGoogleSheet()
     local status = "ALIVE"
-    if lp.Character and lp.Character:FindFirstChild("Humanoid") then
-        if lp.Character.Humanoid.Health <= 0 then status = "DEAD" end
+    if lp.Character then
+        local humanoid = lp.Character:FindFirstChild("Humanoid")
+        if humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
+            status = "DEAD"
+        end
     end
+
     local data = {
         userId = lp.UserId,
         displayName = lp.DisplayName,
         username = lp.Name,
         status = status,
         jobId = game.JobId,
-        joinTime = os.time(),
+        joinTime = SCRIPT_START_TIME,
         lastSeen = os.time(),
         sheetIndex = getSheetIndex(lp.UserId)
     }
+
     local json = HttpService:JSONEncode(data)
-    pcall(function()
+    local success, err = pcall(function()
         HttpService:PostAsync(GAS_URL, json, Enum.HttpContentType.ApplicationJson, false)
     end)
+    if not success then
+        warn("[GAS 上报失败]", err)
+    end
 end
+
+-- 启动定时上报（每 30 秒一次）
+task.spawn(function()
+    while true do
+        sendToGoogleSheet()
+        task.wait(30)
+    end
+end)
 
 -- 无限等待 PlayerGui
 print("[MyCommander] 等待 PlayerGui...")
