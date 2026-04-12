@@ -8,7 +8,7 @@
 
 -- ==================== 配置區 ====================
 local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbynH7FOqm1hTaYomV9pTRssQQJoARC8r5dCdVvOAIxjhJuOyFFFS0BbxmAV1u8v2cjfYw/exec"  -- 替換為你的 Web App URL
+local GAS_URL = "https://script.google.com/macros/s/AKfycbwnwe6tHkppxP5BbudUEWNvOaSVGTfszxP5aIIwuqoG7x9cKyWHm1fj6O6PfPH_gKk9_g/exec"  -- 替換為你的 Web App URL
 
 -- ==================== 去重時間戳 ====================
 local KEY = "__GAS_LAST_SENT_" .. (game.PlaceId or 0)
