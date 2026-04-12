@@ -73,7 +73,7 @@ local function sendToGoogleSheet()
 
     local json = HttpService:JSONEncode(data)
     local success, err = pcall(function()
-        HttpService:PostAsync(GAS_URL, json, Enum.HttpContentType.ApplicationJson, false)
+        httpRequest("POST", GAS_URL, data)
     end)
     if not success then
         warn("[GAS 上报失败]", err)
