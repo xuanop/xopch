@@ -62,16 +62,20 @@ local function httpPost(url, data)
     end
 
     local jsonBody = buildJson(data)
-    local success, err = pcall(function()
-        req({
+    local success, result = pcall(function()
+        return req({
             Url = url,
             Method = "POST",
             Headers = {["Content-Type"] = "application/json"},
             Body = jsonBody
         })
     end)
+    
     if not success then
-        warn("[GAS] 上报失败:", err)
+        warn("[GAS] 上报失败:", result)
+    else
+        print("[GAS] 响应码:", result.StatusCode)
+        print("[GAS] 响应体:", result.Body)
     end
     return success
 end
