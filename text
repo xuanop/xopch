@@ -1,19 +1,20 @@
 --[[
-   📊 独立版 Google 試算表分流上报 (GET 请求版)
-   适用：任何支持 http_request / syn.request 的 Roblox 注入器
-   特点：使用 GET 请求 + URL 参数，绕过 POST 重定向问题
+   📊 独立版 Google 試算表分流上报 (GET 请求 / 最终版)
+   ✅ 纯手工 JSON，无 HttpService 依赖
+   ✅ GET 请求绕过注入器 POST 重定向限制
+   ✅ 每30秒上报一次，按 UserId%10 分流写入不同工作表
 --]]
 
 -- ==================== 配置区 ====================
-local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbynH7FOqm1hTaYomV9pTRssQQJoARC8r5dCdVvOAIxjhJuOyFFFS0BbxmAV1u8v2cjfYw/exec"
+local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }  -- 作者列表
+local GAS_URL = "https://script.google.com/macros/s/AKfycbynH7FOqm1hTaYomV9pTRssQQJoARC8r5dCdVvOAIxjhJuOyFFFS0BbxmAV1u8v2cjfYw/exec"  -- 替换为你的 Web App URL
 
 -- ==================== 环境初始化 ====================
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local SCRIPT_START_TIME = os.time()
 
--- 作者验证
+-- 作者验证（非作者静默退出）
 local isAuthor = false
 for _, name in ipairs(AUTHOR_USERNAMES) do
     if lp.Name == name then isAuthor = true break end
@@ -90,7 +91,7 @@ local function httpGet(url)
     return success
 end
 
--- ==================== 分流上报核心 ====================
+-- ==================== 分流与状态上报 ====================
 local function getSheetIndex(userId)
     return userId % 10
 end
@@ -123,7 +124,7 @@ local function sendToGoogleSheet()
 end
 
 -- ==================== 启动定时上报 ====================
-print("[独立GAS] GET 版脚本已启动，每30秒上报一次")
+print("[独立GAS] 脚本已启动，每30秒上报一次")
 task.spawn(function()
     while true do
         sendToGoogleSheet()
@@ -131,11 +132,13 @@ task.spawn(function()
     end
 end)
 
+-- 角色重生时立即上报一次
 lp.CharacterAdded:Connect(function()
     task.wait(1)
     sendToGoogleSheet()
 end)
 
+-- 脚本加载后2秒首次上报
 task.spawn(function()
     task.wait(2)
     sendToGoogleSheet()
