@@ -22,7 +22,7 @@ if not isAuthorized then return end
 local screenGui = Instance.new("ScreenGui", PlayerGui)
 screenGui.Name = "EvadePlayerPanel"
 screenGui.Enabled = false
-screenGui.ResetOnSpawn = false
+screenGui.ResetOnSpawn = true
 screenGui.DisplayOrder = 999
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
