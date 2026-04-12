@@ -1,33 +1,36 @@
 --[[
-   📊 獨立版 Google 試算表分流上報（單次執行 + 防重複）
-   ✅ 使用 _G 全局標誌確保只執行一次
-   ✅ 純手工 JSON，無 HttpService 依賴
-   ✅ GET 請求繞過注入器 POST 重定向限制
+   📊 独立版 Google 試算表分流上报（时间戳去重 / 最终版）
+   ✅ 10秒内重复执行自动跳过，避免多次上报
+   ✅ 纯手工 JSON，无 HttpService 依赖
+   ✅ GET 请求绕过注入器 POST 重定向限制
 --]]
 
--- ==================== 配置區 ====================
+-- ==================== 配置区 ====================
 local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbynH7FOqm1hTaYomV9pTRssQQJoARC8r5dCdVvOAIxjhJuOyFFFS0BbxmAV1u8v2cjfYw/exec"  -- 替換為你的 Web App URL
+local GAS_URL = "https://script.google.com/macros/s/你的部署ID/exec"  -- 替换为你的 Web App URL
 
--- ==================== 防重複執行標誌 ====================
-if _G.__GAS_SENT__ then
-    return  -- 已經執行過，直接退出
+-- ==================== 去重时间戳（使用共享表 shared 更持久） ====================
+local KEY = "__GAS_LAST_SENT_" .. (game.PlaceId or 0)
+local lastSent = shared[KEY] or 0
+local now = os.time()
+if now - lastSent < 10 then  -- 10秒内已发送过，退出
+    return
 end
-_G.__GAS_SENT__ = true
+shared[KEY] = now
 
--- ==================== 環境初始化 ====================
+-- ==================== 环境初始化 ====================
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local SCRIPT_START_TIME = os.time()
 
--- 作者驗證
+-- 作者验证
 local isAuthor = false
 for _, name in ipairs(AUTHOR_USERNAMES) do
     if lp.Name == name then isAuthor = true break end
 end
 if not isAuthor then return end
 
--- ==================== 純手工 JSON 構建 ====================
+-- ==================== 纯手工 JSON 构建 ====================
 local function buildJson(data)
     local parts = {}
     for k, v in pairs(data) do
@@ -58,7 +61,7 @@ local function buildJson(data)
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
--- ==================== URL 編碼 ====================
+-- ==================== URL 编码 ====================
 local function urlEncode(s)
     local result = ""
     for i = 1, #s do
@@ -73,11 +76,11 @@ local function urlEncode(s)
     return result
 end
 
--- ==================== HTTP GET 請求 ====================
+-- ==================== HTTP GET 请求 ====================
 local function httpGet(url)
     local req = http_request or syn.request or request or (http and http.request)
     if not req then
-        warn("[GAS] 找不到 HTTP 請求函數")
+        warn("[GAS] 找不到 HTTP 请求函数")
         return false
     end
 
@@ -89,15 +92,15 @@ local function httpGet(url)
     end)
     
     if not success then
-        warn("[GAS] GET 請求失敗:", result)
+        warn("[GAS] GET 请求失败:", result)
     else
-        print("[GAS] 響應碼:", result.StatusCode)
-        print("[GAS] 響應體:", result.Body)
+        print("[GAS] 响应码:", result.StatusCode)
+        print("[GAS] 响应体:", result.Body)
     end
     return success
 end
 
--- ==================== 分流與單次上報 ====================
+-- ==================== 分流与上报 ====================
 local function getSheetIndex(userId)
     return userId % 10
 end
@@ -129,6 +132,6 @@ local function sendToGoogleSheet()
     httpGet(fullUrl)
 end
 
--- ==================== 僅執行一次 ====================
-print("[單次上報] 立即上報數據（已防重複）")
+-- ==================== 执行上报 ====================
+print("[单次上报] 发送数据（10秒内去重）")
 sendToGoogleSheet()
