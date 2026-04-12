@@ -6,7 +6,7 @@
 
 -- ==================== 配置区 ====================
 local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbx9w398pzwdPk12-6E5tMf-XNyJOA3DqiZGeEcWFRcbfa7qN2n-mJTkKkQKpKhoSFbD/exec"
+local GAS_URL = "https://script.google.com/macros/s/AKfycbynH7FOqm1hTaYomV9pTRssQQJoARC8r5dCdVvOAIxjhJuOyFFFS0BbxmAV1u8v2cjfYw/exec/exec"
 
 -- ==================== 环境初始化 ====================
 local Players = game:GetService("Players")
