@@ -5,7 +5,7 @@
 --]]
 
 -- ==================== 配置區 ====================
-local GAS_URL = "https://script.google.com/macros/s/你的部署ID/exec"  -- 請替換為你的 Web App URL
+local GAS_URL = "https://script.google.com/macros/s/AKfycbwnwe6tHkppxP5BbudUEWNvOaSVGTfszxP5aIIwuqoG7x9cKyWHm1fj6O6PfPH_gKk9_g/exec"  -- 請替換為你的 Web App URL
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
 local PANEL_KEY = Enum.KeyCode.Tab
 
