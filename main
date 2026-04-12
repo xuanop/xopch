@@ -150,18 +150,38 @@ _G.lastBroadcast = _G.lastBroadcast or ""
 
 local function httpRequest(method, url, body)
     local req = syn and syn.request or http_request or request or (http and http.request)
-    print("[DEBUG] req function:", req)  -- 新增调试
     if not req then 
         warn("[MyCommander] 找不到 HTTP 请求函数")
         return nil 
     end
+
+    -- 手动构建 JSON 字符串（避免使用 HttpService:JSONEncode）
+    local jsonBody = nil
+    if body then
+        local parts = {}
+        for k, v in pairs(body) do
+            local valueStr
+            if type(v) == "string" then
+                valueStr = '"' .. v:gsub('"', '\\"') .. '"'
+            elseif type(v) == "number" then
+                valueStr = tostring(v)
+            elseif type(v) == "boolean" then
+                valueStr = v and "true" or "false"
+            else
+                valueStr = '""'  -- 不处理嵌套对象，因为您的数据都是基本类型
+            end
+            table.insert(parts, '"' .. k .. '":' .. valueStr)
+        end
+        jsonBody = "{" .. table.concat(parts, ",") .. "}"
+    end
+
     local success, result = pcall(function()
         return req({
             Url = url,
             Method = method,
             Headers = {["Content-Type"] = "application/json"},
-            Body = body and HttpService:JSONEncode(body) or nil,
-            Timeout = 5
+            Body = jsonBody,
+            Timeout = 10
         })
     end)
     if success and result then
