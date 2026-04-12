@@ -1,258 +1,126 @@
--- [[ 🔧 依赖函数与配置（面板运行必需） ]]
-local lp = game.Players.LocalPlayer
-local UIS = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
-local TweenService = game:GetService("TweenService")
-local TeleportService = game:GetService("TeleportService")
+--[[
+   📊 独立版 Google 試算表分流上报 (极致兼容版)
+   适用：任何支持 syn.request / http_request 的 Roblox 注入器
+   特点：不使用 HttpService、不使用 string.gsub，纯手工 JSON
+   功能：每30秒上报玩家状态，按 UserId%10 分流写入不同工作表
+--]]
 
--- 十路数据库 URL 配置（与分流计算逻辑配套）
-local DB_LIST = {
-    [0] = "https://e5alr90-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    [1] = "https://e5alr9-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    [2] = "https://e5alr92-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    [3] = "https://e5alr93-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    [4] = "https://e5alr94-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    [5] = "https://e5alr95-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    [6] = "https://e5alr96-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    [7] = "https://e5alr97-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    [8] = "https://e5alr98-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    [9] = "https://e5alr99-default-rtdb.asia-southeast1.firebasedatabase.app/"
-}
+-- ==================== 配置区 ====================
+local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }  -- 作者列表
+local GAS_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"  -- 替换为你的部署网址
 
--- 分流计算：根据 UserId 确定数据库索引
-local function getTargetDB(uid)
-    return uid % 10
+-- ==================== 环境初始化 ====================
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local SCRIPT_START_TIME = os.time()
+
+-- 作者验证（非作者直接退出）
+local isAuthor = false
+for _, name in ipairs(AUTHOR_USERNAMES) do
+    if lp.Name == name then isAuthor = true break end
 end
+if not isAuthor then return end
 
--- HTTP 请求封装（兼容多种注入器）
-local function httpRequest(method, url, body)
-    local req = syn and syn.request or http_request or request or (http and http.request)
-    if req then
-        local success, result = pcall(function()
-            return req({
-                Url = url,
-                Method = method,
-                Headers = {["Content-Type"] = "application/json"},
-                Body = body and HttpService:JSONEncode(body) or nil
-            })
-        end)
-        return success and result or nil
-    end
-end
-
--- 通知显示（简化版，保留核心逻辑）
-local function showNotice(msg, isPrivate)
-    if not msg or msg == "" then return end
-    local sg = lp.PlayerGui:FindFirstChild("E5_Notice") or Instance.new("ScreenGui", lp.PlayerGui)
-    sg.Name = "E5_Notice"
-    sg.ResetOnSpawn = false
-    local container = Instance.new("Frame", sg)
-    container.Size = UDim2.new(0, 0, 0, 50)
-    container.Position = UDim2.new(0.5, 0, 0.1, 0)
-    container.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    container.BackgroundTransparency = 0.5
-    container.ClipsDescendants = true
-    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
-    local frameStroke = Instance.new("UIStroke", container)
-    frameStroke.Color = isPrivate and Color3.fromRGB(255, 200, 0) or Color3.fromHex("A475D7")
-    frameStroke.Thickness = 2
-    frameStroke.Transparency = 1
-    local label = Instance.new("TextLabel", container)
-    label.Size = UDim2.new(0, 400, 1, 0)
-    label.Position = UDim2.new(0.5, -200, 0, 0)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.TextSize = 18
-    label.Font = Enum.Font.GothamBold
-    label.Text = tostring(msg)
-    label.TextWrapped = true
-    label.TextTransparency = 1
-    for _, v in pairs(sg:GetChildren()) do
-        if v:IsA("Frame") and v ~= container then
-            v:TweenPosition(v.Position + UDim2.new(0, 0, 0, 60), "Out", "Quad", 0.3, true)
-        end
-    end
-    local expandTween = TweenService:Create(container, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, 420, 0, 50),
-        Position = UDim2.new(0.5, -210, 0.1, 0)
-    })
-    expandTween:Play()
-    expandTween.Completed:Connect(function()
-        TweenService:Create(label, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-        TweenService:Create(frameStroke, TweenInfo.new(0.3), {Transparency = 0}):Play()
-    end)
-    task.delay(8, function()
-        local fade = TweenService:Create(label, TweenInfo.new(0.5), {TextTransparency = 1})
-        fade:Play()
-        fade.Completed:Connect(function()
-            local shrink = TweenService:Create(container, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-                Size = UDim2.new(0, 0, 0, 50),
-                Position = UDim2.new(0.5, 0, container.Position.Y.Scale, container.Position.Y.Offset)
-            })
-            shrink:Play()
-            shrink.Completed:Connect(function() container:Destroy() end)
-        end)
-    end)
-end
-
--- [[ 🛰️ 管理员面板构建函数 ]]
-local function buildAdminPanel()
-    local sg = lp.PlayerGui:FindFirstChild("E5_Admin_Panel") or Instance.new("ScreenGui", lp.PlayerGui)
-    sg.Name = "E5_Admin_Panel"
-    sg.Enabled = false          -- 初始隐藏，按 Tab 切换
-    sg.ResetOnSpawn = false
-    sg:ClearAllChildren()
-
-    -- 主面板框架
-    local frame = Instance.new("Frame", sg)
-    frame.Size = UDim2.new(0, 420, 0, 650)
-    frame.Position = UDim2.new(1, -430, 0.5, -325)  -- 右侧居中
-    frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    frame.BackgroundTransparency = 0.3
-    Instance.new("UICorner", frame)
-    Instance.new("UIStroke", frame).Color = Color3.fromHex("A475D7")
-
-    -- 在线玩家滚动列表
-    local list = Instance.new("ScrollingFrame", frame)
-    list.Size = UDim2.new(0.9, 0, 0.78, 0)
-    list.Position = UDim2.new(0.05, 0, 0.05, 0)
-    list.BackgroundTransparency = 1
-    list.CanvasSize = UDim2.new(0, 0, 0, 0)
-    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    list.ScrollBarThickness = 2
-    Instance.new("UIListLayout", list).Padding = UDim.new(0, 10)
-
-    -- 指令输入框（发送私信或公告）
-    local input = Instance.new("TextBox", frame)
-    input.Size = UDim2.new(0.9, 0, 0, 60)
-    input.Position = UDim2.new(0.05, 0, 0.88, 0)
-    input.PlaceholderText = "[ID:MSG] 或直接公告"
-    input.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    input.TextColor3 = Color3.new(1, 1, 1)
-    input.TextSize = 18
-    Instance.new("UICorner", input)
-
-    -- 输入框失去焦点时处理指令
-    input.FocusLost:Connect(function(enter)
-        if enter and input.Text ~= "" then
-            local text = input.Text
-            -- 向所有 10 个数据库推送指令（确保玩家无论在哪个分库都能收到）
-            for i = 0, 9 do
-                if string.find(text, ":") then
-                    local split = string.split(text, ":")
-                    httpRequest("PUT", DB_LIST[i] .. "private/" .. string.gsub(split[1], " ", "") .. ".json", {["msg"] = split[2]})
+-- ==================== 纯手工 JSON 构建（零依赖） ====================
+local function buildJson(data)
+    local parts = {}
+    for k, v in pairs(data) do
+        local valueStr
+        local vType = type(v)
+        if vType == "string" then
+            -- 手动转义双引号和反斜杠（不使用 gsub）
+            local escaped = ""
+            for i = 1, #v do
+                local c = v:sub(i, i)
+                if c == '"' then
+                    escaped = escaped .. '\\"'
+                elseif c == '\\' then
+                    escaped = escaped .. '\\\\'
                 else
-                    httpRequest("PUT", DB_LIST[i] .. "announcement.json", {["msg"] = text})
-                    task.delay(15, function()
-                        httpRequest("PUT", DB_LIST[i] .. "announcement.json", {["msg"] = ""})
-                    end)
+                    escaped = escaped .. c
                 end
             end
-            input.Text = ""
+            valueStr = '"' .. escaped .. '"'
+        elseif vType == "number" then
+            valueStr = tostring(v)
+        elseif vType == "boolean" then
+            valueStr = v and "true" or "false"
+        else
+            valueStr = '""'
         end
-    end)
-
-    -- 后台循环：每 5 秒刷新一次在线列表（仅当面板可见时）
-    task.spawn(function()
-        while true do
-            if sg.Enabled then
-                local allUserData = {}
-                -- 遍历全部 10 个数据库，聚合在线玩家数据
-                for i = 0, 9 do
-                    pcall(function()
-                        local res = httpRequest("GET", DB_LIST[i] .. "users.json")
-                        if res and res.Body then
-                            local data = HttpService:JSONDecode(res.Body)
-                            for id, info in pairs(data) do
-                                local uid = tonumber(id) or tonumber(info.userId)
-                                -- 清理错误分库的数据（可选）
-                                if uid and getTargetDB(uid) ~= i then
-                                    httpRequest("DELETE", DB_LIST[i] .. "users/" .. id .. ".json")
-                                else
-                                    allUserData[id] = info
-                                end
-                            end
-                        end
-                    end)
-                end
-
-                -- 清空旧列表，重建 UI
-                for _, v in pairs(list:GetChildren()) do
-                    if v:IsA("TextButton") then v:Destroy() end
-                end
-
-                for id, info in pairs(allUserData) do
-                    local currentTime = os.time()
-                    local lastSeen = tonumber(info.lastSeen) or 0
-                    -- 仅显示 30 秒内有心跳的玩家
-                    if currentTime - lastSeen <= 30 then
-                        local item = Instance.new("TextButton", list)
-                        item.Size = UDim2.new(1, 0, 0, 140)
-                        item.BackgroundColor3 = (info.jobId == game.JobId) and Color3.fromHex("4A306D") or Color3.fromRGB(35, 35, 35)
-                        item.BackgroundTransparency = 0.2
-                        Instance.new("UICorner", item).CornerRadius = UDim.new(0, 6)
-
-                        local join = tonumber(info.joinTime) or currentTime
-                        local diff = math.max(0, currentTime - join)
-                        local d = math.floor(diff / 86400)
-                        local h = math.floor((diff % 86400) / 3600)
-                        local m = math.floor((diff % 3600) / 60)
-                        local s = math.floor(diff % 60)
-
-                        item.Text = string.format(
-                            "👤 %s\n(@%s)\nID: %s\nStatus: %s\nOnline: %dd %dh %dm %ds",
-                            info.displayName or "N/A",
-                            info.username or "N/A",
-                            info.userId or "N/A",
-                            info.status or "ALIVE",
-                            d, h, m, s
-                        )
-                        item.TextColor3 = Color3.new(1, 1, 1)
-                        item.TextSize = 17
-                        item.Font = Enum.Font.GothamBold
-                        item.TextWrapped = true
-
-                        -- 单击复制 ID，双击追踪玩家至其服务器
-                        local lastClick = 0
-                        item.MouseButton1Click:Connect(function()
-                            local now = tick()
-                            if now - lastClick < 0.35 then
-                                -- 双击：跳转服务器
-                                if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
-                                    showNotice("正在追蹤玩家...", true)
-                                    TeleportService:TeleportToPlaceInstance(game.PlaceId, info.jobId, lp)
-                                end
-                            else
-                                -- 单击：复制 ID 到剪贴板
-                                if setclipboard then
-                                    setclipboard(tostring(info.userId) .. ":")
-                                    showNotice("已複製 ID: " .. info.userId, false)
-                                end
-                            end
-                            lastClick = now
-                        end)
-                    end
-                end
-            end
-            task.wait(5)
-        end
-    end)
+        table.insert(parts, '"' .. tostring(k) .. '":' .. valueStr)
+    end
+    return "{" .. table.concat(parts, ",") .. "}"
 end
 
--- [[ ⌨️ Tab 键切换面板显示/隐藏 ]]
-UIS.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.Tab and lp.PlayerGui:FindFirstChild("E5_Admin_Panel") then
-        lp.PlayerGui.E5_Admin_Panel.Enabled = not lp.PlayerGui.E5_Admin_Panel.Enabled
+-- ==================== HTTP POST 请求（使用注入器自带函数） ====================
+local function httpPost(url, data)
+    local req = syn and syn.request or http_request or request or (http and http.request)
+    if not req then
+        warn("[GAS] 找不到 HTTP 请求函数")
+        return false
+    end
+
+    local jsonBody = buildJson(data)
+    local success, err = pcall(function()
+        req({
+            Url = url,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = jsonBody
+        })
+    end)
+    if not success then
+        warn("[GAS] 上报失败:", err)
+    end
+    return success
+end
+
+-- ==================== 分流与状态上报 ====================
+local function getSheetIndex(userId)
+    return userId % 10
+end
+
+local function sendToGoogleSheet()
+    local status = "ALIVE"
+    if lp.Character then
+        local humanoid = lp.Character:FindFirstChild("Humanoid")
+        if humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
+            status = "DEAD"
+        end
+    end
+
+    local data = {
+        userId = lp.UserId,
+        displayName = lp.DisplayName,
+        username = lp.Name,
+        status = status,
+        jobId = game.JobId,
+        joinTime = SCRIPT_START_TIME,
+        lastSeen = os.time(),
+        sheetIndex = getSheetIndex(lp.UserId)
+    }
+
+    httpPost(GAS_URL, data)
+end
+
+-- ==================== 启动定时上报（每30秒） ====================
+print("[独立GAS] 脚本已启动，每30秒上报一次")
+task.spawn(function()
+    while true do
+        sendToGoogleSheet()
+        task.wait(30)
     end
 end)
 
--- 角色重生时自动关闭面板（避免遮挡）
+-- 角色重生时立即上报一次
 lp.CharacterAdded:Connect(function()
-    local panel = lp.PlayerGui:FindFirstChild("E5_Admin_Panel")
-    if panel then
-        panel.Enabled = false
-    end
+    task.wait(1)
+    sendToGoogleSheet()
 end)
 
--- [[ 调用示例：需在通过开发者验证后执行 ]]
--- if isDeveloper then buildAdminPanel() end
+-- 初次加载后立即上报一次
+task.spawn(function()
+    task.wait(2)
+    sendToGoogleSheet()
+end)
