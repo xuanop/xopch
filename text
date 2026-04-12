@@ -94,8 +94,8 @@ local function httpGet(url)
     if not success then
         warn("[GAS] GET 請求失敗:", result)
     else
-        print("[GAS] 響應碼:", result.StatusCode)
-        print("[GAS] 響應體:", result.Body)
+        print("[GAS] 响应码:", result.StatusCode)
+        print("[GAS] 响应体:", result.Body)
     end
     return success
 end
@@ -131,5 +131,5 @@ local function sendToGoogleSheet()
 end
 
 -- ==================== 執行上報 ====================
-print("[單次上報] 發送數據（已移除 JoinTime / LastSeen）")
+print("[单次上报] 发送数据")
 sendToGoogleSheet()
