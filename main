@@ -71,7 +71,6 @@ local function sendToGoogleSheet()
         sheetIndex = getSheetIndex(lp.UserId)
     }
 
-    local json = HttpService:JSONEncode(data)
     local success, err = pcall(function()
         httpRequest("POST", GAS_URL, data)
     end)
@@ -151,6 +150,7 @@ _G.lastBroadcast = _G.lastBroadcast or ""
 
 local function httpRequest(method, url, body)
     local req = syn and syn.request or http_request or request or (http and http.request)
+    print("[DEBUG] req function:", req)  -- 新增调试
     if not req then 
         warn("[MyCommander] 找不到 HTTP 请求函数")
         return nil 
