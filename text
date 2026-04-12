@@ -7,8 +7,7 @@
 
 -- ==================== 配置区 ====================
 local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }  -- 作者列表
-local GAS_URL = "https://script.google.com/macros/s/AKfycbynH7FOqm1hTaYomV9pTRssQQJoARC8r5dCdVvOAIxjhJuOyFFFS0BbxmAV1u8v2cjfYw/exec"  -- 替换为你的 Web App URL
-
+local GAS_URL = "https://script.google.com/macros/s/AKfycbynH7FOqm1hTaYomV9pTRssQQJoARC8r5dCdVvOAIxjhJuOyFFFS0BbxmAV1u8v2cjfYw/exec" 
 -- ==================== 环境初始化 ====================
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
