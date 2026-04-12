@@ -1,19 +1,20 @@
 --[[
-   📊 独立版 Google 試算表分流上报 (GET 请求 / 最终版)
+   📊 独立版 Google 試算表分流上报（单次执行版）
+   ✅ 脚本启动后仅上报一次，不循环
    ✅ 纯手工 JSON，无 HttpService 依赖
    ✅ GET 请求绕过注入器 POST 重定向限制
-   ✅ 每30秒上报一次，按 UserId%10 分流写入不同工作表
 --]]
 
 -- ==================== 配置区 ====================
-local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }  -- 作者列表
-local GAS_URL = "https://script.google.com/macros/s/AKfycbynH7FOqm1hTaYomV9pTRssQQJoARC8r5dCdVvOAIxjhJuOyFFFS0BbxmAV1u8v2cjfYw/exec" 
+local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }
+local GAS_URL = "https://script.google.com/macros/s/你的部署ID/exec"  -- 替换为你的 Web App URL
+
 -- ==================== 环境初始化 ====================
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local SCRIPT_START_TIME = os.time()
 
--- 作者验证（非作者静默退出）
+-- 作者验证
 local isAuthor = false
 for _, name in ipairs(AUTHOR_USERNAMES) do
     if lp.Name == name then isAuthor = true break end
@@ -51,7 +52,7 @@ local function buildJson(data)
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
--- ==================== URL 编码（纯 Lua） ====================
+-- ==================== URL 编码 ====================
 local function urlEncode(s)
     local result = ""
     for i = 1, #s do
@@ -90,7 +91,7 @@ local function httpGet(url)
     return success
 end
 
--- ==================== 分流与状态上报 ====================
+-- ==================== 分流与单次上报 ====================
 local function getSheetIndex(userId)
     return userId % 10
 end
@@ -122,23 +123,9 @@ local function sendToGoogleSheet()
     httpGet(fullUrl)
 end
 
--- ==================== 启动定时上报 ====================
-print("[独立GAS] 脚本已启动，每30秒上报一次")
+-- ==================== 仅执行一次 ====================
+print("[单次上报] 脚本已启动，立即上报一次数据")
 task.spawn(function()
-    while true do
-        sendToGoogleSheet()
-        task.wait(30)
-    end
-end)
-
--- 角色重生时立即上报一次
-lp.CharacterAdded:Connect(function()
-    task.wait(1)
-    sendToGoogleSheet()
-end)
-
--- 脚本加载后2秒首次上报
-task.spawn(function()
-    task.wait(2)
+    task.wait(1)  -- 稍等 1 秒确保角色加载
     sendToGoogleSheet()
 end)
