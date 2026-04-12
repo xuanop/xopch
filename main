@@ -10,6 +10,10 @@ local AUTHOR_USERNAMES = {
 local DC_CODE = "6bcp6StHey"
 local DC_URL = "https://discord.gg/" .. DC_CODE
 
+local scriptStartTime = os.time()  -- 在文件顶部添加
+-- 在 sendToGoogleSheet 内：
+joinTime = scriptStartTime,
+
 -- 无头效果使用的 Mesh ID (仅 R6)
 local HEADLESS_MESH_ID = "rbxassetid://6686307858"
 
