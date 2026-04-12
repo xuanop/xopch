@@ -7,7 +7,7 @@
 
 -- ==================== 配置区 ====================
 local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }  -- 作者列表
-local GAS_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AWDtjMUfpTEMSdq_QmpIFOm15XYToj6ayHnoZy7sskrycasIvFdnw7yTDc3mAAm1JoatbKabDG98R0hCxh6QBO9GBErIXsBwvkmO50e92p8gpmjp5_10DTe0tEtGU0U2i2QzgROewItu6jP538Le7uDmUtKwYSzeNsZ_q8XLthsaBQQWqGQC-5ea4XY7QSNtfqYELNOGFOATYzSgn41jAXcve8WS-QO4AYI200eBYyDvZib7zjdmK5X4L96YQ4MIxWn7Aak_VeDXPWiqQ-VjAYanYz4-QU0nbw&lib=MksKXL85p0UmBWMJQl1vC0CYm-_H7rWTw"  -- 替换为你的部署网址
+local GAS_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"  -- 替换为你的部署网址
 
 -- ==================== 环境初始化 ====================
 local Players = game:GetService("Players")
