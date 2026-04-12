@@ -23,6 +23,7 @@ local screenGui = Instance.new("ScreenGui", PlayerGui)
 screenGui.Name = "EvadePlayerPanel"
 screenGui.Enabled = false
 screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 999
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local mainFrame = Instance.new("Frame", screenGui)
