@@ -1,5 +1,5 @@
 -- 除錯測試腳本
-local GAS_URL = "https://script.google.com/macros/s/AKfycbwnwe6tHkppxP5BbudUEWNvOaSVGTfszxP5aIIwuqoG7x9cKyWHm1fj6O6PfPH_gKk9_g/exec"
+local GAS_URL = "https://script.google.com/macros/s/AKfycbx4slkh_-tl_yELnHYSOzjnwSGsNxSxZZy94qU3UHQ_ZJq0LPeqqCLMUZLXjFWNXK8jSA/exec"
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
