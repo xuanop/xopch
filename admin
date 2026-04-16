@@ -1,12 +1,14 @@
 --[[
-   🔑 Evade 玩家追蹤面板 (極簡版)
-   啟動後後台運行，按 Tab 鍵切換顯示/隱藏
-   面板可拖動、置頂，點擊玩家按鈕傳送至其伺服器
+   🔑 Evade 管理面板 (純玩家列表版)
+   - Tab 鍵切換顯示/隱藏
+   - 顯示所有使用本系統的線上玩家
+   - 單擊複製 ID，雙擊追蹤至其伺服器
+   - 無輸入框，公告/私信由主腳本處理
 --]]
 
 -- ==================== 配置區 ====================
-local GAS_URL = "https://script.google.com/macros/s/AKfycbwnwe6tHkppxP5BbudUEWNvOaSVGTfszxP5aIIwuqoG7x9cKyWHm1fj6O6PfPH_gKk9_g/exec"
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
+local GAS_URL = "https://script.google.com/macros/s/AKfycbwnwe6tHkppxP5BbudUEWNvOaSVGTfszxP5aIIwuqoG7x9cKyWHm1fj6O6PfPH_gKk9_g/exec" 
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 環境初始化 ====================
@@ -25,7 +27,44 @@ for _, name in ipairs(AUTHORIZED_USERS) do
 end
 if not isAuthorized then return end
 
--- ==================== 建立 UI 面板（預設隱藏，無關閉鈕） ====================
+-- ==================== HTTP 請求封裝 ====================
+local function httpRequest(method, url, body)
+    local req = syn and syn.request or http_request or request or (http and http.request)
+    if not req then return nil end
+    local success, result = pcall(function()
+        return req({
+            Url = url,
+            Method = method,
+            Headers = {["Content-Type"] = "application/json"},
+            Body = body and HttpService:JSONEncode(body) or nil
+        })
+    end)
+    return success and result or nil
+end
+
+-- ==================== 通知系統（簡易） ====================
+local function showNotice(msg)
+    local sg = PlayerGui:FindFirstChild("EvadeNotice") or Instance.new("ScreenGui", PlayerGui)
+    sg.Name = "EvadeNotice"
+    sg.ResetOnSpawn = false
+    sg.DisplayOrder = 9998
+    local container = Instance.new("Frame", sg)
+    container.Size = UDim2.new(0, 300, 0, 40)
+    container.Position = UDim2.new(0.5, -150, 0.1, 0)
+    container.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    container.BackgroundTransparency = 0.4
+    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
+    local label = Instance.new("TextLabel", container)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.TextSize = 16
+    label.Font = Enum.Font.GothamBold
+    label.Text = msg
+    task.delay(3, function() container:Destroy() end)
+end
+
+-- ==================== 建立 UI 面板（無輸入框） ====================
 local screenGui = Instance.new("ScreenGui", PlayerGui)
 screenGui.Name = "EvadePlayerPanel"
 screenGui.Enabled = false
@@ -34,49 +73,49 @@ screenGui.DisplayOrder = 9999
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 
 local mainFrame = Instance.new("Frame", screenGui)
-mainFrame.Size = UDim2.new(0, 300, 0, 400)  -- 稍微縮短高度，因為沒有關閉鈕
-mainFrame.Position = UDim2.new(0.5, -150, 0.5, -200)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-mainFrame.BackgroundTransparency = 0.1
+mainFrame.Size = UDim2.new(0, 380, 0, 500)
+mainFrame.Position = UDim2.new(1, -390, 0.5, -250)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+mainFrame.BackgroundTransparency = 0.15
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
 mainFrame.Draggable = true
 mainFrame.ZIndex = 10
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+Instance.new("UIStroke", mainFrame).Color = Color3.fromHex("A475D7")
 
 local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 40)
+title.Size = UDim2.new(1, 0, 0, 35)
+title.Position = UDim2.new(0, 0, 0, 5)
 title.BackgroundTransparency = 1
-title.Text = "🚀 Evade 玩家列表"
+title.Text = "🚀 Evade 玩家列表 (Tab 開關)"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 18
+title.TextSize = 16
 title.ZIndex = 10
 
 local playerList = Instance.new("ScrollingFrame", mainFrame)
-playerList.Size = UDim2.new(0.9, 0, 0.85, 0)
-playerList.Position = UDim2.new(0.05, 0, 0.1, 0)
+playerList.Size = UDim2.new(0.9, 0, 0.88, 0)
+playerList.Position = UDim2.new(0.05, 0, 0.08, 0)
 playerList.BackgroundTransparency = 1
 playerList.CanvasSize = UDim2.new(0, 0, 0, 0)
 playerList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 playerList.ScrollBarThickness = 2
 playerList.ZIndex = 10
-Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 5)
+Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 
 -- 雙重保險強制隱藏
 screenGui.Enabled = false
-task.delay(0.5, function()
-    if screenGui then screenGui.Enabled = false end
-end)
+task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
--- ==================== 從後端獲取在線玩家 ====================
+-- ==================== 從 GAS 獲取在線玩家 ====================
 local function fetchOnlinePlayers()
     local allPlayers = {}
     for i = 0, 9 do
         local url = GAS_URL:gsub("/exec", "/users/" .. i .. ".json")
-        local success, result = pcall(function() return game:HttpGet(url) end)
-        if success and result then
-            local data = HttpService:JSONDecode(result)
+        local res = httpRequest("GET", url)
+        if res and res.Body then
+            local data = HttpService:JSONDecode(res.Body)
             for _, info in pairs(data) do
                 if os.time() - (info.lastSeen or 0) < 30 then
                     table.insert(allPlayers, info)
@@ -92,41 +131,61 @@ local function refreshPlayerList()
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
+
     local players = fetchOnlinePlayers()
+    local now = os.time()
     for _, info in ipairs(players) do
         local btn = Instance.new("TextButton", playerList)
-        btn.Size = UDim2.new(1, 0, 0, 50)
-        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-        btn.Text = string.format("%s (@%s)\nID: %s",
-            info.displayName or "N/A",
-            info.username or "N/A",
-            info.userId or "N/A")
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamMedium
-        btn.TextSize = 14
-        btn.TextWrapped = true
+        btn.Size = UDim2.new(1, 0, 0, 130)
+        btn.BackgroundColor3 = (info.jobId == game.JobId) and Color3.fromHex("4A306D") or Color3.fromRGB(35, 35, 45)
+        btn.BackgroundTransparency = 0.2
         btn.ZIndex = 10
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
+        local join = tonumber(info.joinTime) or now
+        local diff = math.max(0, now - join)
+        local d = math.floor(diff / 86400)
+        local h = math.floor((diff % 86400) / 3600)
+        local m = math.floor((diff % 3600) / 60)
+        local s = math.floor(diff % 60)
+
+        btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n⏱️ %dd %dh %dm %ds",
+            info.displayName or "N/A",
+            info.username or "N/A",
+            info.userId or "N/A",
+            info.status or "ALIVE",
+            d, h, m, s)
+        btn.TextColor3 = Color3.new(1, 1, 1)
+        btn.TextSize = 15
+        btn.Font = Enum.Font.GothamBold
+        btn.TextWrapped = true
+
+        local lastClick = 0
         btn.MouseButton1Click:Connect(function()
-            if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
-                local success, err = pcall(function()
+            local t = tick()
+            if t - lastClick < 0.35 then
+                if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
+                    showNotice("正在追蹤玩家...")
                     TeleportService:TeleportToPlaceInstance(game.PlaceId, info.jobId, lp)
-                end)
-                if not success then warn("傳送失敗:", err) end
+                end
             else
-                print("玩家與您在同一伺服器，或無有效的 JobId")
+                if setclipboard then
+                    setclipboard(tostring(info.userId))
+                    showNotice("已複製 ID: " .. info.userId)
+                end
             end
+            lastClick = t
         end)
     end
 end
 
--- ==================== 狀態上報 ====================
+-- ==================== 狀態上報（至 Google Sheets） ====================
+local SCRIPT_START = os.time()
 local function reportStatus()
     local status = "ALIVE"
     if lp.Character and lp.Character:FindFirstChild("Humanoid") then
-        local humanoid = lp.Character.Humanoid
-        if humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead then
+        local hum = lp.Character.Humanoid
+        if hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then
             status = "DEAD"
         end
     end
@@ -136,6 +195,7 @@ local function reportStatus()
         username = lp.Name,
         status = status,
         jobId = game.JobId,
+        joinTime = SCRIPT_START,
         lastSeen = os.time(),
         sheetIndex = lp.UserId % 10
     }
@@ -152,7 +212,7 @@ task.spawn(function()
     end
 end)
 
--- ==================== Tab 鍵切換面板 ====================
+-- ==================== Tab 鍵切換 ====================
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
@@ -164,4 +224,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ Evade 追蹤面板已後台運行，按 Tab 鍵切換顯示/隱藏")
+print("✅ Evade 玩家面板已載入，按 Tab 鍵開啟/關閉")
