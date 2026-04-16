@@ -1,0 +1,30 @@
+-- 除錯測試腳本
+local GAS_URL = "https://script.google.com/macros/s/AKfycbwnwe6tHkppxP5BbudUEWNvOaSVGTfszxP5aIIwuqoG7x9cKyWHm1fj6O6PfPH_gKk9_g/exec"
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local lp = Players.LocalPlayer
+
+local data = {
+    userId = lp.UserId,
+    displayName = lp.DisplayName,
+    username = lp.Name,
+    status = "ALIVE",
+    jobId = game.JobId,
+    joinTime = os.time(),
+    lastSeen = os.time(),
+    sheetIndex = lp.UserId % 10
+}
+
+local json = HttpService:JSONEncode(data)
+local url = GAS_URL .. "?data=" .. game:UrlEncode(json)
+
+local req = syn and syn.request or http_request or request
+if not req then error("找不到 HTTP 請求函數") end
+
+print("📤 發送請求到:", url:sub(1, 80) .. "...")
+
+local result = req({ Url = url, Method = "GET" })
+
+print("📥 響應碼:", result.StatusCode)
+print("📥 響應體:", result.Body)
