@@ -1,26 +1,93 @@
--- 终极最小化测试：发送完全固定的 JSON 字符串
-local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"
+-- 超级诊断脚本：测试写入和读取
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
 
--- 完全不依赖任何 Roblox 服务，纯手工构造请求
 local req = syn and syn.request or http_request or request or (http and http.request)
-if not req then
-    print("❌ 无请求函数")
+if not req then error("无HTTP请求函数") end
+
+-- 纯手工JSON
+local function buildJson(t)
+    local parts = {}
+    for k, v in pairs(t) do
+        local vStr
+        if type(v) == "string" then
+            vStr = '"' .. v:gsub('"', '\\"') .. '"'
+        elseif type(v) == "number" then
+            vStr = tostring(v)
+        else
+            vStr = '""'
+        end
+        table.insert(parts, '"' .. k .. '":' .. vStr)
+    end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+
+-- URL编码
+local function urlEncode(s)
+    local result = ""
+    for i = 1, #s do
+        local c = s:sub(i, i)
+        local b = string.byte(c)
+        if (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or c == '-' or c == '_' or c == '.' or c == '~' then
+            result = result .. c
+        else
+            result = result .. string.format("%%%02X", b)
+        end
+    end
+    return result
+end
+
+-- 上报自己的数据
+print("📤 步骤1：上报玩家数据...")
+local data = {
+    userId = lp.UserId,
+    displayName = lp.DisplayName,
+    username = lp.Name,
+    status = "ALIVE",
+    jobId = game.JobId,
+    joinTime = os.time(),
+    sheetIndex = lp.UserId % 10
+}
+local json = buildJson(data)
+local url = GAS_URL .. "?data=" .. urlEncode(json)
+local res = req({ Url = url, Method = "GET" })
+print("   写入响应码:", res.StatusCode)
+if res.StatusCode ~= 200 then
+    print("❌ 写入失败，响应体:", res.Body)
+    return
+end
+print("✅ 写入成功")
+
+-- 等待数据落库
+print("⏳ 步骤2：等待2秒让GAS处理数据...")
+wait(2)
+
+-- 读取玩家列表
+print("📥 步骤3：读取在线玩家列表...")
+local getUrl = GAS_URL .. "?action=getPlayers"
+res = req({ Url = getUrl, Method = "GET" })
+print("   读取响应码:", res.StatusCode)
+if res.StatusCode ~= 200 then
+    print("❌ 读取失败，响应体:", res.Body)
     return
 end
 
--- 固定的测试 JSON（已经过 URL 编码）
-local fixedJson = '{"userId":123,"displayName":"Test","username":"Test","status":"ALIVE","jobId":"test","joinTime":123456,"lastSeen":123456,"sheetIndex":0}'
-local encoded = fixedJson:gsub("%W", function(c) return string.format("%%%02X", string.byte(c)) end)
-local url = GAS_URL .. "?data=" .. encoded
+local responseData = HttpService:JSONDecode(res.Body)
+local players = responseData.players or {}
+print("   返回的玩家数量:", #players)
 
-print("📤 发送固定测试数据...")
-local success, result = pcall(function() return req({ Url = url, Method = "GET" }) end)
-
-if not success then
-    print("❌ 请求失败:", result)
-elseif result then
-    print("📥 响应码:", result.StatusCode)
-    print("📥 响应体:", result.Body)
+if #players == 0 then
+    print("⚠️ 玩家列表为空！")
+    print("   可能原因：")
+    print("   - GAS代码中的时间判断逻辑有误")
+    print("   - 试算表中确实没有30秒内的数据")
+    print("   请检查试算表对应的'分流_X'工作表，看最后一行是否有您刚才上报的数据。")
 else
-    print("❌ 请求返回 nil")
+    print("🎉 成功获取到玩家列表！")
+    for i, p in ipairs(players) do
+        print(string.format("   [%d] %s (@%s) ID:%s Status:%s", i, p.displayName, p.username, p.userId, p.status))
+    end
+    print("✅ 如果这里显示了玩家，但Evade面板不显示，说明是面板UI刷新逻辑的问题。")
 end
