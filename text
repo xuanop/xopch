@@ -160,20 +160,13 @@ task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
 -- ==================== 从 GAS 获取在线玩家 ====================
 local function fetchOnlinePlayers()
-    local allPlayers = {}
-    for i = 0, 9 do
-        local url = GAS_URL:gsub("/exec", "/users/" .. i .. ".json")
-        local result = httpGet(url)
-        if result and result.StatusCode == 200 and result.Body then
-            local data = HttpService:JSONDecode(result.Body)
-            for _, info in pairs(data) do
-                if os.time() - (info.lastSeen or 0) < 30 then
-                    table.insert(allPlayers, info)
-                end
-            end
-        end
+    local url = GAS_URL .. "?action=getPlayers"
+    local result = httpGet(url)
+    if result and result.StatusCode == 200 and result.Body then
+        local data = HttpService:JSONDecode(result.Body)
+        return data.players or {}
     end
-    return allPlayers
+    return {}
 end
 
 -- ==================== 刷新玩家列表 ====================
