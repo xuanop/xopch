@@ -1,34 +1,32 @@
--- 終極連通性測試：發送一個極簡 GET 請求到 GAS，並輸出原始回應
-local testUrl = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"  -- 請務必替換！
+-- 超簡化單次上報版（用於連通性測試成功後）
+local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"
+local HttpService = game:GetService("HttpService")
+local lp = game:GetService("Players").LocalPlayer
 
--- 嘗試獲取可用的請求函數
+local data = {
+    userId = lp.UserId,
+    displayName = lp.DisplayName,
+    username = lp.Name,
+    status = "ALIVE",
+    jobId = game.JobId,
+    joinTime = os.time(),
+    lastSeen = os.time(),
+    sheetIndex = lp.UserId % 10
+}
+
+local json = HttpService:JSONEncode(data)
+local url = GAS_URL .. "?data=" .. game:UrlEncode(json)
+
 local req = syn and syn.request or http_request or request or (http and http.request)
-if not req then
-    print("❌ 錯誤：您的注入器不支援任何 HTTP 請求函數")
-    return
-end
+if not req then error("無請求函數") end
 
-print("✅ 找到請求函數，類型:", type(req))
-print("📤 正在發送測試請求...")
+print("📤 發送上報...")
+local result = req({ Url = url, Method = "GET" })
+print("📥 響應碼:", result.StatusCode)
+print("📥 響應體:", result.Body)
 
-local success, result = pcall(function()
-    return req({
-        Url = testUrl,
-        Method = "GET"
-    })
-end)
-
-if not success then
-    print("❌ 請求過程中發生 Lua 錯誤:", result)
-elseif result then
-    print("📥 請求完成！")
-    print("   響應碼:", result.StatusCode)
-    print("   響應體:", result.Body)
-    if result.StatusCode == 200 and string.find(result.Body, "API") then
-        print("🎉 成功！GAS 連通性正常。問題可能出在數據格式或上報邏輯。")
-    else
-        print("⚠️ 請求已發送，但 GAS 回應異常。請檢查您的 GAS 部署。")
-    end
+if result.StatusCode == 200 then
+    print("✅ 上報成功，請檢查試算表")
 else
-    print("❌ 請求返回 nil，可能是網路問題或注入器攔截。")
+    print("❌ 上報失敗，請根據上述響應碼排查")
 end
