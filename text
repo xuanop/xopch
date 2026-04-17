@@ -1,7 +1,7 @@
 --[[
-   🔑 Evade 追踪系统 - 单次上报版
-   ✅ 启动时仅上报一次自身状态
-   ✅ 按 Tab 键打开玩家列表（显示其他在线玩家）
+   🔑 Evade 追踪系统 - 严格单次上报版
+   ✅ 启动后仅上报一次自身状态（永不循环）
+   ✅ 按 Tab 键打开玩家列表（查看其他持续上报的玩家）
    ✅ 单击复制 ID，双击追踪至玩家服务器
    ✅ 表格无 LastSeen 显示，时间格式为英文 AM/PM
 --]]
@@ -97,10 +97,10 @@ local function reportStatusOnce()
     local jsonBody = buildJson(data)
     local fullUrl = GAS_URL .. "?data=" .. urlEncode(jsonBody)
     httpGet(fullUrl)
-    print("✅ 状态已上报（单次）")
+    print("✅ 状态已上报（仅此一次）")
 end
 
--- 启动后延迟 2 秒上报一次
+-- 启动后延迟 2 秒上报一次（无任何后续循环）
 task.spawn(function()
     task.wait(2)
     reportStatusOnce()
@@ -214,4 +214,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ Evade 追踪系统已启动（单次上报），按 Tab 键打开玩家列表")
+print("✅ Evade 追踪系统已启动（严格单次上报），按 Tab 键打开玩家列表")
