@@ -241,26 +241,25 @@ local function updateCache()
     return success
 end
 
--- ==================== 刷新 UI（自動過濾超時玩家，但若無時間字段則保留） ====================
+-- ==================== 刷新 UI（根據 lastUpdate 判斷在線狀態） ====================
 local function renderPlayerList()
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
-    
+
     local now = os.time()
     local visibleCount = 0
-    
+
     for _, info in ipairs(cachedPlayers) do
-        -- 獲取最後更新時間（兼容多種字段，缺失時視為剛剛更新）
-        local lastUpdate = tonumber(info.lastUpdate) or tonumber(info.recordTime)
-        if not lastUpdate then
-            -- 如果沒有任何時間字段，則認為是有效的（避免因缺失字段而隱藏）
-            lastUpdate = now
-        end
-        
-        if now - lastUpdate <= 35 then
+        local userId = tonumber(info.userId)
+        local isSelf = (userId == lp.UserId)
+        local lastUpdate = tonumber(info.lastUpdate) or tonumber(info.recordTime) or now
+        local isOnline = (now - lastUpdate <= 35)  -- 35 秒內有心跳視為在線
+
+        -- 自己永遠顯示，其他玩家只顯示在線的
+        if isSelf or isOnline then
             visibleCount = visibleCount + 1
-            
+
             local btn = Instance.new("TextButton", playerList)
             btn.Size = UDim2.new(1, 0, 0, 130)
             btn.BackgroundColor3 = (info.jobId == game.JobId) and Color3.fromHex("4A306D") or Color3.fromRGB(35, 35, 45)
@@ -268,17 +267,24 @@ local function renderPlayerList()
             btn.ZIndex = 10
             Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
-            local join = tonumber(info.joinTime) or now
-            local diff = math.max(0, now - join)
+            -- 計算顯示時長：在線用 joinTime，離線用 lastUpdate
+            local baseTime = isOnline and tonumber(info.joinTime) or lastUpdate
+            baseTime = baseTime or now
+            local diff = math.max(0, now - baseTime)
             local d = math.floor(diff / 86400)
             local h = math.floor((diff % 86400) / 3600)
             local m = math.floor((diff % 3600) / 60)
             local s = math.floor(diff % 60)
 
-            btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n⏱️ %dd %dh %dm %ds",
-                info.displayName or "N/A", info.username or "N/A", info.userId or "N/A",
-                info.status or "ALIVE", d, h, m, s)
-            btn.TextColor3 = Color3.new(1, 1, 1)
+            local statusText = isOnline and (info.status or "ALIVE") or "OFFLINE"
+            local timerText = isOnline and string.format("⏱️ %dd %dh %dm %ds", d, h, m, s)
+                                        or string.format("💤 離線 %dd %dh %dm %ds", d, h, m, s)
+
+            btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n%s",
+                info.displayName or "N/A", info.username or "N/A", userId or "N/A",
+                statusText, timerText)
+
+            btn.TextColor3 = isOnline and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 180)
             btn.TextSize = 15
             btn.Font = Enum.Font.GothamBold
             btn.TextWrapped = true
@@ -286,22 +292,24 @@ local function renderPlayerList()
             local lastClick = 0
             btn.MouseButton1Click:Connect(function()
                 local t = tick()
-                if t - lastClick < 0.70 then
-                    if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
+                if t - lastClick < 0.35 then
+                    if isOnline and info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
                         showNotice("正在追蹤玩家...")
-                        safeTeleport(info.userId, info.jobId)
+                        safeTeleport(userId, info.jobId)
+                    elseif not isOnline then
+                        showNotice("❌ 玩家已離線，無法追蹤")
                     end
                 else
                     if setclipboard then
-                        setclipboard(tostring(info.userId))
-                        showNotice("已複製 ID: " .. info.userId)
+                        setclipboard(tostring(userId))
+                        showNotice("已複製 ID: " .. userId)
                     end
                 end
                 lastClick = t
             end)
         end
     end
-    
+
     if visibleCount == 0 then
         local emptyBtn = Instance.new("TextButton", playerList)
         emptyBtn.Size = UDim2.new(1, 0, 0, 50)
@@ -314,7 +322,6 @@ local function renderPlayerList()
         Instance.new("UICorner", emptyBtn).CornerRadius = UDim.new(0, 6)
     end
 end
-
 -- ==================== 後台定時刷新緩存 ====================
 task.spawn(function()
     updateCache()
