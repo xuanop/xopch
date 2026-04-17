@@ -8,7 +8,7 @@
 
 -- ==================== 配置區 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec" 
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxcQZqqo_OpI-owCKfcMuxphNxVMdAkXeRHa3-WUBaMHQoFzv9AADhVV9PAzWeUFAMMIQ/exec" 
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 環境初始化 ====================
