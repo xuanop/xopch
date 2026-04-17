@@ -1,10 +1,19 @@
 --[[
-   🔑 Evade 追踪系统 - 最终静默版
-   ✅ 启动后仅上报一次自身状态（无循环，无错误提示）
-   ✅ 按 Tab 键打开玩家列表（查看其他持续上报的玩家）
-   ✅ 单击复制 ID，双击追踪至玩家服务器
-   ✅ 表格无 LastSeen 显示，时间格式为英文 AM/PM
+   🔑 Evade 追踪系统 - 终极静默版
+   ✅ 强制屏蔽所有 GAS 相关警告
+   ✅ 启动后仅上报一次自身状态
+   ✅ 按 Tab 键打开玩家列表
+   ✅ 单击复制 ID，双击追踪
 --]]
+
+-- ==================== 强制静默：拦截所有 GAS 警告 ====================
+local originalWarn = warn
+warn = function(...)
+    local msg = tostring(({...})[1] or "")
+    if not msg:find("GAS") then
+        originalWarn(...)
+    end
+end
 
 -- ==================== 配置区 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
@@ -65,7 +74,7 @@ local function urlEncode(s)
     return result
 end
 
--- ==================== HTTP GET 请求（静默） ====================
+-- ==================== HTTP GET 请求（完全静默） ====================
 local function httpGet(url)
     local req = http_request or syn.request or request or (http and http.request)
     if not req then return nil end
@@ -75,7 +84,7 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- ==================== 状态上报（仅一次，完全静默） ====================
+-- ==================== 状态上报（仅一次） ====================
 local function reportStatusOnce()
     local status = "ALIVE"
     if lp.Character and lp.Character:FindFirstChild("Humanoid") then
@@ -96,11 +105,9 @@ local function reportStatusOnce()
 
     local jsonBody = buildJson(data)
     local fullUrl = GAS_URL .. "?data=" .. urlEncode(jsonBody)
-    -- 静默发送，无论成功与否都不输出任何警告
     httpGet(fullUrl)
 end
 
--- 启动后延迟 2 秒上报一次
 task.spawn(function()
     task.wait(2)
     reportStatusOnce()
