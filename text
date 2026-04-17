@@ -1,36 +1,34 @@
 --[[
-   📊 獨立版 Google 試算表分流上報（單次執行 / 無時間欄位）
-   ✅ 已移除 JoinTime 和 LastSeen
-   ✅ 10秒內重複執行自動跳過
-   ✅ 純手工 JSON，無 HttpService 依賴
-   ✅ GET 請求繞過注入器 POST 重定向限制
+   🔑 Evade 完整追踪系统 v2.0 (简体中文版)
+   ✅ 每 30 秒自动上报状态至 Google 表格
+   ✅ 按 Tab 键打开/关闭玩家列表面板
+   ✅ 单击复制 ID，双击追踪至玩家服务器
+   ✅ 面板可拖动、置顶，无关闭按钮
+   ✅ 纯 Google Sheets 后端，无 JoinTime/LastSeen
 --]]
 
--- ==================== 配置區 ====================
-local AUTHOR_USERNAMES = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbwnwe6tHkppxP5BbudUEWNvOaSVGTfszxP5aIIwuqoG7x9cKyWHm1fj6O6PfPH_gKk9_g/exec"  -- 替換為你的 Web App URL
+-- ==================== 配置区 ====================
+local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
+local GAS_URL = "https://script.google.com/macros/s/你的部署ID/exec"   -- ⚠️ 请替换为你的 Web App 网址
+local PANEL_KEY = Enum.KeyCode.Tab
 
--- ==================== 去重時間戳 ====================
-local KEY = "__GAS_LAST_SENT_" .. (game.PlaceId or 0)
-local lastSent = shared[KEY] or 0
-local now = os.time()
-if now - lastSent < 10 then
-    return
-end
-shared[KEY] = now
-
--- ==================== 環境初始化 ====================
+-- ==================== 环境初始化 ====================
 local Players = game:GetService("Players")
-local lp = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local TeleportService = game:GetService("TeleportService")
+local UIS = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 
--- 作者驗證
-local isAuthor = false
-for _, name in ipairs(AUTHOR_USERNAMES) do
-    if lp.Name == name then isAuthor = true break end
+local lp = Players.LocalPlayer
+local PlayerGui = lp:WaitForChild("PlayerGui")
+
+-- 授权检查
+local isAuthorized = false
+for _, name in ipairs(AUTHORIZED_USERS) do
+    if lp.Name == name then isAuthorized = true break end
 end
-if not isAuthor then return end
+if not isAuthorized then return end
 
--- ==================== 純手工 JSON 構建 ====================
+-- ==================== 纯手工 JSON 构建 ====================
 local function buildJson(data)
     local parts = {}
     for k, v in pairs(data) do
@@ -40,28 +38,20 @@ local function buildJson(data)
             local escaped = ""
             for i = 1, #v do
                 local c = v:sub(i, i)
-                if c == '"' then
-                    escaped = escaped .. '\\"'
-                elseif c == '\\' then
-                    escaped = escaped .. '\\\\'
-                else
-                    escaped = escaped .. c
-                end
+                if c == '"' then escaped = escaped .. '\\"'
+                elseif c == '\\' then escaped = escaped .. '\\\\'
+                else escaped = escaped .. c end
             end
             valueStr = '"' .. escaped .. '"'
-        elseif vType == "number" then
-            valueStr = tostring(v)
-        elseif vType == "boolean" then
-            valueStr = v and "true" or "false"
-        else
-            valueStr = '""'
-        end
+        elseif vType == "number" then valueStr = tostring(v)
+        elseif vType == "boolean" then valueStr = v and "true" or "false"
+        else valueStr = '""' end
         table.insert(parts, '"' .. tostring(k) .. '":' .. valueStr)
     end
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
--- ==================== URL 編碼 ====================
+-- ==================== URL 编码 ====================
 local function urlEncode(s)
     local result = ""
     for i = 1, #s do
@@ -76,40 +66,22 @@ local function urlEncode(s)
     return result
 end
 
--- ==================== HTTP GET 請求 ====================
+-- ==================== HTTP GET 请求 ====================
 local function httpGet(url)
     local req = http_request or syn.request or request or (http and http.request)
-    if not req then
-        warn("[GAS] 找不到 HTTP 請求函數")
-        return false
-    end
-
+    if not req then return nil end
     local success, result = pcall(function()
-        return req({
-            Url = url,
-            Method = "GET"
-        })
+        return req({ Url = url, Method = "GET" })
     end)
-    
-    if not success then
-        warn("[GAS] GET 請求失敗:", result)
-    else
-        print("[GAS] 响应码:", result.StatusCode)
-        print("[GAS] 响应体:", result.Body)
-    end
-    return success
+    return success and result or nil
 end
 
--- ==================== 分流與上報 ====================
-local function getSheetIndex(userId)
-    return userId % 10
-end
-
-local function sendToGoogleSheet()
+-- ==================== 状态上报（无 JoinTime/LastSeen） ====================
+local function reportStatus()
     local status = "ALIVE"
-    if lp.Character then
-        local humanoid = lp.Character:FindFirstChild("Humanoid")
-        if humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
+    if lp.Character and lp.Character:FindFirstChild("Humanoid") then
+        local hum = lp.Character.Humanoid
+        if hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then
             status = "DEAD"
         end
     end
@@ -120,34 +92,145 @@ local function sendToGoogleSheet()
         username = lp.Name,
         status = status,
         jobId = game.JobId,
-        sheetIndex = getSheetIndex(lp.UserId)
+        sheetIndex = lp.UserId % 10
     }
 
     local jsonBody = buildJson(data)
-    local encodedData = urlEncode(jsonBody)
-    local fullUrl = GAS_URL .. "?data=" .. encodedData
+    local fullUrl = GAS_URL .. "?data=" .. urlEncode(jsonBody)
 
-    httpGet(fullUrl)
-end
-
-local req = http_request or syn.request or request or (http and http.request)
-    if not req then
-        warn("[GAS] 找不到 HTTP 請求函數")
-        return
-    end
-
-    local success, result = pcall(function()
-        return req({ Url = fullUrl, Method = "GET" })
-    end)
-
-    -- ✅ 寬容判斷：只要狀態碼在 200~399 之間都視為成功
-    if success and result and result.StatusCode >= 200 and result.StatusCode < 400 then
-        -- 成功，不輸出任何警告
+    local result = httpGet(fullUrl)
+    if result and result.StatusCode and result.StatusCode >= 200 and result.StatusCode < 400 then
+        -- 成功，静默
     else
-        local errMsg = success and ("狀態碼 " .. tostring(result and result.StatusCode)) or tostring(result)
-        warn("[GAS] 上報失敗: " .. errMsg)
+        warn("[GAS] 上报异常，状态码:", result and result.StatusCode)
     end
 end
+
+-- 启动定时上报（每 30 秒）
+task.spawn(function()
+    while true do
+        reportStatus()
+        task.wait(30)
+    end
+end)
+
+-- ==================== 创建 UI 面板 ====================
+local screenGui = Instance.new("ScreenGui", PlayerGui)
+screenGui.Name = "EvadePlayerPanel"
+screenGui.Enabled = false
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 9999
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, 380, 0, 500)
+mainFrame.Position = UDim2.new(1, -390, 0.5, -250)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+mainFrame.BackgroundTransparency = 0.15
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.ZIndex = 10
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+Instance.new("UIStroke", mainFrame).Color = Color3.fromHex("A475D7")
+
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, 0, 0, 35)
+title.Position = UDim2.new(0, 0, 0, 5)
+title.BackgroundTransparency = 1
+title.Text = "🚀 Evade 玩家列表 (Tab 开关)"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.ZIndex = 10
+
+local playerList = Instance.new("ScrollingFrame", mainFrame)
+playerList.Size = UDim2.new(0.9, 0, 0.88, 0)
+playerList.Position = UDim2.new(0.05, 0, 0.08, 0)
+playerList.BackgroundTransparency = 1
+playerList.CanvasSize = UDim2.new(0, 0, 0, 0)
+playerList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+playerList.ScrollBarThickness = 2
+playerList.ZIndex = 10
+Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
+
+-- 强制隐藏（双重保险）
+screenGui.Enabled = false
+task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
+
+-- ==================== 从 GAS 获取在线玩家 ====================
+local function fetchOnlinePlayers()
+    local allPlayers = {}
+    for i = 0, 9 do
+        local url = GAS_URL:gsub("/exec", "/users/" .. i .. ".json")
+        local result = httpGet(url)
+        if result and result.StatusCode == 200 and result.Body then
+            local data = HttpService:JSONDecode(result.Body)
+            for _, info in pairs(data) do
+                if os.time() - (info.lastSeen or 0) < 30 then
+                    table.insert(allPlayers, info)
+                end
+            end
+        end
+    end
+    return allPlayers
+end
+
+-- ==================== 刷新玩家列表 ====================
+local function refreshPlayerList()
+    for _, child in ipairs(playerList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    local players = fetchOnlinePlayers()
+    for _, info in ipairs(players) do
+        local btn = Instance.new("TextButton", playerList)
+        btn.Size = UDim2.new(1, 0, 0, 110)
+        btn.BackgroundColor3 = (info.jobId == game.JobId) and Color3.fromHex("4A306D") or Color3.fromRGB(35, 35, 45)
+        btn.BackgroundTransparency = 0.2
+        btn.ZIndex = 10
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+        btn.Text = string.format("👤 %s\n(@%s)\nID: %s\n状态: %s",
+            info.displayName or "N/A",
+            info.username or "N/A",
+            info.userId or "N/A",
+            info.status or "ALIVE")
+        btn.TextColor3 = Color3.new(1, 1, 1)
+        btn.TextSize = 15
+        btn.Font = Enum.Font.GothamBold
+        btn.TextWrapped = true
+
+        local lastClick = 0
+        btn.MouseButton1Click:Connect(function()
+            local t = tick()
+            if t - lastClick < 0.35 then
+                if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, info.jobId, lp)
+                end
+            else
+                if setclipboard then
+                    setclipboard(tostring(info.userId))
+                end
+            end
+            lastClick = t
+        end)
+    end
+end
+
+-- ==================== 快捷键（Tab 切换） ====================
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == PANEL_KEY then
+        local newState = not screenGui.Enabled
+        screenGui.Enabled = newState
+        if newState then
+            refreshPlayerList()
+        end
+    end
+end)
+
+print("✅ Evade 追踪系统已启动，按 Tab 键打开玩家列表")
 -- ==================== 執行上報 ====================
 print("[单次上报] 发送数据")
 sendToGoogleSheet()
