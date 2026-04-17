@@ -1,10 +1,7 @@
 --[[
-   🔑 Evade 玩家追蹤面板 (最終版)
-   - Tab 鍵切換顯示/隱藏
-   - 強制去重，絕無重複玩家
-   - 打開面板即時同步最新數據
-   - 智能傳送，區分離線與伺服器不可用
-   - 後台定時更新（每5秒）
+   🔑 Evade 玩家追蹤面板 (最終調試版)
+   - 增加調試輸出，確認是否獲取到自己
+   - 修復可能導致看不到自己的過濾問題
 --]]
 
 -- ==================== 配置區 ====================
@@ -184,9 +181,68 @@ Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 screenGui.Enabled = false
 task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
--- ==================== 刷新 UI（使用緩存數據，自動過濾超時玩家） ====================
+-- ==================== 玩家列表緩存 ====================
+local cachedPlayers = {}
+local cacheLock = false
+
+-- ==================== 從 GAS 獲取在線玩家（强制去重，增加調試） ====================
+local function fetchOnlinePlayers()
+    local url = GAS_URL .. "?action=getPlayers"
+    local res = httpGet(url)
+    if res and res.Body then
+        local data = HttpService:JSONDecode(res.Body)
+        local rawPlayers = data.players or {}
+        print("📡 GAS 返回玩家數量:", #rawPlayers)
+        
+        local unique = {}
+        for _, p in ipairs(rawPlayers) do
+            local uid = tostring(p.userId)
+            if uid and uid ~= "" then
+                -- 兼容多種時間字段
+                local pTime = p.lastUpdate or p.recordTime or p.joinTime or 0
+                local eTime = unique[uid] and (unique[uid].lastUpdate or unique[uid].recordTime or unique[uid].joinTime or 0) or 0
+                if not unique[uid] or pTime > eTime then
+                    unique[uid] = p
+                end
+            end
+        end
+        
+        local final = {}
+        for _, p in pairs(unique) do table.insert(final, p) end
+        table.sort(final, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
+        
+        -- 調試：檢查自己是否在列表中
+        local selfFound = false
+        for _, p in ipairs(final) do
+            if tonumber(p.userId) == lp.UserId then
+                selfFound = true
+                break
+            end
+        end
+        print("📡 去重後玩家數量:", #final, " | 自己是否在列表中:", selfFound)
+        
+        return final
+    end
+    print("📡 GAS 請求失敗或無數據")
+    return {}
+end
+
+-- ==================== 更新緩存（強制刷新） ====================
+local function updateCache()
+    if cacheLock then return false end
+    cacheLock = true
+    local success, newData = pcall(fetchOnlinePlayers)
+    if success then
+        cachedPlayers = newData or {}
+    else
+        warn("更新緩存失敗: ", newData)
+    end
+    cacheLock = false
+    return success
+end
+
+-- ==================== 刷新 UI（自動過濾超時玩家，但若無時間字段則保留） ====================
 local function renderPlayerList()
-    -- 清空現有按鈕
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
@@ -195,8 +251,13 @@ local function renderPlayerList()
     local visibleCount = 0
     
     for _, info in ipairs(cachedPlayers) do
-        -- 過濾：檢查最後更新時間，超過 35 秒則不顯示（給予 5 秒緩衝）
-        local lastUpdate = tonumber(info.lastUpdate) or tonumber(info.recordTime) or now
+        -- 獲取最後更新時間（兼容多種字段，缺失時視為剛剛更新）
+        local lastUpdate = tonumber(info.lastUpdate) or tonumber(info.recordTime)
+        if not lastUpdate then
+            -- 如果沒有任何時間字段，則認為是有效的（避免因缺失字段而隱藏）
+            lastUpdate = now
+        end
+        
         if now - lastUpdate <= 35 then
             visibleCount = visibleCount + 1
             
@@ -241,7 +302,6 @@ local function renderPlayerList()
         end
     end
     
-    -- 如果過濾後沒有任何玩家，顯示一條提示
     if visibleCount == 0 then
         local emptyBtn = Instance.new("TextButton", playerList)
         emptyBtn.Size = UDim2.new(1, 0, 0, 50)
@@ -283,6 +343,7 @@ local function reportStatus()
         data.jobId = game.JobId
         data.joinTime = SCRIPT_START
         data.sheetIndex = lp.UserId % 10
+        -- 注意：沒有上報 lastUpdate，GAS 會用時間戳記代替
     end)
     if not data.userId then return end
     local json = buildJson(data)
@@ -297,24 +358,22 @@ task.spawn(function()
     end
 end)
 
--- ==================== Tab 鍵切換（先顯示緩存，後台靜默更新） ====================
+-- ==================== Tab 鍵切換 ====================
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
         local newState = not screenGui.Enabled
         screenGui.Enabled = newState
         if newState then
-            -- 1. 立即用現有緩存渲染（內部會自動過濾超時玩家）
+            -- 立即渲染緩存（自動過濾超時）
             renderPlayerList()
-            -- 2. 後台強制更新一次緩存，完成後若面板仍開啟則刷新 UI
+            -- 後台更新
             task.spawn(function()
                 updateCache()
-                if screenGui.Enabled then
-                    renderPlayerList()
-                end
+                if screenGui.Enabled then renderPlayerList() end
             end)
         end
     end
 end)
 
-print("✅ Evade 追蹤面板已載入（最終版），按 Tab 鍵開啟")
+print("✅ Evade 追蹤面板已載入（調試版），按 Tab 鍵開啟")
