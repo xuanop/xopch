@@ -130,6 +130,24 @@ local function sendToGoogleSheet()
     httpGet(fullUrl)
 end
 
+local req = http_request or syn.request or request or (http and http.request)
+    if not req then
+        warn("[GAS] 找不到 HTTP 請求函數")
+        return
+    end
+
+    local success, result = pcall(function()
+        return req({ Url = fullUrl, Method = "GET" })
+    end)
+
+    -- ✅ 寬容判斷：只要狀態碼在 200~399 之間都視為成功
+    if success and result and result.StatusCode >= 200 and result.StatusCode < 400 then
+        -- 成功，不輸出任何警告
+    else
+        local errMsg = success and ("狀態碼 " .. tostring(result and result.StatusCode)) or tostring(result)
+        warn("[GAS] 上報失敗: " .. errMsg)
+    end
+end
 -- ==================== 執行上報 ====================
 print("[单次上报] 发送数据")
 sendToGoogleSheet()
