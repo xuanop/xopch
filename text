@@ -65,6 +65,29 @@ local function httpGet(url)
     return success and result or nil
 end
 
+-- ==================== 帶重試的安全傳送 ====================
+local function safeTeleport(placeId, jobId, player)
+    local TeleportService = game:GetService("TeleportService")
+    local maxRetries = 3
+    local retryDelay = 1
+    
+    for attempt = 1, maxRetries do
+        local success, err = pcall(function()
+            TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+        end)
+        
+        if success then
+            return true
+        else
+            warn("传送失败 (尝试 ", attempt, "/", maxRetries, "): ", err)
+            if attempt < maxRetries then
+                task.wait(retryDelay)
+            end
+        end
+    end
+    return false
+end
+
 -- ==================== 通知系統 ====================
 local function showNotice(msg)
     local sg = PlayerGui:FindFirstChild("EvadeNotice") or Instance.new("ScreenGui", PlayerGui)
@@ -209,13 +232,14 @@ local function renderPlayerList()
 
         local lastClick = 0
         btn.MouseButton1Click:Connect(function()
-            local t = tick()
-            if t - lastClick < 0.35 then
-                if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
-                    showNotice("正在追蹤玩家...")
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, info.jobId, lp)
-                end
-            else
+        local t = tick()
+        if t - lastClick < 0.35 then
+            if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
+                showNotice("正在追蹤玩家...")
+                -- 使用安全传送函数替代原来的 TeleportService:TeleportToPlaceInstance
+                safeTeleport(game.PlaceId, info.jobId, lp)
+            end
+        else
                 if setclipboard then
                     setclipboard(tostring(info.userId))
                     showNotice("已複製 ID: " .. info.userId)
