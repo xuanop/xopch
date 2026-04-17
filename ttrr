@@ -1,11 +1,19 @@
--- 最終測試：發送完整玩家數據到 GAS
-local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"  -- 請替換
+-- 超穩定測試腳本（含完整錯誤處理）
+local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"  -- 必須替換！
 
-local Players = game:GetService("Players")
+print(">>> 步驟 1：檢查環境")
+
 local HttpService = game:GetService("HttpService")
-local lp = Players.LocalPlayer
+local lp = game:GetService("Players").LocalPlayer
 
--- 構造數據
+local req = syn and syn.request or http_request or request or (http and http.request)
+if not req then
+    print("❌ 錯誤：找不到 HTTP 請求函數，您的注入器不支援網路請求。")
+    return
+end
+print("✅ 請求函數已獲取:", type(req))
+
+print(">>> 步驟 2：構造數據")
 local data = {
     userId = lp.UserId,
     displayName = lp.DisplayName,
@@ -16,23 +24,59 @@ local data = {
     lastSeen = os.time(),
     sheetIndex = lp.UserId % 10
 }
+print("✅ 數據構造完成")
 
-local json = HttpService:JSONEncode(data)
-local url = GAS_URL .. "?data=" .. game:UrlEncode(json)
+print(">>> 步驟 3：JSON 編碼")
+local success, json = pcall(HttpService.JSONEncode, HttpService, data)
+if not success then
+    print("❌ JSON 編碼失敗，注入器可能禁用了 HttpService:", json)
+    return
+end
+print("✅ JSON 編碼成功")
 
-print("📤 發送測試數據...")
-print("URL 長度:", #url)
+print(">>> 步驟 4：URL 編碼")
+local function manualUrlEncode(s)
+    -- 純 Lua 實現，無任何依賴
+    local result = ""
+    for i = 1, #s do
+        local c = s:sub(i, i)
+        local b = string.byte(c)
+        if (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or c == '-' or c == '_' or c == '.' or c == '~' then
+            result = result .. c
+        else
+            result = result .. string.format("%%%02X", b)
+        end
+    end
+    return result
+end
 
-local req = syn and syn.request or http_request or request or (http and http.request)
-if not req then error("找不到 HTTP 請求函數") end
+local encoded = manualUrlEncode(json)
+local url = GAS_URL .. "?data=" .. encoded
+print("✅ URL 編碼成功，長度:", #url)
 
-local result = req({ Url = url, Method = "GET" })
+print(">>> 步驟 5：發送 GET 請求")
+local result
+success, result = pcall(function()
+    return req({ Url = url, Method = "GET" })
+end)
+
+if not success then
+    print("❌ 請求過程中 Lua 錯誤:", result)
+    return
+end
+
+if not result then
+    print("❌ 請求返回 nil，可能是注入器攔截或網路問題。")
+    return
+end
 
 print("📥 響應碼:", result.StatusCode)
 print("📥 響應體:", result.Body)
 
 if result.StatusCode == 200 and string.find(result.Body, "success") then
-    print("🎉 成功！數據已寫入試算表，請檢查 Google Sheets。")
+    print("🎉 成功！數據已寫入試算表！")
+elseif result.StatusCode == 403 then
+    print("❌ 403 錯誤：GAS 權限不足，請重新部署並確保「存取權限」為「任何人」。")
 else
-    print("❌ 寫入失敗，請檢查 GAS 代碼中的 doGet 邏輯。")
+    print("❌ 寫入失敗，請檢查 GAS 代碼。")
 end
