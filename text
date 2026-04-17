@@ -68,7 +68,7 @@ end
 -- ==================== 帶重試的安全傳送 ====================
 local function safeTeleport(placeId, jobId, player)
     local TeleportService = game:GetService("TeleportService")
-    local maxRetries = 3
+    local maxRetries = 7
     local retryDelay = 1
     
     for attempt = 1, maxRetries do
