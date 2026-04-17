@@ -65,27 +65,50 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- ==================== 帶重試的安全傳送 ====================
-local function safeTeleport(placeId, jobId, player)
+-- ==================== 智能传送（预检 + 回退） ====================
+local function safeTeleport(targetUserId, targetJobId)
     local TeleportService = game:GetService("TeleportService")
-    local maxRetries = 7
-    local retryDelay = 1
+    local Players = game:GetService("Players")
+    local lp = Players.LocalPlayer
     
-    for attempt = 1, maxRetries do
-        local success, err = pcall(function()
-            TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+    -- 如果是同一服务器，直接提示
+    if targetJobId == game.JobId then
+        showNotice("⚠️ 您已在该服务器中")
+        return false
+    end
+    
+    -- 第一步：尝试获取目标玩家当前最准确的服务器信息
+    local success, placeId, jobId = pcall(function()
+        return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId)
+    end)
+    
+    if success and jobId and jobId ~= "" then
+        -- 预检成功，使用最新信息传送
+        showNotice("🚀 正在传送到玩家所在服务器...")
+        local teleportSuccess, err = pcall(function()
+            TeleportService:TeleportToPlaceInstance(placeId, jobId, lp)
         end)
-        
-        if success then
+        if teleportSuccess then
             return true
         else
-            warn("传送失败 (尝试 ", attempt, "/", maxRetries, "): ", err)
-            if attempt < maxRetries then
-                task.wait(retryDelay)
-            end
+            warn("精准传送失败: ", err)
+            -- 如果精准传送失败，尝试回退到普通传送（不指定 jobId）
+            showNotice("⚠️ 精准传送失败，尝试普通传送...")
+            pcall(function()
+                TeleportService:Teleport(placeId, lp)
+            end)
+            return true
         end
+    else
+        -- 预检失败：玩家可能已离线或服务器不可用
+        showNotice("❌ 目标玩家已离线或服务器不可用")
+        -- 强制刷新一次列表，移除失效玩家
+        task.spawn(function()
+            updateCache()
+            if screenGui.Enabled then renderPlayerList() end
+        end)
+        return false
     end
-    return false
 end
 
 -- ==================== 通知系統 ====================
