@@ -1,10 +1,10 @@
 --[[
-   🔑 Evade 玩家追蹤面板 (優化版)
+   🔑 Evade 玩家追蹤面板 (最終版)
    - Tab 鍵切換顯示/隱藏
-   - 玩家列表緩存，打開時立即顯示，無需等待
-   - 自動去重，同一玩家只顯示一次
-   - 後台定時更新列表（每5秒）
-   - 單擊複製 ID，雙擊追蹤
+   - 強制去重，絕無重複玩家
+   - 打開面板即時同步最新數據
+   - 智能傳送，區分離線與伺服器不可用
+   - 後台定時更新（每5秒）
 --]]
 
 -- ==================== 配置區 ====================
@@ -65,27 +65,22 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- ==================== 智能传送（区分离线与服务器不可用） ====================
+-- ==================== 智能傳送（區分離線與伺服器不可用） ====================
 local function safeTeleport(targetUserId, targetJobId)
     local TeleportService = game:GetService("TeleportService")
-    local Players = game:GetService("Players")
     local lp = Players.LocalPlayer
     
-    -- 如果是同一服务器，直接提示
     if targetJobId == game.JobId then
-        showNotice("⚠️ 您已在该服务器中")
+        showNotice("⚠️ 您已在該伺服器中")
         return false
     end
     
-    -- 第一步：尝试获取目标玩家当前最准确的服务器信息
     local success, placeId, jobId = pcall(function()
         return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId)
     end)
     
     if not success then
-        -- pcall 失败，通常意味着网络问题、玩家不存在或权限不足
-        showNotice("❌ 服务器不可用或玩家不存在")
-        -- 刷新列表，移除可能已失效的玩家
+        showNotice("❌ 伺服器不可用或玩家不存在")
         task.spawn(function()
             updateCache()
             if screenGui.Enabled then renderPlayerList() end
@@ -94,9 +89,7 @@ local function safeTeleport(targetUserId, targetJobId)
     end
     
     if not jobId or jobId == "" then
-        -- 成功调用，但没有返回 jobId，说明玩家在线但未处于任何游戏服务器中
-        showNotice("👻 玩家已离线")
-        -- 刷新列表，移除离线玩家
+        showNotice("👻 玩家已離線")
         task.spawn(function()
             updateCache()
             if screenGui.Enabled then renderPlayerList() end
@@ -104,8 +97,7 @@ local function safeTeleport(targetUserId, targetJobId)
         return false
     end
     
-    -- 预检成功，使用最新信息传送
-    showNotice("🚀 正在传送到玩家所在服务器...")
+    showNotice("🚀 正在傳送到玩家所在伺服器...")
     local teleportSuccess, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(placeId, jobId, lp)
     end)
@@ -113,16 +105,15 @@ local function safeTeleport(targetUserId, targetJobId)
     if teleportSuccess then
         return true
     else
-        warn("精准传送失败: ", err)
-        -- 如果精准传送失败，尝试回退到普通传送（不指定 jobId）
-        showNotice("⚠️ 精准传送失败，尝试普通传送...")
-        local fallbackSuccess, fallbackErr = pcall(function()
+        warn("精準傳送失敗: ", err)
+        showNotice("⚠️ 精準傳送失敗，嘗試普通傳送...")
+        local fallbackSuccess = pcall(function()
             TeleportService:Teleport(placeId, lp)
         end)
         if fallbackSuccess then
             return true
         else
-            showNotice("❌ 传送失败，请重试")
+            showNotice("❌ 傳送失敗，請重試")
             return false
         end
     end
@@ -193,59 +184,48 @@ Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 screenGui.Enabled = false
 task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
--- ==================== 玩家列表緩存 ====================
-local cachedPlayers = {}  -- 缓存最新的玩家列表
-local cacheLock = false   -- 简单的防并发标志
+-- ==================== 玩家列表緩存（強制更新） ====================
+local cachedPlayers = {}
+local cacheLock = false
 
--- ==================== 從 GAS 獲取在線玩家（强制去重版） ====================
 local function fetchOnlinePlayers()
     local url = GAS_URL .. "?action=getPlayers"
     local res = httpGet(url)
     if res and res.Body then
         local data = HttpService:JSONDecode(res.Body)
         local rawPlayers = data.players or {}
-        
-        -- 使用 userId 作为唯一键进行去重，保留最新记录
-        local uniquePlayers = {}
-        for _, player in ipairs(rawPlayers) do
-            local uid = player.userId
-            if uid then
-                -- 如果该玩家还不存在，或者当前记录比已存在的更新，则更新
-                if not uniquePlayers[uid] or (player.lastUpdate or 0) > (uniquePlayers[uid].lastUpdate or 0) then
-                    uniquePlayers[uid] = player
+        local unique = {}
+        for _, p in ipairs(rawPlayers) do
+            local uid = tostring(p.userId)
+            if uid and uid ~= "" then
+                local pTime = p.lastUpdate or p.recordTime or p.joinTime or 0
+                local eTime = unique[uid] and (unique[uid].lastUpdate or unique[uid].recordTime or unique[uid].joinTime or 0) or 0
+                if not unique[uid] or pTime > eTime then
+                    unique[uid] = p
                 end
             end
         end
-
-        -- 将去重后的结果转换为数组格式
-        local finalPlayers = {}
-        for _, player in pairs(uniquePlayers) do
-            table.insert(finalPlayers, player)
-        end
-        
-        return finalPlayers
+        local final = {}
+        for _, p in pairs(unique) do table.insert(final, p) end
+        table.sort(final, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
+        return final
     end
     return {}
 end
 
--- ==================== 更新緩存（後台執行） ====================
 local function updateCache()
-    if cacheLock then return end
+    if cacheLock then return false end
     cacheLock = true
-    local newData = fetchOnlinePlayers()
-    if #newData > 0 then
-        cachedPlayers = newData
-    end
+    local success, newData = pcall(fetchOnlinePlayers)
+    cachedPlayers = success and newData or {}
     cacheLock = false
+    return success
 end
 
--- ==================== 刷新 UI（使用緩存數據） ====================
 local function renderPlayerList()
-    -- 清空現有按鈕
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
-    
     local now = os.time()
     for _, info in ipairs(cachedPlayers) do
         local btn = Instance.new("TextButton", playerList)
@@ -272,14 +252,13 @@ local function renderPlayerList()
 
         local lastClick = 0
         btn.MouseButton1Click:Connect(function()
-        local t = tick()
-        if t - lastClick < 0.35 then
-            if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
-                showNotice("正在追蹤玩家...")
-                -- 使用安全传送函数替代原来的 TeleportService:TeleportToPlaceInstance
-                safeTeleport(info.userId, info.jobId)  -- 传入 userId 和 jobId
-            end
-        else
+            local t = tick()
+            if t - lastClick < 0.35 then
+                if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
+                    showNotice("正在追蹤玩家...")
+                    safeTeleport(info.userId, info.jobId)
+                end
+            else
                 if setclipboard then
                     setclipboard(tostring(info.userId))
                     showNotice("已複製 ID: " .. info.userId)
@@ -292,15 +271,11 @@ end
 
 -- ==================== 後台定時刷新緩存 ====================
 task.spawn(function()
-    -- 首次啟動時立即加載一次
     updateCache()
     while true do
-        task.wait(5)  -- 每5秒更新一次緩存
+        task.wait(5)
         updateCache()
-        -- 如果面板正在顯示，則刷新 UI
-        if screenGui.Enabled then
-            renderPlayerList()
-        end
+        if screenGui.Enabled then renderPlayerList() end
     end
 end)
 
@@ -336,25 +311,34 @@ task.spawn(function()
     end
 end)
 
--- ==================== Tab 鍵切換（即時同步版） ====================
+-- ==================== Tab 鍵切換（即時同步 + 加載提示） ====================
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
         local newState = not screenGui.Enabled
         screenGui.Enabled = newState
         if newState then
-            -- 1. 立即用現有緩存渲染，保證瞬間顯示
-            renderPlayerList()
-            -- 2. 後台強制更新一次緩存，完成後再次刷新 UI
+            -- 顯示加載中提示
+            for _, child in ipairs(playerList:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+            local loadingBtn = Instance.new("TextButton", playerList)
+            loadingBtn.Size = UDim2.new(1, 0, 0, 50)
+            loadingBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+            loadingBtn.Text = "⏳ 刷新玩家列表中..."
+            loadingBtn.TextColor3 = Color3.new(1, 1, 1)
+            loadingBtn.Font = Enum.Font.GothamMedium
+            loadingBtn.TextSize = 16
+            loadingBtn.ZIndex = 10
+            Instance.new("UICorner", loadingBtn).CornerRadius = UDim.new(0, 6)
+            
+            -- 強制更新緩存後渲染
             task.spawn(function()
                 updateCache()
-                -- 更新期間如果面板沒有被關閉，則刷新顯示
-                if screenGui.Enabled then
-                    renderPlayerList()
-                end
+                if screenGui.Enabled then renderPlayerList() end
             end)
         end
     end
 end)
 
-print("✅ Evade 追蹤面板已載入（優化版），按 Tab 鍵開啟")
+print("✅ Evade 追蹤面板已載入（最終版），按 Tab 鍵開啟")
