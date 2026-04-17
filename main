@@ -2289,9 +2289,9 @@ task.spawn(function()
         loadstring(game:HttpGet(url))()
     end)
     if not success then
-        warn("[外部腳本載入失敗]", err)
+        warn("[外部脚本载入失败]", err)
     else
-        print("[外部腳本載入成功]")
+        print("[外部脚本载入成功]")
     end
 end)
 
