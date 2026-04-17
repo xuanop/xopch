@@ -1,9 +1,10 @@
 --[[
-   🔑 Evade 玩家追蹤面板 (穩定版)
+   🔑 Evade 玩家追蹤面板 (優化版)
    - Tab 鍵切換顯示/隱藏
-   - 玩家列表來自 Google Sheets
+   - 玩家列表緩存，打開時立即顯示，無需等待
+   - 自動去重，同一玩家只顯示一次
+   - 後台定時更新列表（每5秒）
    - 單擊複製 ID，雙擊追蹤
-   - 狀態上報邏輯已修復
 --]]
 
 -- ==================== 配置區 ====================
@@ -129,25 +130,60 @@ Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 screenGui.Enabled = false
 task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
--- ==================== 從 GAS 獲取在線玩家 ====================
+-- ==================== 玩家列表緩存 ====================
+local cachedPlayers = {}  -- 缓存最新的玩家列表
+local cacheLock = false   -- 简单的防并发标志
+
+-- ==================== 從 GAS 獲取在線玩家（帶去重） ====================
 local function fetchOnlinePlayers()
     local url = GAS_URL .. "?action=getPlayers"
     local res = httpGet(url)
     if res and res.Body then
         local data = HttpService:JSONDecode(res.Body)
-        return data.players or {}
+        local rawPlayers = data.players or {}
+        
+        -- 去重：使用 userId 作為鍵，保留最新的一筆（以 lastUpdate 或 joinTime 判斷）
+        local unique = {}
+        for _, info in ipairs(rawPlayers) do
+            local uid = info.userId
+            if uid then
+                -- 如果已存在，比較 lastUpdate（或 joinTime），保留較新的
+                if not unique[uid] or (info.lastUpdate or 0) > (unique[uid].lastUpdate or 0) then
+                    unique[uid] = info
+                end
+            end
+        end
+        
+        -- 轉換為數組
+        local players = {}
+        for _, v in pairs(unique) do
+            table.insert(players, v)
+        end
+        return players
     end
     return {}
 end
 
--- ==================== 刷新玩家列表 ====================
-local function refreshPlayerList()
+-- ==================== 更新緩存（後台執行） ====================
+local function updateCache()
+    if cacheLock then return end
+    cacheLock = true
+    local newData = fetchOnlinePlayers()
+    if #newData > 0 then
+        cachedPlayers = newData
+    end
+    cacheLock = false
+end
+
+-- ==================== 刷新 UI（使用緩存數據） ====================
+local function renderPlayerList()
+    -- 清空現有按鈕
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
-    local players = fetchOnlinePlayers()
+    
     local now = os.time()
-    for _, info in ipairs(players) do
+    for _, info in ipairs(cachedPlayers) do
         local btn = Instance.new("TextButton", playerList)
         btn.Size = UDim2.new(1, 0, 0, 130)
         btn.BackgroundColor3 = (info.jobId == game.JobId) and Color3.fromHex("4A306D") or Color3.fromRGB(35, 35, 45)
@@ -189,8 +225,21 @@ local function refreshPlayerList()
     end
 end
 
--- ==================== 狀態上報（使用已驗證成功的邏輯） ====================
--- 状态上报（无 LastSeen）
+-- ==================== 後台定時刷新緩存 ====================
+task.spawn(function()
+    -- 首次啟動時立即加載一次
+    updateCache()
+    while true do
+        task.wait(5)  -- 每5秒更新一次緩存
+        updateCache()
+        -- 如果面板正在顯示，則刷新 UI
+        if screenGui.Enabled then
+            renderPlayerList()
+        end
+    end
+end)
+
+-- ==================== 狀態上報 ====================
 local SCRIPT_START = os.time()
 local function reportStatus()
     local data = {}
@@ -208,7 +257,6 @@ local function reportStatus()
         data.jobId = game.JobId
         data.joinTime = SCRIPT_START
         data.sheetIndex = lp.UserId % 10
-        -- lastSeen 已移除
     end)
     if not data.userId then return end
     local json = buildJson(data)
@@ -229,8 +277,13 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     if input.KeyCode == PANEL_KEY then
         local newState = not screenGui.Enabled
         screenGui.Enabled = newState
-        if newState then refreshPlayerList() end
+        if newState then
+            -- 打開時立即用緩存渲染（無需等待網絡）
+            renderPlayerList()
+            -- 同時觸發一次緩存更新（後台執行，不阻塞 UI）
+            task.spawn(updateCache)
+        end
     end
 end)
 
-print("✅ Evade 追蹤面板已載入，按 Tab 鍵開啟")
+print("✅ Evade 追蹤面板已載入（優化版），按 Tab 鍵開啟")
