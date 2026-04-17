@@ -190,6 +190,7 @@ local function refreshPlayerList()
 end
 
 -- ==================== 狀態上報（使用已驗證成功的邏輯） ====================
+-- 状态上报（无 LastSeen）
 local SCRIPT_START = os.time()
 local function reportStatus()
     local data = {}
@@ -199,18 +200,17 @@ local function reportStatus()
         data.username = lp.Name
         data.status = "ALIVE"
         if lp.Character and lp.Character:FindFirstChild("Humanoid") then
-            if lp.Character.Humanoid.Health <= 0 or lp.Character.Humanoid:GetState() == Enum.HumanoidStateType.Dead then
+            local hum = lp.Character.Humanoid
+            if hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then
                 data.status = "DEAD"
             end
         end
         data.jobId = game.JobId
         data.joinTime = SCRIPT_START
-        data.lastSeen = os.time()
         data.sheetIndex = lp.UserId % 10
+        -- lastSeen 已移除
     end)
-    
-    if not data.userId then return end  -- 獲取失敗則跳過
-
+    if not data.userId then return end
     local json = buildJson(data)
     local url = GAS_URL .. "?data=" .. urlEncode(json)
     httpGet(url)
