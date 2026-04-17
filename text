@@ -134,7 +134,7 @@ task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 local cachedPlayers = {}  -- 缓存最新的玩家列表
 local cacheLock = false   -- 简单的防并发标志
 
--- ==================== 從 GAS 獲取在線玩家（帶去重） ====================
+-- ==================== 從 GAS 獲取在線玩家（强制去重版） ====================
 local function fetchOnlinePlayers()
     local url = GAS_URL .. "?action=getPlayers"
     local res = httpGet(url)
@@ -142,24 +142,25 @@ local function fetchOnlinePlayers()
         local data = HttpService:JSONDecode(res.Body)
         local rawPlayers = data.players or {}
         
-        -- 去重：使用 userId 作為鍵，保留最新的一筆（以 lastUpdate 或 joinTime 判斷）
-        local unique = {}
-        for _, info in ipairs(rawPlayers) do
-            local uid = info.userId
+        -- 使用 userId 作为唯一键进行去重，保留最新记录
+        local uniquePlayers = {}
+        for _, player in ipairs(rawPlayers) do
+            local uid = player.userId
             if uid then
-                -- 如果已存在，比較 lastUpdate（或 joinTime），保留較新的
-                if not unique[uid] or (info.lastUpdate or 0) > (unique[uid].lastUpdate or 0) then
-                    unique[uid] = info
+                -- 如果该玩家还不存在，或者当前记录比已存在的更新，则更新
+                if not uniquePlayers[uid] or (player.lastUpdate or 0) > (uniquePlayers[uid].lastUpdate or 0) then
+                    uniquePlayers[uid] = player
                 end
             end
         end
-        
-        -- 轉換為數組
-        local players = {}
-        for _, v in pairs(unique) do
-            table.insert(players, v)
+
+        -- 将去重后的结果转换为数组格式
+        local finalPlayers = {}
+        for _, player in pairs(uniquePlayers) do
+            table.insert(finalPlayers, player)
         end
-        return players
+        
+        return finalPlayers
     end
     return {}
 end
