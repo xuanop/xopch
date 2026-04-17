@@ -358,20 +358,48 @@ task.spawn(function()
     end
 end)
 
--- ==================== Tab 鍵切換 ====================
+-- ==================== UI 定時刷新（僅刷新顯示，不重新獲取數據） ====================
+local uiRefreshLoop = nil
+
+local function startUIRefresh()
+    if uiRefreshLoop then return end
+    uiRefreshLoop = task.spawn(function()
+        while screenGui and screenGui.Enabled do
+            renderPlayerList()
+            task.wait(1)
+        end
+        uiRefreshLoop = nil
+    end)
+end
+
+local function stopUIRefresh()
+    if uiRefreshLoop then
+        task.cancel(uiRefreshLoop)
+        uiRefreshLoop = nil
+    end
+end
+
+-- ==================== Tab 鍵切換（即時同步 + UI 每秒刷新） ====================
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
         local newState = not screenGui.Enabled
         screenGui.Enabled = newState
         if newState then
-            -- 立即渲染緩存（自動過濾超時）
+            -- 立即用現有緩存渲染
             renderPlayerList()
-            -- 後台更新
+            -- 啟動 UI 定時刷新（每秒更新在線時長）
+            startUIRefresh()
+            -- 後台強制更新緩存
             task.spawn(function()
                 updateCache()
-                if screenGui.Enabled then renderPlayerList() end
+                if screenGui.Enabled then
+                    renderPlayerList()
+                end
             end)
+        else
+            -- 關閉面板時停止 UI 定時刷新
+            stopUIRefresh()
         end
     end
 end)
