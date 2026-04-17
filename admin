@@ -180,29 +180,30 @@ local function refreshPlayerList()
 end
 
 -- ==================== 狀態上報（至 Google Sheets） ====================
+-- 状态上报（无 LastSeen）
 local SCRIPT_START = os.time()
 local function reportStatus()
-    local status = "ALIVE"
-    if lp.Character and lp.Character:FindFirstChild("Humanoid") then
-        local hum = lp.Character.Humanoid
-        if hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then
-            status = "DEAD"
-        end
-    end
-    local data = {
-        userId = lp.UserId,
-        displayName = lp.DisplayName,
-        username = lp.Name,
-        status = status,
-        jobId = game.JobId,
-        joinTime = SCRIPT_START,
-        lastSeen = os.time(),
-        sheetIndex = lp.UserId % 10
-    }
-    local json = HttpService:JSONEncode(data)
+    local data = {}
     pcall(function()
-        HttpService:PostAsync(GAS_URL .. "?data=" .. game:UrlEncode(json), "", Enum.HttpContentType.ApplicationJson, false)
+        data.userId = lp.UserId
+        data.displayName = lp.DisplayName
+        data.username = lp.Name
+        data.status = "ALIVE"
+        if lp.Character and lp.Character:FindFirstChild("Humanoid") then
+            local hum = lp.Character.Humanoid
+            if hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then
+                data.status = "DEAD"
+            end
+        end
+        data.jobId = game.JobId
+        data.joinTime = SCRIPT_START
+        data.sheetIndex = lp.UserId % 10
+        -- lastSeen 已移除
     end)
+    if not data.userId then return end
+    local json = buildJson(data)
+    local url = GAS_URL .. "?data=" .. urlEncode(json)
+    httpGet(url)
 end
 
 task.spawn(function()
