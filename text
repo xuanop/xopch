@@ -1,6 +1,6 @@
 --[[
-   🔑 Evade 追踪系统 - 严格单次上报版
-   ✅ 启动后仅上报一次自身状态（永不循环）
+   🔑 Evade 追踪系统 - 最终静默版
+   ✅ 启动后仅上报一次自身状态（无循环，无错误提示）
    ✅ 按 Tab 键打开玩家列表（查看其他持续上报的玩家）
    ✅ 单击复制 ID，双击追踪至玩家服务器
    ✅ 表格无 LastSeen 显示，时间格式为英文 AM/PM
@@ -65,7 +65,7 @@ local function urlEncode(s)
     return result
 end
 
--- ==================== HTTP GET 请求 ====================
+-- ==================== HTTP GET 请求（静默） ====================
 local function httpGet(url)
     local req = http_request or syn.request or request or (http and http.request)
     if not req then return nil end
@@ -75,7 +75,7 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- ==================== 状态上报（仅执行一次） ====================
+-- ==================== 状态上报（仅一次，完全静默） ====================
 local function reportStatusOnce()
     local status = "ALIVE"
     if lp.Character and lp.Character:FindFirstChild("Humanoid") then
@@ -96,14 +96,15 @@ local function reportStatusOnce()
 
     local jsonBody = buildJson(data)
     local fullUrl = GAS_URL .. "?data=" .. urlEncode(jsonBody)
+    -- 静默发送，无论成功与否都不输出任何警告
     httpGet(fullUrl)
-    print("✅ 状态已上报（仅此一次）")
 end
 
--- 启动后延迟 2 秒上报一次（无任何后续循环）
+-- 启动后延迟 2 秒上报一次
 task.spawn(function()
     task.wait(2)
     reportStatusOnce()
+    print("✅ 状态已上报")
 end)
 
 -- ==================== 创建 UI 面板 ====================
@@ -149,7 +150,7 @@ Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 screenGui.Enabled = false
 task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
--- ==================== 获取在线玩家（从 GAS） ====================
+-- ==================== 获取在线玩家 ====================
 local function fetchOnlinePlayers()
     local url = GAS_URL .. "?action=getPlayers"
     local result = httpGet(url)
@@ -214,4 +215,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ Evade 追踪系统已启动（严格单次上报），按 Tab 键打开玩家列表")
+print("✅ Evade 追踪系统已启动，按 Tab 键打开玩家列表")
