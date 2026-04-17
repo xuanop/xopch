@@ -260,7 +260,7 @@ local function renderPlayerList()
             if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
                 showNotice("正在追蹤玩家...")
                 -- 使用安全传送函数替代原来的 TeleportService:TeleportToPlaceInstance
-                safeTeleport(game.PlaceId, info.jobId, lp)
+                safeTeleport(info.userId, info.jobId)  -- 传入 userId 和 jobId
             end
         else
                 if setclipboard then
