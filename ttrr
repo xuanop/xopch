@@ -1,8 +1,11 @@
--- 超簡化單次上報版（用於連通性測試成功後）
-local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"
-local HttpService = game:GetService("HttpService")
-local lp = game:GetService("Players").LocalPlayer
+-- 最終測試：發送完整玩家數據到 GAS
+local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"  -- 請替換
 
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local lp = Players.LocalPlayer
+
+-- 構造數據
 local data = {
     userId = lp.UserId,
     displayName = lp.DisplayName,
@@ -17,16 +20,19 @@ local data = {
 local json = HttpService:JSONEncode(data)
 local url = GAS_URL .. "?data=" .. game:UrlEncode(json)
 
-local req = syn and syn.request or http_request or request or (http and http.request)
-if not req then error("無請求函數") end
+print("📤 發送測試數據...")
+print("URL 長度:", #url)
 
-print("📤 發送上報...")
+local req = syn and syn.request or http_request or request or (http and http.request)
+if not req then error("找不到 HTTP 請求函數") end
+
 local result = req({ Url = url, Method = "GET" })
+
 print("📥 響應碼:", result.StatusCode)
 print("📥 響應體:", result.Body)
 
-if result.StatusCode == 200 then
-    print("✅ 上報成功，請檢查試算表")
+if result.StatusCode == 200 and string.find(result.Body, "success") then
+    print("🎉 成功！數據已寫入試算表，請檢查 Google Sheets。")
 else
-    print("❌ 上報失敗，請根據上述響應碼排查")
+    print("❌ 寫入失敗，請檢查 GAS 代碼中的 doGet 邏輯。")
 end
