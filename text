@@ -319,17 +319,23 @@ task.spawn(function()
     end
 end)
 
--- ==================== Tab 鍵切換 ====================
+-- ==================== Tab 鍵切換（即時同步版） ====================
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
         local newState = not screenGui.Enabled
         screenGui.Enabled = newState
         if newState then
-            -- 打開時立即用緩存渲染（無需等待網絡）
+            -- 1. 立即用現有緩存渲染，保證瞬間顯示
             renderPlayerList()
-            -- 同時觸發一次緩存更新（後台執行，不阻塞 UI）
-            task.spawn(updateCache)
+            -- 2. 後台強制更新一次緩存，完成後再次刷新 UI
+            task.spawn(function()
+                updateCache()
+                -- 更新期間如果面板沒有被關閉，則刷新顯示
+                if screenGui.Enabled then
+                    renderPlayerList()
+                end
+            end)
         end
     end
 end)
