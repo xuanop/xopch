@@ -286,7 +286,7 @@ local function renderPlayerList()
             local lastClick = 0
             btn.MouseButton1Click:Connect(function()
                 local t = tick()
-                if t - lastClick < 0.35 then
+                if t - lastClick < 0.70 then
                     if info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
                         showNotice("正在追蹤玩家...")
                         safeTeleport(info.userId, info.jobId)
