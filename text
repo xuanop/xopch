@@ -1,15 +1,14 @@
 --[[
-   🔑 Evade 完整追踪系统 v2.0 (简体中文版)
-   ✅ 每 30 秒自动上报状态至 Google 表格
-   ✅ 按 Tab 键打开/关闭玩家列表面板
+   🔑 Evade 追踪系统 - 单次上报版
+   ✅ 启动时仅上报一次自身状态
+   ✅ 按 Tab 键打开玩家列表（显示其他在线玩家）
    ✅ 单击复制 ID，双击追踪至玩家服务器
-   ✅ 面板可拖动、置顶，无关闭按钮
-   ✅ 纯 Google Sheets 后端，无 JoinTime/LastSeen
+   ✅ 表格无 LastSeen 显示，时间格式为英文 AM/PM
 --]]
 
 -- ==================== 配置区 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"   -- ⚠️ 请替换为你的 Web App 网址
+local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"   -- ⚠️ 请替换
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 环境初始化 ====================
@@ -76,8 +75,8 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- ==================== 状态上报（无 JoinTime/LastSeen） ====================
-local function reportStatus()
+-- ==================== 状态上报（仅执行一次） ====================
+local function reportStatusOnce()
     local status = "ALIVE"
     if lp.Character and lp.Character:FindFirstChild("Humanoid") then
         local hum = lp.Character.Humanoid
@@ -97,21 +96,14 @@ local function reportStatus()
 
     local jsonBody = buildJson(data)
     local fullUrl = GAS_URL .. "?data=" .. urlEncode(jsonBody)
-
-    local result = httpGet(fullUrl)
-    if result and result.StatusCode and result.StatusCode >= 200 and result.StatusCode < 400 then
-        -- 成功，静默
-    else
-        warn("[GAS] 上报异常，状态码:", result and result.StatusCode)
-    end
+    httpGet(fullUrl)
+    print("✅ 状态已上报（单次）")
 end
 
--- 启动定时上报（每 30 秒）
+-- 启动后延迟 2 秒上报一次
 task.spawn(function()
-    while true do
-        reportStatus()
-        task.wait(30)
-    end
+    task.wait(2)
+    reportStatusOnce()
 end)
 
 -- ==================== 创建 UI 面板 ====================
@@ -154,11 +146,10 @@ playerList.ScrollBarThickness = 2
 playerList.ZIndex = 10
 Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 
--- 强制隐藏（双重保险）
 screenGui.Enabled = false
 task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
--- ==================== 从 GAS 获取在线玩家 ====================
+-- ==================== 获取在线玩家（从 GAS） ====================
 local function fetchOnlinePlayers()
     local url = GAS_URL .. "?action=getPlayers"
     local result = httpGet(url)
@@ -169,7 +160,7 @@ local function fetchOnlinePlayers()
     return {}
 end
 
--- ==================== 刷新玩家列表 ====================
+-- ==================== 刷新列表 ====================
 local function refreshPlayerList()
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
@@ -211,7 +202,7 @@ local function refreshPlayerList()
     end
 end
 
--- ==================== 快捷键（Tab 切换） ====================
+-- ==================== Tab 切换 ====================
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
@@ -223,7 +214,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ Evade 追踪系统已启动，按 Tab 键打开玩家列表")
--- ==================== 執行上報 ====================
-print("[单次上报] 发送数据")
-sendToGoogleSheet()
+print("✅ Evade 追踪系统已启动（单次上报），按 Tab 键打开玩家列表")
