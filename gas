@@ -1,0 +1,19 @@
+--[[
+   🔇 全域 GAS 警告攔截器
+   放置於 autoexec 資料夾，確保最先執行
+   功能：徹底屏蔽所有包含 "GAS" 字樣的 warn 輸出
+--]]
+
+local originalWarn = warn
+warn = function(...)
+    local args = {...}
+    local msg = tostring(args[1] or "")
+    -- 如果警告訊息包含 "GAS"，則直接丟棄，不輸出
+    if msg:find("GAS") then
+        return
+    end
+    -- 否則正常輸出
+    originalWarn(unpack(args))
+end
+
+print("🔇 GAS 警告攔截器已啟用")
