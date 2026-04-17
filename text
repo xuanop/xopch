@@ -9,7 +9,7 @@
 
 -- ==================== 配置区 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbz0hhP5d3n975AwLuMUl0wM311sf9_y5bEgx46GFir8n8lipcOLaTiKjdEtBlzMFO-OLw/exec"   -- ⚠️ 请替换为你的 Web App 网址
+local GAS_URL = "https://script.google.com/macros/s/AKfycbw3zarYx2Y5Ekv127iZVAror2xzi_2_z7EeYqPcSTTcMg5qncJpU8M903IARqpWNK2Okg/exec"   -- ⚠️ 请替换为你的 Web App 网址
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 环境初始化 ====================
