@@ -1,14 +1,14 @@
 --[[
-   🔑 Evade 管理面板 (純玩家列表版)
+   🔑 Evade 玩家追蹤面板 (穩定版)
    - Tab 鍵切換顯示/隱藏
-   - 顯示所有使用本系統的線上玩家
-   - 單擊複製 ID，雙擊追蹤至其伺服器
-   - 無輸入框，公告/私信由主腳本處理
+   - 玩家列表來自 Google Sheets
+   - 單擊複製 ID，雙擊追蹤
+   - 狀態上報邏輯已修復
 --]]
 
 -- ==================== 配置區 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbxS08kU5IgQDmoR2Gql51qv6o8W2cMOrzMOfn8E_nygMsYvfh6J1BzPzNFvGEtnXJTBjw/exec" 
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxS08kU5IgQDmoR2Gql51qv6o8W2cMOrzMOfn8E_nygMsYvfh6J1BzPzNFvGEtnXJTBjw/exec"  -- 請替換
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 環境初始化 ====================
@@ -16,33 +16,55 @@ local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
-
 local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
 
 -- 授權檢查
 local isAuthorized = false
-for _, name in ipairs(AUTHORIZED_USERS) do
-    if lp.Name == name then isAuthorized = true break end
-end
+for _, name in ipairs(AUTHORIZED_USERS) do if lp.Name == name then isAuthorized = true break end end
 if not isAuthorized then return end
 
+-- ==================== 純手工 JSON 構建 ====================
+local function buildJson(t)
+    local parts = {}
+    for k, v in pairs(t) do
+        local vStr
+        if type(v) == "string" then
+            vStr = '"' .. v:gsub('"', '\\"') .. '"'
+        elseif type(v) == "number" then
+            vStr = tostring(v)
+        else
+            vStr = '""'
+        end
+        table.insert(parts, '"' .. k .. '":' .. vStr)
+    end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+
+-- ==================== 純手工 URL 編碼 ====================
+local function urlEncode(s)
+    local result = ""
+    for i = 1, #s do
+        local c = s:sub(i, i)
+        local b = string.byte(c)
+        if (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or c == '-' or c == '_' or c == '.' or c == '~' then
+            result = result .. c
+        else
+            result = result .. string.format("%%%02X", b)
+        end
+    end
+    return result
+end
+
 -- ==================== HTTP 請求封裝 ====================
-local function httpRequest(method, url, body)
+local function httpGet(url)
     local req = syn and syn.request or http_request or request or (http and http.request)
     if not req then return nil end
-    local success, result = pcall(function()
-        return req({
-            Url = url,
-            Method = method,
-            Headers = {["Content-Type"] = "application/json"},
-            Body = body and HttpService:JSONEncode(body) or nil
-        })
-    end)
+    local success, result = pcall(function() return req({ Url = url, Method = "GET" }) end)
     return success and result or nil
 end
 
--- ==================== 通知系統（簡易） ====================
+-- ==================== 通知系統 ====================
 local function showNotice(msg)
     local sg = PlayerGui:FindFirstChild("EvadeNotice") or Instance.new("ScreenGui", PlayerGui)
     sg.Name = "EvadeNotice"
@@ -64,7 +86,7 @@ local function showNotice(msg)
     task.delay(3, function() container:Destroy() end)
 end
 
--- ==================== 建立 UI 面板（無輸入框） ====================
+-- ==================== 建立 UI 面板 ====================
 local screenGui = Instance.new("ScreenGui", PlayerGui)
 screenGui.Name = "EvadePlayerPanel"
 screenGui.Enabled = false
@@ -104,26 +126,18 @@ playerList.ScrollBarThickness = 2
 playerList.ZIndex = 10
 Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 
--- 雙重保險強制隱藏
 screenGui.Enabled = false
 task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
 -- ==================== 從 GAS 獲取在線玩家 ====================
 local function fetchOnlinePlayers()
-    local allPlayers = {}
-    for i = 0, 9 do
-        local url = GAS_URL:gsub("/exec", "/users/" .. i .. ".json")
-        local res = httpRequest("GET", url)
-        if res and res.Body then
-            local data = HttpService:JSONDecode(res.Body)
-            for _, info in pairs(data) do
-                if os.time() - (info.lastSeen or 0) < 30 then
-                    table.insert(allPlayers, info)
-                end
-            end
-        end
+    local url = GAS_URL .. "?action=getPlayers"
+    local res = httpGet(url)
+    if res and res.Body then
+        local data = HttpService:JSONDecode(res.Body)
+        return data.players or {}
     end
-    return allPlayers
+    return {}
 end
 
 -- ==================== 刷新玩家列表 ====================
@@ -131,7 +145,6 @@ local function refreshPlayerList()
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
-
     local players = fetchOnlinePlayers()
     local now = os.time()
     for _, info in ipairs(players) do
@@ -150,11 +163,8 @@ local function refreshPlayerList()
         local s = math.floor(diff % 60)
 
         btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n⏱️ %dd %dh %dm %ds",
-            info.displayName or "N/A",
-            info.username or "N/A",
-            info.userId or "N/A",
-            info.status or "ALIVE",
-            d, h, m, s)
+            info.displayName or "N/A", info.username or "N/A", info.userId or "N/A",
+            info.status or "ALIVE", d, h, m, s)
         btn.TextColor3 = Color3.new(1, 1, 1)
         btn.TextSize = 15
         btn.Font = Enum.Font.GothamBold
@@ -179,7 +189,7 @@ local function refreshPlayerList()
     end
 end
 
--- ==================== 狀態上報（至 Google Sheets） ====================
+-- ==================== 狀態上報（使用已驗證成功的邏輯） ====================
 -- 状态上报（无 LastSeen）
 local SCRIPT_START = os.time()
 local function reportStatus()
@@ -219,10 +229,8 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     if input.KeyCode == PANEL_KEY then
         local newState = not screenGui.Enabled
         screenGui.Enabled = newState
-        if newState then
-            refreshPlayerList()
-        end
+        if newState then refreshPlayerList() end
     end
 end)
 
-print("✅ Evade 玩家面板已載入，按 Tab 鍵開啟/關閉")
+print("✅ Evade 追蹤面板已載入，按 Tab 鍵開啟")
