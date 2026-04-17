@@ -65,7 +65,7 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- ==================== 智能传送（预检 + 回退） ====================
+-- ==================== 智能传送（区分离线与服务器不可用） ====================
 local function safeTeleport(targetUserId, targetJobId)
     local TeleportService = game:GetService("TeleportService")
     local Players = game:GetService("Players")
@@ -82,32 +82,49 @@ local function safeTeleport(targetUserId, targetJobId)
         return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId)
     end)
     
-    if success and jobId and jobId ~= "" then
-        -- 预检成功，使用最新信息传送
-        showNotice("🚀 正在传送到玩家所在服务器...")
-        local teleportSuccess, err = pcall(function()
-            TeleportService:TeleportToPlaceInstance(placeId, jobId, lp)
-        end)
-        if teleportSuccess then
-            return true
-        else
-            warn("精准传送失败: ", err)
-            -- 如果精准传送失败，尝试回退到普通传送（不指定 jobId）
-            showNotice("⚠️ 精准传送失败，尝试普通传送...")
-            pcall(function()
-                TeleportService:Teleport(placeId, lp)
-            end)
-            return true
-        end
-    else
-        -- 预检失败：玩家可能已离线或服务器不可用
-        showNotice("❌ 目标玩家已离线或服务器不可用")
-        -- 强制刷新一次列表，移除失效玩家
+    if not success then
+        -- pcall 失败，通常意味着网络问题、玩家不存在或权限不足
+        showNotice("❌ 服务器不可用或玩家不存在")
+        -- 刷新列表，移除可能已失效的玩家
         task.spawn(function()
             updateCache()
             if screenGui.Enabled then renderPlayerList() end
         end)
         return false
+    end
+    
+    if not jobId or jobId == "" then
+        -- 成功调用，但没有返回 jobId，说明玩家在线但未处于任何游戏服务器中
+        showNotice("👻 玩家已离线")
+        -- 刷新列表，移除离线玩家
+        task.spawn(function()
+            updateCache()
+            if screenGui.Enabled then renderPlayerList() end
+        end)
+        return false
+    end
+    
+    -- 预检成功，使用最新信息传送
+    showNotice("🚀 正在传送到玩家所在服务器...")
+    local teleportSuccess, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(placeId, jobId, lp)
+    end)
+    
+    if teleportSuccess then
+        return true
+    else
+        warn("精准传送失败: ", err)
+        -- 如果精准传送失败，尝试回退到普通传送（不指定 jobId）
+        showNotice("⚠️ 精准传送失败，尝试普通传送...")
+        local fallbackSuccess, fallbackErr = pcall(function()
+            TeleportService:Teleport(placeId, lp)
+        end)
+        if fallbackSuccess then
+            return true
+        else
+            showNotice("❌ 传送失败，请重试")
+            return false
+        end
     end
 end
 
