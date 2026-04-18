@@ -1,46 +1,41 @@
--- 读取调试脚本（给看不到自己的用户运行）
-local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
-
-local HttpService = game:GetService("HttpService")
-local lp = game:GetService("Players").LocalPlayer
-
-local req = syn and syn.request or http_request or request or (http and http.request)
-if not req then error("无 HTTP 请求函数") end
-
-local url = GAS_URL .. "?action=getPlayers"
-print("📤 用户", lp.Name, "正在请求玩家列表...")
-local result = req({ Url = url, Method = "GET" })
-
-print("📥 响应码:", result.StatusCode)
-if result.StatusCode ~= 200 then
-    print("❌ 请求失败，响应体:", result.Body)
-    return
-end
-
-local data = HttpService:JSONDecode(result.Body)
-local players = data.players or {}
-print("📊 GAS 返回玩家总数:", #players)
-
-local foundSelf = false
-for i, p in ipairs(players) do
-    if tonumber(p.userId) == lp.UserId then
-        foundSelf = true
-        print("✅ 在列表中找到自己！")
-        print("   显示名:", p.displayName)
-        print("   状态:", p.status)
-        print("   lastUpdate:", p.lastUpdate)
-        print("   jobId:", p.jobId)
-    end
-end
-
-if not foundSelf then
-    print("❌ 在返回的", #players, "个玩家中没有找到自己！")
-    if #players > 0 then
-        print("   列表中的玩家 ID：")
-        for _, p in ipairs(players) do
-            print("     -", p.userId, p.displayName)
+-- 诊断版：自检玩家列表获取与渲染
+local function diagnostic()
+    print("========== 診斷開始 ==========")
+    print("1. 檢查緩存數據...")
+    updateCache()
+    task.wait(2)
+    print("2. 當前緩存玩家數量:", #cachedPlayers)
+    if #cachedPlayers > 0 then
+        print("3. 緩存內容:")
+        for i, info in ipairs(cachedPlayers) do
+            print(string.format("   [%d] %s (ID:%s) lastUpdate:%s", i, tostring(info.username), tostring(info.userId), tostring(info.lastUpdate)))
         end
     else
-        print("   列表为空。")
+        print("3. 緩存為空，嘗試直接請求GAS...")
+        local url = GAS_URL .. "?action=getPlayers"
+        local res = httpGet(url)
+        if res and res.StatusCode == 200 and res.Body then
+            local data = HttpService:JSONDecode(res.Body)
+            local raw = data.players or {}
+            print("4. GAS直接返回玩家數量:", #raw)
+            if #raw > 0 then
+                print("5. 示例數據:", raw[1].username, raw[1].lastUpdate)
+            else
+                print("5. GAS返回空列表，請檢查試算表是否有數據")
+            end
+        else
+            print("4. GAS請求失敗，狀態碼:", res and res.StatusCode)
+        end
     end
+    print("========== 診斷結束 ==========")
 end
+
+-- 绑定到Tab键（临时覆盖原逻辑）
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == PANEL_KEY then
+        diagnostic()
+    end
+end)
+
+print("診斷模式已啟用，按Tab執行診斷")
