@@ -1,41 +1,26 @@
--- 诊断版：自检玩家列表获取与渲染
-local function diagnostic()
-    print("========== 診斷開始 ==========")
-    print("1. 檢查緩存數據...")
-    updateCache()
-    task.wait(2)
-    print("2. 當前緩存玩家數量:", #cachedPlayers)
-    if #cachedPlayers > 0 then
-        print("3. 緩存內容:")
-        for i, info in ipairs(cachedPlayers) do
-            print(string.format("   [%d] %s (ID:%s) lastUpdate:%s", i, tostring(info.username), tostring(info.userId), tostring(info.lastUpdate)))
+-- 极简调试：直接查看 GAS 返回了什么
+local GAS_URL = "https://script.google.com/macros/library/d/1L_o-MWE4mCAuCtXCYXuahSnSRjI9IPZNzFS_5_a13pe4pF1MhO1OGej5/28"  -- 请替换
+local HttpService = game:GetService("HttpService")
+
+local req = syn and syn.request or http_request or request or (http and http.request)
+if not req then error("无 HTTP 请求函数") end
+
+local url = GAS_URL .. "?action=getPlayers"
+local res = req({ Url = url, Method = "GET" })
+
+print("📥 响应码:", res.StatusCode)
+if res.StatusCode == 200 and res.Body then
+    local data = HttpService:JSONDecode(res.Body)
+    local players = data.players or {}
+    print("📊 GAS 返回玩家数量:", #players)
+    if #players > 0 then
+        print("👤 第一位玩家:")
+        for k, v in pairs(players[1]) do
+            print("   ", k, "=", tostring(v))
         end
     else
-        print("3. 緩存為空，嘗試直接請求GAS...")
-        local url = GAS_URL .. "?action=getPlayers"
-        local res = httpGet(url)
-        if res and res.StatusCode == 200 and res.Body then
-            local data = HttpService:JSONDecode(res.Body)
-            local raw = data.players or {}
-            print("4. GAS直接返回玩家數量:", #raw)
-            if #raw > 0 then
-                print("5. 示例數據:", raw[1].username, raw[1].lastUpdate)
-            else
-                print("5. GAS返回空列表，請檢查試算表是否有數據")
-            end
-        else
-            print("4. GAS請求失敗，狀態碼:", res and res.StatusCode)
-        end
+        print("⚠️ 玩家列表为空")
     end
-    print("========== 診斷結束 ==========")
+else
+    print("❌ 请求失败:", res.Body)
 end
-
--- 绑定到Tab键（临时覆盖原逻辑）
-UIS.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == PANEL_KEY then
-        diagnostic()
-    end
-end)
-
-print("診斷模式已啟用，按Tab執行診斷")
