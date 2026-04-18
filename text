@@ -263,7 +263,9 @@ task.spawn(function()
     while true do task.wait(5); updateCache(); if screenGui.Enabled then renderPlayerList() end end
 end)
 
--- ==================== 狀態上報（不上傳 joinTime，完全由 GAS 生成時間） ====================
+-- ==================== 狀態上報（傳遞 joinTime） ====================
+local SCRIPT_START = os.time()   -- 脚本启动时记录一次
+
 local function reportStatus()
     local data = {}
     pcall(function()
@@ -278,6 +280,7 @@ local function reportStatus()
             end
         end
         data.jobId = game.JobId
+        data.joinTime = SCRIPT_START   -- 关键：传递脚本启动时间
         data.sheetIndex = lp.UserId % 10
     end)
     if not data.userId then return end
