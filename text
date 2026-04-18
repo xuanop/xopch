@@ -268,7 +268,7 @@ local function renderPlayerList()
         local userId = tonumber(info.userId)
         local isSelf = (userId == lp.UserId)
         local lastUpdate = tonumber(info.lastUpdate) or tonumber(info.recordTime) or now
-        local isOnline = (now - lastUpdate <= 35)  -- 35 秒內有心跳視為在線
+        local isOnline = (now - lastUpdate <= 25)  -- 35 秒內有心跳視為在線
 
         -- 自己永遠顯示，其他玩家只顯示在線的
         if isSelf or isOnline then
