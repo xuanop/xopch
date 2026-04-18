@@ -265,6 +265,12 @@ local function renderPlayerList()
     local visibleCount = 0
 
     for _, info in ipairs(cachedPlayers) do
+    -- 在 for _, info in ipairs(cachedPlayers) do 循环内部，计算 isOnline 之前添加
+local userId = tonumber(info.userId)
+local lastUpdate = tonumber(info.lastUpdate) or tonumber(info.recordTime) or now
+local diff = now - lastUpdate
+print(string.format("[調試] 玩家 %s (ID:%s) lastUpdate=%s, now=%s, diff=%s, isSelf=%s",
+    info.username or "?", userId, tostring(lastUpdate), now, diff, tostring(userId == lp.UserId)))
     print("[调试] 玩家", info.username, "lastUpdate =", info.lastUpdate, "recordTime =", info.recordTime, "now =", now, "差值 =", now - (tonumber(info.lastUpdate) or tonumber(info.recordTime) or now))
         local userId = tonumber(info.userId)
         local isSelf = (userId == lp.UserId)
