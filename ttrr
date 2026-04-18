@@ -1,63 +1,46 @@
--- 极简写入测试脚本（请确保 GAS_URL 是您最新部署的网址）
+-- 读取调试脚本（给看不到自己的用户运行）
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
 
-local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
-local lp = Players.LocalPlayer
+local lp = game:GetService("Players").LocalPlayer
 
 local req = syn and syn.request or http_request or request or (http and http.request)
 if not req then error("无 HTTP 请求函数") end
 
-local data = {
-    userId = lp.UserId,
-    displayName = lp.DisplayName,
-    username = lp.Name,
-    status = "ALIVE",
-    jobId = game.JobId,
-    joinTime = os.time(),
-    sheetIndex = lp.UserId % 10
-}
-
-local function buildJson(t)
-    local parts = {}
-    for k, v in pairs(t) do
-        local vStr
-        if type(v) == "string" then
-            vStr = '"' .. v:gsub('"', '\\"') .. '"'
-        elseif type(v) == "number" then
-            vStr = tostring(v)
-        else
-            vStr = '""'
-        end
-        table.insert(parts, '"' .. k .. '":' .. vStr)
-    end
-    return "{" .. table.concat(parts, ",") .. "}"
-end
-
-local function urlEncode(s)
-    local result = ""
-    for i = 1, #s do
-        local c = s:sub(i, i)
-        local b = string.byte(c)
-        if (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or c == '-' or c == '_' or c == '.' or c == '~' then
-            result = result .. c
-        else
-            result = result .. string.format("%%%02X", b)
-        end
-    end
-    return result
-end
-
-local json = buildJson(data)
-local url = GAS_URL .. "?data=" .. urlEncode(json)
-
-print("📤 用户", lp.Name, "正在发送写入请求... sheetIndex =", data.sheetIndex)
+local url = GAS_URL .. "?action=getPlayers"
+print("📤 用户", lp.Name, "正在请求玩家列表...")
 local result = req({ Url = url, Method = "GET" })
-print("📥 响应码:", result.StatusCode)
-print("📥 响应体:", result.Body)
 
-if result.StatusCode == 200 and string.find(result.Body, "success") then
-    print("✅ 写入请求成功！请让脚本作者检查试算表 '分流_" .. data.sheetIndex .. "' 是否有您的数据。")
-else
-    print("❌ 写入失败，请将以上输出提供给脚本作者。")
+print("📥 响应码:", result.StatusCode)
+if result.StatusCode ~= 200 then
+    print("❌ 请求失败，响应体:", result.Body)
+    return
+end
+
+local data = HttpService:JSONDecode(result.Body)
+local players = data.players or {}
+print("📊 GAS 返回玩家总数:", #players)
+
+local foundSelf = false
+for i, p in ipairs(players) do
+    if tonumber(p.userId) == lp.UserId then
+        foundSelf = true
+        print("✅ 在列表中找到自己！")
+        print("   显示名:", p.displayName)
+        print("   状态:", p.status)
+        print("   lastUpdate:", p.lastUpdate)
+        print("   jobId:", p.jobId)
+    end
+end
+
+if not foundSelf then
+    print("❌ 在返回的", #players, "个玩家中没有找到自己！")
+    if #players > 0 then
+        print("   列表中的玩家 ID：")
+        for _, p in ipairs(players) do
+            print("     -", p.userId, p.displayName)
+        end
+    else
+        print("   列表为空。")
+    end
 end
