@@ -185,57 +185,71 @@ task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 local cachedPlayers = {}
 local cacheLock = false
 
--- ==================== 從 GAS 獲取在線玩家（强制去重，增加調試） ====================
+-- ==================== 從 GAS 獲取在線玩家（調試版） ====================
 local function fetchOnlinePlayers()
     local url = GAS_URL .. "?action=getPlayers"
+    print("[調試] 正在請求玩家列表... URL:", url:sub(1, 80) .. "...")
     local res = httpGet(url)
-    if res and res.Body then
-        local data = HttpService:JSONDecode(res.Body)
-        local rawPlayers = data.players or {}
-        print("📡 GAS 返回玩家數量:", #rawPlayers)
-        
-        local unique = {}
-        for _, p in ipairs(rawPlayers) do
-            local uid = tostring(p.userId)
-            if uid and uid ~= "" then
-                -- 兼容多種時間字段
-                local pTime = p.lastUpdate or p.recordTime or p.joinTime or 0
-                local eTime = unique[uid] and (unique[uid].lastUpdate or unique[uid].recordTime or unique[uid].joinTime or 0) or 0
-                if not unique[uid] or pTime > eTime then
-                    unique[uid] = p
-                end
-            end
-        end
-        
-        local final = {}
-        for _, p in pairs(unique) do table.insert(final, p) end
-        table.sort(final, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
-        
-        -- 調試：檢查自己是否在列表中
-        local selfFound = false
-        for _, p in ipairs(final) do
-            if tonumber(p.userId) == lp.UserId then
-                selfFound = true
-                break
-            end
-        end
-        print("📡 去重後玩家數量:", #final, " | 自己是否在列表中:", selfFound)
-        
-        return final
+    if not res then
+        warn("[調試] httpGet 返回 nil，請檢查網絡或 GAS_URL")
+        return {}
     end
-    print("📡 GAS 請求失敗或無數據")
-    return {}
+    print("[調試] HTTP 響應碼:", res.StatusCode)
+    if res.StatusCode ~= 200 then
+        warn("[調試] HTTP 錯誤，響應體:", res.Body)
+        return {}
+    end
+    if not res.Body then
+        warn("[調試] 響應體為空")
+        return {}
+    end
+    print("[調試] 響應體長度:", #res.Body)
+    local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
+    if not success then
+        warn("[調試] JSON 解析失敗:", data)
+        return {}
+    end
+    local rawPlayers = data.players or {}
+    print("[調試] GAS 返回玩家數量:", #rawPlayers)
+    if #rawPlayers > 0 then
+        print("[調試] 第一位玩家數據示例:")
+        local first = rawPlayers[1]
+        for k, v in pairs(first) do
+            print("  ", k, "=", tostring(v))
+        end
+    end
+    -- 去重邏輯保持不變
+    local uniquePlayers = {}
+    for _, player in ipairs(rawPlayers) do
+        local uid = player.userId
+        if uid then
+            local playerTime = player.lastUpdate or player.recordTime or player.joinTime or 0
+            local existingTime = uniquePlayers[uid] and (uniquePlayers[uid].lastUpdate or uniquePlayers[uid].recordTime or uniquePlayers[uid].joinTime or 0) or 0
+            if not uniquePlayers[uid] or playerTime > existingTime then
+                uniquePlayers[uid] = player
+            end
+        end
+    end
+    local finalPlayers = {}
+    for _, player in pairs(uniquePlayers) do
+        table.insert(finalPlayers, player)
+    end
+    print("[調試] 去重後玩家數量:", #finalPlayers)
+    return finalPlayers
 end
 
--- ==================== 更新緩存（強制刷新） ====================
+-- ==================== 更新緩存（強制刷新，支持空數據） ====================
 local function updateCache()
     if cacheLock then return false end
     cacheLock = true
+    print("[調試] updateCache 開始...")
     local success, newData = pcall(fetchOnlinePlayers)
     if success then
         cachedPlayers = newData or {}
+        print("[調試] 緩存已更新，玩家數量:", #cachedPlayers)
     else
-        warn("更新緩存失敗: ", newData)
+        warn("[調試] fetchOnlinePlayers 出錯:", newData)
+        cachedPlayers = {}
     end
     cacheLock = false
     return success
