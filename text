@@ -1,12 +1,12 @@
 --[[
-   🔑 Evade 玩家追蹤面板 (最終調試版)
-   - 增加調試輸出，確認是否獲取到自己
-   - 修復可能導致看不到自己的過濾問題
+   🔑 Evade 玩家追蹤面板 (最終完整版)
+   - 修復所有顯示問題（OFFLINE、重複、看不到自己）
+   - 強制 GAS 寫入最新記錄，讀取時精準判斷在線狀態
 --]]
 
 -- ==================== 配置區 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"  -- 請替換！
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 環境初始化 ====================
@@ -62,58 +62,19 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- ==================== 智能傳送（區分離線與伺服器不可用） ====================
+-- ==================== 智能傳送 ====================
 local function safeTeleport(targetUserId, targetJobId)
-    local TeleportService = game:GetService("TeleportService")
-    local lp = Players.LocalPlayer
-    
-    if targetJobId == game.JobId then
-        showNotice("⚠️ 您已在該伺服器中")
-        return false
-    end
-    
-    local success, placeId, jobId = pcall(function()
-        return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId)
-    end)
-    
-    if not success then
-        showNotice("❌ 伺服器不可用或玩家不存在")
-        task.spawn(function()
-            updateCache()
-            if screenGui.Enabled then renderPlayerList() end
-        end)
-        return false
-    end
-    
-    if not jobId or jobId == "" then
-        showNotice("👻 玩家已離線")
-        task.spawn(function()
-            updateCache()
-            if screenGui.Enabled then renderPlayerList() end
-        end)
-        return false
-    end
-    
+    if targetJobId == game.JobId then showNotice("⚠️ 您已在該伺服器中"); return false end
+    local success, placeId, jobId = pcall(function() return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId) end)
+    if not success then showNotice("❌ 伺服器不可用或玩家不存在"); return false end
+    if not jobId or jobId == "" then showNotice("👻 玩家已離線"); return false end
     showNotice("🚀 正在傳送到玩家所在伺服器...")
-    local teleportSuccess, err = pcall(function()
-        TeleportService:TeleportToPlaceInstance(placeId, jobId, lp)
-    end)
-    
-    if teleportSuccess then
-        return true
-    else
-        warn("精準傳送失敗: ", err)
+    local teleportSuccess = pcall(function() TeleportService:TeleportToPlaceInstance(placeId, jobId, lp) end)
+    if not teleportSuccess then
         showNotice("⚠️ 精準傳送失敗，嘗試普通傳送...")
-        local fallbackSuccess = pcall(function()
-            TeleportService:Teleport(placeId, lp)
-        end)
-        if fallbackSuccess then
-            return true
-        else
-            showNotice("❌ 傳送失敗，請重試")
-            return false
-        end
+        pcall(function() TeleportService:Teleport(placeId, lp) end)
     end
+    return true
 end
 
 -- ==================== 通知系統 ====================
@@ -185,77 +146,40 @@ task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 local cachedPlayers = {}
 local cacheLock = false
 
--- ==================== 從 GAS 獲取在線玩家（調試版） ====================
 local function fetchOnlinePlayers()
     local url = GAS_URL .. "?action=getPlayers"
-    print("[調試] 正在請求玩家列表... URL:", url:sub(1, 80) .. "...")
     local res = httpGet(url)
-    if not res then
-        warn("[調試] httpGet 返回 nil，請檢查網絡或 GAS_URL")
-        return {}
-    end
-    print("[調試] HTTP 響應碼:", res.StatusCode)
-    if res.StatusCode ~= 200 then
-        warn("[調試] HTTP 錯誤，響應體:", res.Body)
-        return {}
-    end
-    if not res.Body then
-        warn("[調試] 響應體為空")
-        return {}
-    end
-    print("[調試] 響應體長度:", #res.Body)
+    if not res or res.StatusCode ~= 200 or not res.Body then return {} end
     local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-    if not success then
-        warn("[調試] JSON 解析失敗:", data)
-        return {}
-    end
+    if not success then return {} end
     local rawPlayers = data.players or {}
-    print("[調試] GAS 返回玩家數量:", #rawPlayers)
-    if #rawPlayers > 0 then
-        print("[調試] 第一位玩家數據示例:")
-        local first = rawPlayers[1]
-        for k, v in pairs(first) do
-            print("  ", k, "=", tostring(v))
-        end
-    end
-    -- 去重邏輯保持不變
-    local uniquePlayers = {}
-    for _, player in ipairs(rawPlayers) do
-        local uid = player.userId
+
+    -- 去重：保留 lastUpdate 最大的记录
+    local unique = {}
+    for _, p in ipairs(rawPlayers) do
+        local uid = p.userId
         if uid then
-            local playerTime = player.lastUpdate or player.recordTime or player.joinTime or 0
-            local existingTime = uniquePlayers[uid] and (uniquePlayers[uid].lastUpdate or uniquePlayers[uid].recordTime or uniquePlayers[uid].joinTime or 0) or 0
-            if not uniquePlayers[uid] or playerTime > existingTime then
-                uniquePlayers[uid] = player
-            end
+            local pTime = p.lastUpdate or 0
+            local eTime = unique[uid] and unique[uid].lastUpdate or 0
+            if not unique[uid] or pTime > eTime then unique[uid] = p end
         end
     end
-    local finalPlayers = {}
-    for _, player in pairs(uniquePlayers) do
-        table.insert(finalPlayers, player)
-    end
-    print("[調試] 去重後玩家數量:", #finalPlayers)
-    return finalPlayers
+    local final = {}
+    for _, p in pairs(unique) do table.insert(final, p) end
+    table.sort(final, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
+    return final
 end
 
--- ==================== 更新緩存（強制刷新，支持空數據） ====================
 local function updateCache()
     if cacheLock then return false end
     cacheLock = true
-    print("[調試] updateCache 開始...")
     local success, newData = pcall(fetchOnlinePlayers)
-    if success then
-        cachedPlayers = newData or {}
-        print("[調試] 緩存已更新，玩家數量:", #cachedPlayers)
-    else
-        warn("[調試] fetchOnlinePlayers 出錯:", newData)
-        cachedPlayers = {}
-    end
+    cachedPlayers = success and newData or {}
     cacheLock = false
     return success
 end
 
--- ==================== 刷新 UI（安全稳健版） ====================
+-- ==================== 刷新 UI ====================
 local function renderPlayerList()
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
@@ -264,23 +188,16 @@ local function renderPlayerList()
     local now = os.time()
     local visibleCount = 0
 
-    print("[渲染調試] ========== 開始渲染，緩存玩家數量:", #cachedPlayers)
-
     for _, info in ipairs(cachedPlayers) do
-        local success, result = pcall(function()
+        local success = pcall(function()
             local userId = tonumber(info.userId)
             local isSelf = (userId == lp.UserId)
-            local lastUpdate = tonumber(info.lastUpdate) or tonumber(info.recordTime) or now
+            local lastUpdate = tonumber(info.lastUpdate) or now
             local diff = now - lastUpdate
-            local isOnline = (diff <= 35)
-
-            print(string.format("[渲染調試] 玩家:%s, ID:%s, lastUpdate:%s, now:%s, diff:%s, isSelf:%s, isOnline:%s",
-                tostring(info.username), tostring(userId), tostring(lastUpdate), now, diff, tostring(isSelf), tostring(isOnline)))
+            local isOnline = (diff <= 120)  -- 與 GAS 的 120 秒一致
 
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
-                print("[渲染調試]   ✅ 顯示玩家:", tostring(info.username))
-
                 local btn = Instance.new("TextButton", playerList)
                 btn.Size = UDim2.new(1, 0, 0, 130)
                 btn.BackgroundColor3 = (info.jobId == game.JobId) and Color3.fromHex("4A306D") or Color3.fromRGB(35, 35, 45)
@@ -296,16 +213,12 @@ local function renderPlayerList()
                 local m = math.floor((diffTime % 3600) / 60)
                 local s = math.floor(diffTime % 60)
 
-                local statusText = isOnline and (tostring(info.status) ~= "" and info.status or "ALIVE") or "OFFLINE"
+                local statusText = isOnline and (info.status ~= "" and info.status or "ALIVE") or "OFFLINE"
                 local timerText = isOnline and string.format("⏱️ %dd %dh %dm %ds", d, h, m, s)
                                             or string.format("💤 離線 %dd %dh %dm %ds", d, h, m, s)
 
-                local displayName = info.displayName or "N/A"
-                local username = info.username or "N/A"
-
                 btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n%s",
-                    tostring(displayName), tostring(username), tostring(userId), tostring(statusText), timerText)
-
+                    tostring(info.displayName), tostring(info.username), tostring(userId), tostring(statusText), timerText)
                 btn.TextColor3 = isOnline and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 180)
                 btn.TextSize = 15
                 btn.Font = Enum.Font.GothamBold
@@ -322,24 +235,16 @@ local function renderPlayerList()
                             showNotice("❌ 玩家已離線，無法追蹤")
                         end
                     else
-                        if setclipboard then
-                            setclipboard(tostring(userId))
-                            showNotice("已複製 ID: " .. userId)
-                        end
+                        if setclipboard then setclipboard(tostring(userId)); showNotice("已複製 ID: " .. userId) end
                     end
                     lastClick = t
                 end)
-            else
-                print("[渲染調試]   ❌ 跳過玩家:", tostring(info.username), "原因: 不在線且不是自己")
             end
         end)
-        if not success then
-            warn("[渲染調試] 渲染玩家時出錯:", result)
-        end
+        if not success then warn("渲染玩家失敗") end
     end
 
     if visibleCount == 0 then
-        print("[渲染調試]   😴 無任何玩家顯示，創建空提示")
         local emptyBtn = Instance.new("TextButton", playerList)
         emptyBtn.Size = UDim2.new(1, 0, 0, 50)
         emptyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
@@ -350,21 +255,15 @@ local function renderPlayerList()
         emptyBtn.ZIndex = 10
         Instance.new("UICorner", emptyBtn).CornerRadius = UDim.new(0, 6)
     end
-    print("[渲染調試] ========== 渲染完成，顯示玩家數:", visibleCount)
 end
 
 -- ==================== 後台定時刷新緩存 ====================
 task.spawn(function()
     updateCache()
-    while true do
-        task.wait(5)
-        updateCache()
-        if screenGui.Enabled then renderPlayerList() end
-    end
+    while true do task.wait(5); updateCache(); if screenGui.Enabled then renderPlayerList() end end
 end)
 
--- ==================== 狀態上報 ====================
-local SCRIPT_START = os.time()
+-- ==================== 狀態上報（不上傳 joinTime，完全由 GAS 生成時間） ====================
 local function reportStatus()
     local data = {}
     pcall(function()
@@ -379,9 +278,7 @@ local function reportStatus()
             end
         end
         data.jobId = game.JobId
-        data.joinTime = SCRIPT_START
         data.sheetIndex = lp.UserId % 10
-        -- 注意：沒有上報 lastUpdate，GAS 會用時間戳記代替
     end)
     if not data.userId then return end
     local json = buildJson(data)
@@ -389,57 +286,31 @@ local function reportStatus()
     httpGet(url)
 end
 
-task.spawn(function()
-    while true do
-        reportStatus()
-        task.wait(30)
-    end
-end)
+task.spawn(function() while true do reportStatus(); task.wait(30) end end)
 
--- ==================== UI 定時刷新（僅刷新顯示，不重新獲取數據） ====================
+-- ==================== UI 定時刷新 ====================
 local uiRefreshLoop = nil
-
 local function startUIRefresh()
     if uiRefreshLoop then return end
-    uiRefreshLoop = task.spawn(function()
-        while screenGui and screenGui.Enabled do
-            renderPlayerList()
-            task.wait(1)
-        end
-        uiRefreshLoop = nil
-    end)
+    uiRefreshLoop = task.spawn(function() while screenGui and screenGui.Enabled do renderPlayerList(); task.wait(1) end uiRefreshLoop = nil end)
 end
-
 local function stopUIRefresh()
-    if uiRefreshLoop then
-        task.cancel(uiRefreshLoop)
-        uiRefreshLoop = nil
-    end
+    if uiRefreshLoop then task.cancel(uiRefreshLoop); uiRefreshLoop = nil end
 end
 
--- ==================== Tab 鍵切換（即時同步 + UI 每秒刷新） ====================
+-- ==================== Tab 鍵切換 ====================
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
-        local newState = not screenGui.Enabled
-        screenGui.Enabled = newState
-        if newState then
-            -- 立即用現有緩存渲染
+        screenGui.Enabled = not screenGui.Enabled
+        if screenGui.Enabled then
             renderPlayerList()
-            -- 啟動 UI 定時刷新（每秒更新在線時長）
             startUIRefresh()
-            -- 後台強制更新緩存
-            task.spawn(function()
-                updateCache()
-                if screenGui.Enabled then
-                    renderPlayerList()
-                end
-            end)
+            task.spawn(function() updateCache(); if screenGui.Enabled then renderPlayerList() end end)
         else
-            -- 關閉面板時停止 UI 定時刷新
             stopUIRefresh()
         end
     end
 end)
 
-print("✅ Evade 追蹤面板已載入（調試版），按 Tab 鍵開啟")
+print("✅ Evade 追蹤面板已載入（最終版），按 Tab 鍵開啟")
