@@ -1,13 +1,24 @@
--- 超级诊断脚本：测试写入和读取
-local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
-local HttpService = game:GetService("HttpService")
+-- 极简上报测试脚本
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"  -- 请确认是您最新部署的 URL
+
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 local lp = Players.LocalPlayer
 
 local req = syn and syn.request or http_request or request or (http and http.request)
-if not req then error("无HTTP请求函数") end
+if not req then error("无 HTTP 请求函数") end
 
--- 纯手工JSON
+-- 构造数据（完全模拟面板上报）
+local data = {
+    userId = lp.UserId,
+    displayName = lp.DisplayName,
+    username = lp.Name,
+    status = "ALIVE",
+    jobId = game.JobId,
+    joinTime = os.time(),
+    sheetIndex = lp.UserId % 10
+}
+
 local function buildJson(t)
     local parts = {}
     for k, v in pairs(t) do
@@ -24,7 +35,6 @@ local function buildJson(t)
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
--- URL编码
 local function urlEncode(s)
     local result = ""
     for i = 1, #s do
@@ -39,55 +49,16 @@ local function urlEncode(s)
     return result
 end
 
--- 上报自己的数据
-print("📤 步骤1：上报玩家数据...")
-local data = {
-    userId = lp.UserId,
-    displayName = lp.DisplayName,
-    username = lp.Name,
-    status = "ALIVE",
-    jobId = game.JobId,
-    joinTime = os.time(),
-    sheetIndex = lp.UserId % 10
-}
 local json = buildJson(data)
 local url = GAS_URL .. "?data=" .. urlEncode(json)
-local res = req({ Url = url, Method = "GET" })
-print("   写入响应码:", res.StatusCode)
-if res.StatusCode ~= 200 then
-    print("❌ 写入失败，响应体:", res.Body)
-    return
-end
-print("✅ 写入成功")
 
--- 等待数据落库
-print("⏳ 步骤2：等待2秒让GAS处理数据...")
-wait(2)
+print("📤 发送写入请求... sheetIndex =", data.sheetIndex)
+local result = req({ Url = url, Method = "GET" })
+print("📥 响应码:", result.StatusCode)
+print("📥 响应体:", result.Body)
 
--- 读取玩家列表
-print("📥 步骤3：读取在线玩家列表...")
-local getUrl = GAS_URL .. "?action=getPlayers"
-res = req({ Url = getUrl, Method = "GET" })
-print("   读取响应码:", res.StatusCode)
-if res.StatusCode ~= 200 then
-    print("❌ 读取失败，响应体:", res.Body)
-    return
-end
-
-local responseData = HttpService:JSONDecode(res.Body)
-local players = responseData.players or {}
-print("   返回的玩家数量:", #players)
-
-if #players == 0 then
-    print("⚠️ 玩家列表为空！")
-    print("   可能原因：")
-    print("   - GAS代码中的时间判断逻辑有误")
-    print("   - 试算表中确实没有30秒内的数据")
-    print("   请检查试算表对应的'分流_X'工作表，看最后一行是否有您刚才上报的数据。")
+if result.StatusCode == 200 and string.find(result.Body, "success") then
+    print("✅ 写入请求成功！请立即打开试算表，检查工作表 '分流_" .. data.sheetIndex .. "' 的最后一行是否有您的数据。")
 else
-    print("🎉 成功获取到玩家列表！")
-    for i, p in ipairs(players) do
-        print(string.format("   [%d] %s (@%s) ID:%s Status:%s", i, p.displayName, p.username, p.userId, p.status))
-    end
-    print("✅ 如果这里显示了玩家，但Evade面板不显示，说明是面板UI刷新逻辑的问题。")
+    print("❌ 写入失败，请检查 GAS 部署权限或试算表绑定。")
 end
