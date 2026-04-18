@@ -1,5 +1,5 @@
--- 极简上报测试脚本
-local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"  -- 请确认是您最新部署的 URL
+-- 极简写入测试脚本（请确保 GAS_URL 是您最新部署的网址）
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
@@ -8,7 +8,6 @@ local lp = Players.LocalPlayer
 local req = syn and syn.request or http_request or request or (http and http.request)
 if not req then error("无 HTTP 请求函数") end
 
--- 构造数据（完全模拟面板上报）
 local data = {
     userId = lp.UserId,
     displayName = lp.DisplayName,
@@ -52,13 +51,13 @@ end
 local json = buildJson(data)
 local url = GAS_URL .. "?data=" .. urlEncode(json)
 
-print("📤 发送写入请求... sheetIndex =", data.sheetIndex)
+print("📤 用户", lp.Name, "正在发送写入请求... sheetIndex =", data.sheetIndex)
 local result = req({ Url = url, Method = "GET" })
 print("📥 响应码:", result.StatusCode)
 print("📥 响应体:", result.Body)
 
 if result.StatusCode == 200 and string.find(result.Body, "success") then
-    print("✅ 写入请求成功！请立即打开试算表，检查工作表 '分流_" .. data.sheetIndex .. "' 的最后一行是否有您的数据。")
+    print("✅ 写入请求成功！请让脚本作者检查试算表 '分流_" .. data.sheetIndex .. "' 是否有您的数据。")
 else
-    print("❌ 写入失败，请检查 GAS 部署权限或试算表绑定。")
+    print("❌ 写入失败，请将以上输出提供给脚本作者。")
 end
