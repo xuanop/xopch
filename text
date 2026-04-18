@@ -255,7 +255,7 @@ local function updateCache()
     return success
 end
 
--- ==================== 刷新 UI（增強調試版） ====================
+-- ==================== 刷新 UI（安全稳健版） ====================
 local function renderPlayerList()
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
@@ -267,70 +267,74 @@ local function renderPlayerList()
     print("[渲染調試] ========== 開始渲染，緩存玩家數量:", #cachedPlayers)
 
     for _, info in ipairs(cachedPlayers) do
-        local userId = tonumber(info.userId)
-        local isSelf = (userId == lp.UserId)
-        local lastUpdate = tonumber(info.lastUpdate) or tonumber(info.recordTime) or now
-        local diff = now - lastUpdate
-        local isOnline = (diff <= 35)  -- 35 秒內有心跳視為在線
-        
-        -- 詳細輸出每個玩家的判斷過程
-        print(string.format("[渲染調試] 玩家:%s, ID:%s, lastUpdate:%s, now:%s, diff:%s, isSelf:%s, isOnline:%s",
-            info.username or "?", userId, lastUpdate, now, diff, isSelf, isOnline))
+        local success, result = pcall(function()
+            local userId = tonumber(info.userId)
+            local isSelf = (userId == lp.UserId)
+            local lastUpdate = tonumber(info.lastUpdate) or tonumber(info.recordTime) or now
+            local diff = now - lastUpdate
+            local isOnline = (diff <= 35)
 
-        -- 自己永遠顯示，其他玩家只顯示在線的
-        if isSelf or isOnline then
-            visibleCount = visibleCount + 1
-            print("[渲染調試]   ✅ 顯示玩家:", info.username, "狀態:", isOnline and "在線" or "離線(自己)")
+            print(string.format("[渲染調試] 玩家:%s, ID:%s, lastUpdate:%s, now:%s, diff:%s, isSelf:%s, isOnline:%s",
+                tostring(info.username), tostring(userId), tostring(lastUpdate), now, diff, tostring(isSelf), tostring(isOnline)))
 
-            local btn = Instance.new("TextButton", playerList)
-            btn.Size = UDim2.new(1, 0, 0, 130)
-            btn.BackgroundColor3 = (info.jobId == game.JobId) and Color3.fromHex("4A306D") or Color3.fromRGB(35, 35, 45)
-            btn.BackgroundTransparency = 0.2
-            btn.ZIndex = 10
-            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+            if isSelf or isOnline then
+                visibleCount = visibleCount + 1
+                print("[渲染調試]   ✅ 顯示玩家:", tostring(info.username))
 
-            -- 計算顯示時長
-            local baseTime = isOnline and tonumber(info.joinTime) or lastUpdate
-            baseTime = baseTime or now
-            local diffTime = math.max(0, now - baseTime)
-            local d = math.floor(diffTime / 86400)
-            local h = math.floor((diffTime % 86400) / 3600)
-            local m = math.floor((diffTime % 3600) / 60)
-            local s = math.floor(diffTime % 60)
+                local btn = Instance.new("TextButton", playerList)
+                btn.Size = UDim2.new(1, 0, 0, 130)
+                btn.BackgroundColor3 = (info.jobId == game.JobId) and Color3.fromHex("4A306D") or Color3.fromRGB(35, 35, 45)
+                btn.BackgroundTransparency = 0.2
+                btn.ZIndex = 10
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
-            local statusText = isOnline and (info.status or "ALIVE") or "OFFLINE"
-            local timerText = isOnline and string.format("⏱️ %dd %dh %dm %ds", d, h, m, s)
-                                        or string.format("💤 離線 %dd %dh %dm %ds", d, h, m, s)
+                local baseTime = isOnline and tonumber(info.joinTime) or lastUpdate
+                baseTime = baseTime or now
+                local diffTime = math.max(0, now - baseTime)
+                local d = math.floor(diffTime / 86400)
+                local h = math.floor((diffTime % 86400) / 3600)
+                local m = math.floor((diffTime % 3600) / 60)
+                local s = math.floor(diffTime % 60)
 
-            btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n%s",
-                info.displayName or "N/A", info.username or "N/A", userId or "N/A",
-                statusText, timerText)
+                local statusText = isOnline and (tostring(info.status) ~= "" and info.status or "ALIVE") or "OFFLINE"
+                local timerText = isOnline and string.format("⏱️ %dd %dh %dm %ds", d, h, m, s)
+                                            or string.format("💤 離線 %dd %dh %dm %ds", d, h, m, s)
 
-            btn.TextColor3 = isOnline and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 180)
-            btn.TextSize = 15
-            btn.Font = Enum.Font.GothamBold
-            btn.TextWrapped = true
+                local displayName = info.displayName or "N/A"
+                local username = info.username or "N/A"
 
-            local lastClick = 0
-            btn.MouseButton1Click:Connect(function()
-                local t = tick()
-                if t - lastClick < 0.35 then
-                    if isOnline and info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
-                        showNotice("正在追蹤玩家...")
-                        safeTeleport(userId, info.jobId)
-                    elseif not isOnline then
-                        showNotice("❌ 玩家已離線，無法追蹤")
+                btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n%s",
+                    tostring(displayName), tostring(username), tostring(userId), tostring(statusText), timerText)
+
+                btn.TextColor3 = isOnline and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 180)
+                btn.TextSize = 15
+                btn.Font = Enum.Font.GothamBold
+                btn.TextWrapped = true
+
+                local lastClick = 0
+                btn.MouseButton1Click:Connect(function()
+                    local t = tick()
+                    if t - lastClick < 0.35 then
+                        if isOnline and info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
+                            showNotice("正在追蹤玩家...")
+                            safeTeleport(userId, info.jobId)
+                        elseif not isOnline then
+                            showNotice("❌ 玩家已離線，無法追蹤")
+                        end
+                    else
+                        if setclipboard then
+                            setclipboard(tostring(userId))
+                            showNotice("已複製 ID: " .. userId)
+                        end
                     end
-                else
-                    if setclipboard then
-                        setclipboard(tostring(userId))
-                        showNotice("已複製 ID: " .. userId)
-                    end
-                end
-                lastClick = t
-            end)
-        else
-            print("[渲染調試]   ❌ 跳過玩家:", info.username, "原因: 不在線且不是自己")
+                    lastClick = t
+                end)
+            else
+                print("[渲染調試]   ❌ 跳過玩家:", tostring(info.username), "原因: 不在線且不是自己")
+            end
+        end)
+        if not success then
+            warn("[渲染調試] 渲染玩家時出錯:", result)
         end
     end
 
@@ -348,6 +352,7 @@ local function renderPlayerList()
     end
     print("[渲染調試] ========== 渲染完成，顯示玩家數:", visibleCount)
 end
+
 -- ==================== 後台定時刷新緩存 ====================
 task.spawn(function()
     updateCache()
