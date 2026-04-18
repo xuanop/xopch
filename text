@@ -289,8 +289,6 @@ local function reportStatus()
     httpGet(url)
 end
 
-task.spawn(function() while true do reportStatus(); task.wait(30) end end)
-
 -- ==================== UI 定時刷新 ====================
 local uiRefreshLoop = nil
 local function startUIRefresh()
