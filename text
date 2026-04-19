@@ -1,13 +1,12 @@
 --[[
-   🔑 Evade 玩家追蹤面板 (最終穩定版)
-   - 修復所有顯示問題
+   🔑 Evade 玩家追蹤面板 (最終完整版)
+   - 修復 sheetIndex 缺失問題
    - 降低請求頻率，規避反作弊
-   - 智能傳送，區分離線與伺服器不可用
 --]]
 
 -- ==================== 配置區 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"  -- 請替換！
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 環境初始化 ====================
@@ -100,9 +99,9 @@ local function showNotice(msg)
     task.delay(3, function() container:Destroy() end)
 end
 
--- ==================== 建立 UI 面板（隱蔽命名） ====================
+-- ==================== 建立 UI 面板 ====================
 local screenGui = Instance.new("ScreenGui", PlayerGui)
-screenGui.Name = "InfoPanel"
+screenGui.Name = "NotificationUI"
 screenGui.Enabled = false
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 9999
@@ -124,7 +123,7 @@ local title = Instance.new("TextLabel", mainFrame)
 title.Size = UDim2.new(1, 0, 0, 35)
 title.Position = UDim2.new(0, 0, 0, 5)
 title.BackgroundTransparency = 1
-title.Text = "玩家列表"
+title.Text = "玩家列表 (Tab 開關)"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
@@ -154,8 +153,13 @@ local function fetchOnlinePlayers()
     local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
     if not success then return {} end
     local rawPlayers = data.players or {}
-
-    -- 去重：保留 lastUpdate 最大的记录
+    if screenGui.Enabled then
+        print("[面板調試] GAS 返回玩家數量:", #rawPlayers)
+        if #rawPlayers > 0 then
+            print("[面板調試] 第一位玩家數據:")
+            for k, v in pairs(rawPlayers[1]) do print("   ", k, "=", tostring(v)) end
+        end
+    end
     local unique = {}
     for _, p in ipairs(rawPlayers) do
         local uid = p.userId
@@ -185,10 +189,8 @@ local function renderPlayerList()
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
-
     local now = os.time()
     local visibleCount = 0
-
     for _, info in ipairs(cachedPlayers) do
         local success = pcall(function()
             local userId = tonumber(info.userId)
@@ -196,7 +198,6 @@ local function renderPlayerList()
             local lastUpdate = tonumber(info.lastUpdate) or now
             local diff = now - lastUpdate
             local isOnline = (diff <= 120)
-
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
                 local btn = Instance.new("TextButton", playerList)
@@ -205,7 +206,6 @@ local function renderPlayerList()
                 btn.BackgroundTransparency = 0.2
                 btn.ZIndex = 10
                 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-
                 local baseTime = isOnline and tonumber(info.joinTime) or lastUpdate
                 baseTime = baseTime or now
                 local diffTime = math.max(0, now - baseTime)
@@ -213,18 +213,15 @@ local function renderPlayerList()
                 local h = math.floor((diffTime % 86400) / 3600)
                 local m = math.floor((diffTime % 3600) / 60)
                 local s = math.floor(diffTime % 60)
-
                 local statusText = isOnline and (info.status ~= "" and info.status or "ALIVE") or "OFFLINE"
                 local timerText = isOnline and string.format("⏱️ %dd %dh %dm %ds", d, h, m, s)
                                             or string.format("💤 離線 %dd %dh %dm %ds", d, h, m, s)
-
                 btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n%s",
                     tostring(info.displayName), tostring(info.username), tostring(userId), tostring(statusText), timerText)
                 btn.TextColor3 = isOnline and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 180)
                 btn.TextSize = 15
                 btn.Font = Enum.Font.GothamBold
                 btn.TextWrapped = true
-
                 local lastClick = 0
                 btn.MouseButton1Click:Connect(function()
                     local t = tick()
@@ -244,7 +241,6 @@ local function renderPlayerList()
         end)
         if not success then warn("渲染玩家失敗") end
     end
-
     if visibleCount == 0 then
         local emptyBtn = Instance.new("TextButton", playerList)
         emptyBtn.Size = UDim2.new(1, 0, 0, 50)
@@ -268,7 +264,7 @@ task.spawn(function()
     end
 end)
 
--- ==================== 狀態上報 ====================
+-- ==================== 狀態上報（含 sheetIndex） ====================
 local SCRIPT_START = os.time()
 local function reportStatus()
     local data = {}
@@ -276,7 +272,6 @@ local function reportStatus()
         data.userId = lp.UserId
         data.displayName = lp.DisplayName
         data.username = lp.Name
-        
         local character = lp.Character
         local humanoid = character and character:FindFirstChild("Humanoid")
         if not character or not humanoid then
@@ -288,10 +283,9 @@ local function reportStatus()
                 data.status = "ALIVE"
             end
         end
-        
         data.jobId = game.JobId
         data.joinTime = SCRIPT_START
-        data.sheetIndex = lp.UserId % 10
+        data.sheetIndex = lp.UserId % 10   -- 关键字段
     end)
     if not data.userId then return end
     local json = buildJson(data)
@@ -331,4 +325,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ 面板已載入，按 Tab 開啟")
+print("✅ Evade 追蹤面板已載入，按 Tab 開啟")
