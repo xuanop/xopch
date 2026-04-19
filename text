@@ -252,7 +252,7 @@ end
 task.spawn(function()
     updateCache()
     while true do
-        task.wait(math.random(90, 120))
+        task.wait(math.random(30, 60))
         updateCache()
         if screenGui.Enabled then renderPlayerList() end
     end
@@ -289,7 +289,7 @@ end
 task.spawn(function()
     while true do
         reportStatus()
-        task.wait(math.random(90, 120))
+        task.wait(math.random(30, 60)
     end
 end)
 
