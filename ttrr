@@ -1,16 +1,32 @@
--- 极简调试：直接查看 GAS 返回了什么
-local GAS_URL = "https://script.google.com/macros/library/d/1L_o-MWE4mCAuCtXCYXuahSnSRjI9IPZNzFS_5_a13pe4pF1MhO1OGej5/28"  -- 请替换
+-- 极简调试：使用官方 HttpService 获取 GAS 数据
+local GAS_URL = "https://script.google.com/macros/library/d/1L_o-MWE4mCAuCtXCYXuahSnSRjI9IPZNzFS_5_a13pe4pF1MhO1OGej5/28"
 local HttpService = game:GetService("HttpService")
 
-local req = syn and syn.request or http_request or request or (http and http.request)
-if not req then error("无 HTTP 请求函数") end
+-- 检查游戏是否允许 HTTP 请求
+if not HttpService.HttpEnabled then
+    warn("此游戏未启用 HTTP 请求，无法进行测试。")
+    return
+end
 
+-- 使用官方 API 发送请求（规避部分检测）
 local url = GAS_URL .. "?action=getPlayers"
-local res = req({ Url = url, Method = "GET" })
+local success, result = pcall(function()
+    -- 尝试使用 RequestInternal（更底层，可能更难被检测）
+    return HttpService:RequestInternal({
+        Url = url,
+        Method = "GET",
+        Headers = {["Content-Type"] = "application/json"}
+    })
+end)
 
-print("📥 响应码:", res.StatusCode)
-if res.StatusCode == 200 and res.Body then
-    local data = HttpService:JSONDecode(res.Body)
+if not success then
+    warn("请求失败:", result)
+    return
+end
+
+print("📥 响应码:", result.StatusCode)
+if result.StatusCode == 200 and result.Body then
+    local data = HttpService:JSONDeccode(result.Body)
     local players = data.players or {}
     print("📊 GAS 返回玩家数量:", #players)
     if #players > 0 then
@@ -22,5 +38,5 @@ if res.StatusCode == 200 and res.Body then
         print("⚠️ 玩家列表为空")
     end
 else
-    print("❌ 请求失败:", res.Body)
+    print("❌ 请求失败:", result.Body)
 end
