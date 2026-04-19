@@ -144,7 +144,7 @@ local function fetchOnlinePlayers()
     print("[診斷] GAS 返回玩家總數:", #rawPlayers)
     local unique = {}
     for _, p in ipairs(rawPlayers) do
-        local uid = p.userId
+        local uid = tostring(p.userId)
         if uid then
             local pTime = p.lastUpdate or 0
             local eTime = unique[uid] and unique[uid].lastUpdate or 0
@@ -252,7 +252,7 @@ end
 task.spawn(function()
     updateCache()
     while true do
-        task.wait(math.random(30, 60))
+        task.wait(math.random(90, 120))
         updateCache()
         if screenGui.Enabled then renderPlayerList() end
     end
@@ -289,7 +289,7 @@ end
 task.spawn(function()
     while true do
         reportStatus()
-        task.wait(math.random(30, 60))
+        task.wait(math.random(90, 120))
     end
 end)
 
