@@ -129,6 +129,10 @@ end)
 
 -- ==================== 增強版傳送 ====================
 local function safeTeleport(targetUserId, targetJobId)
+    print("[傳送] 目標 UserId:", targetUserId)
+    print("[傳送] 目標 JobId:", targetJobId)
+    print("[傳送] 當前 JobId:", game.JobId)
+
     if targetJobId == game.JobId then
         showNotice("⚠️ 您已在該伺服器中")
         return false
@@ -139,8 +143,16 @@ local function safeTeleport(targetUserId, targetJobId)
         return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId)
     end)
 
-    if not success or not jobId or jobId == "" then
+    if not success then
+        warn("[傳送] GetPlayerPlaceInstanceAsync 失敗:", placeId)  -- placeId 即錯誤訊息
         showNotice("❌ 無法獲取玩家位置，可能已離線")
+        return false
+    end
+
+    print("[傳送] 獲取到 PlaceId:", placeId, "JobId:", jobId)
+
+    if not jobId or jobId == "" then
+        showNotice("❌ 玩家離線或 JobId 無效")
         return false
     end
 
@@ -150,16 +162,18 @@ local function safeTeleport(targetUserId, targetJobId)
     end
 
     showNotice("🚀 正在傳送到玩家所在伺服器...")
-    local teleportSuccess = pcall(function()
+    local teleportSuccess, teleportErr = pcall(function()
         TeleportService:TeleportToPlaceInstance(placeId, jobId, lp)
     end)
 
     if not teleportSuccess then
+        warn("[傳送] TeleportToPlaceInstance 失敗:", teleportErr)
         showNotice("⚠️ 精準傳送失敗，嘗試普通傳送...")
-        local fallbackSuccess = pcall(function()
+        local fallbackSuccess, fallbackErr = pcall(function()
             TeleportService:Teleport(placeId, lp)
         end)
         if not fallbackSuccess then
+            warn("[傳送] Teleport 失敗:", fallbackErr)
             showNotice("❌ 傳送失敗，請手動加入")
             if setclipboard then
                 setclipboard(tostring(targetUserId))
