@@ -9,8 +9,6 @@ local DEVELOPERS = {
     ["xuan_1529"] = true,
     ["0xzzyi"] = true,
     ["E5alR9"] = true,
-    ["3388363961"] = true,
-    [3388363961] = true
 }
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
 local REPORT_INTERVAL = 60
