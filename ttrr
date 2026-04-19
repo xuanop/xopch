@@ -1,5 +1,5 @@
 -- 增强调试脚本（模拟完整面板行为，安全测试）
-local GAS_URL = "https://script.google.com/macros/library/d/1L_o-MWE4mCAuCtXCYXuahSnSRjI9IPZNzFS_5_a13pe4pF1MhO1OGej5/28"
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
 local HttpService = game:GetService("HttpService")
 local lp = game:GetService("Players").LocalPlayer
 
