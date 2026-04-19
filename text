@@ -1,13 +1,13 @@
 --[[
-   🔑 Evade 玩家追蹤面板 (終極雙帳號驗證版)
-   - 控制台輸出詳細過濾過程
-   - 強制顯示所有120秒內活躍玩家
+   🔑 Evade 玩家追蹤面板 (合併版：啟動時測試寫入 + 完整面板功能)
 --]]
 
+-- ==================== 配置區 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
 local PANEL_KEY = Enum.KeyCode.Tab
 
+-- ==================== 環境初始化 ====================
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local UIS = game:GetService("UserInputService")
@@ -15,10 +15,12 @@ local HttpService = game:GetService("HttpService")
 local lp = Players.LocalPlayer
 local PlayerGui = lp:WaitForChild("PlayerGui")
 
+-- 授權檢查
 local isAuthorized = false
 for _, name in ipairs(AUTHORIZED_USERS) do if lp.Name == name then isAuthorized = true break end end
 if not isAuthorized then return end
 
+-- ==================== 通用工具函數（合併去重） ====================
 local function buildJson(t)
     local parts = {}
     for k, v in pairs(t) do
@@ -52,6 +54,7 @@ local function httpGet(url)
     return success and result or nil
 end
 
+-- ==================== 智能傳送 ====================
 local function safeTeleport(targetUserId, targetJobId)
     if targetJobId == game.JobId then showNotice("⚠️ 您已在該伺服器中"); return false end
     local success, placeId, jobId = pcall(function() return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId) end)
@@ -66,6 +69,7 @@ local function safeTeleport(targetUserId, targetJobId)
     return true
 end
 
+-- ==================== 通知系統 ====================
 local function showNotice(msg)
     local sg = PlayerGui:FindFirstChild("EvadeNotice") or Instance.new("ScreenGui", PlayerGui)
     sg.Name = "EvadeNotice"
@@ -87,7 +91,7 @@ local function showNotice(msg)
     task.delay(3, function() container:Destroy() end)
 end
 
--- UI 建立（省略，与您提供的完全相同）
+-- ==================== 建立 UI 面板 ====================
 local screenGui = Instance.new("ScreenGui", PlayerGui)
 screenGui.Name = "NotificationUI"
 screenGui.Enabled = false
@@ -130,6 +134,7 @@ Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 screenGui.Enabled = false
 task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 
+-- ==================== 玩家列表緩存 ====================
 local cachedPlayers = {}
 local cacheLock = false
 
@@ -187,7 +192,7 @@ local function renderPlayerList()
             local isSelf = (userId == lp.UserId)
             local lastUpdate = tonumber(info.lastUpdate) or now
             local diff = now - lastUpdate
-            local isOnline = (diff <= 180)  -- 放宽至180秒，与GAS一致
+            local isOnline = (diff <= 180)
 
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
@@ -249,15 +254,17 @@ local function renderPlayerList()
     end
 end
 
+-- ==================== 後台定時刷新緩存 ====================
 task.spawn(function()
     updateCache()
     while true do
-        task.wait(math.random(30, 60))
+        task.wait(math.random(90, 120))
         updateCache()
         if screenGui.Enabled then renderPlayerList() end
     end
 end)
 
+-- ==================== 狀態上報（每次輸出詳細調試信息） ====================
 local SCRIPT_START = os.time()
 local function reportStatus()
     local data = {}
@@ -281,18 +288,27 @@ local function reportStatus()
         data.sheetIndex = lp.UserId % 10
     end)
     if not data.userId then return end
+
     local json = buildJson(data)
     local url = GAS_URL .. "?data=" .. urlEncode(json)
-    httpGet(url)
+
+    -- 每次上報都輸出詳細測試信息
+    print("📤 [上報測試] 用戶", lp.Name, "正在發送寫入請求... sheetIndex =", data.sheetIndex)
+    local res = httpGet(url)
+    if res then
+        print("📥 [上報測試] 響應碼:", res.StatusCode)
+        print("📥 [上報測試] 響應體:", res.Body)
+        if res.StatusCode == 200 and string.find(res.Body, "success") then
+            print("✅ [上報測試] 寫入成功")
+        else
+            print("❌ [上報測試] 寫入異常")
+        end
+    else
+        print("❌ [上報測試] 請求失敗（網絡錯誤或無響應）")
+    end
 end
 
-task.spawn(function()
-    while true do
-        reportStatus()
-        task.wait(math.random(30, 60))
-    end
-end)
-
+-- ==================== UI 定時刷新 ====================
 local uiRefreshLoop = nil
 local function startUIRefresh()
     if uiRefreshLoop then return end
@@ -302,6 +318,7 @@ local function stopUIRefresh()
     if uiRefreshLoop then task.cancel(uiRefreshLoop); uiRefreshLoop = nil end
 end
 
+-- ==================== Tab 鍵切換 ====================
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
@@ -316,4 +333,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ 終極雙帳號驗證版已載入，按 Tab 開啟")
+print("✅ 合併版面板已載入（啟動時已執行寫入測試），按 Tab 開啟")
