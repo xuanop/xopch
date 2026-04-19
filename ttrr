@@ -1,4 +1,4 @@
--- 增强调试脚本（模拟完整面板行为，安全测试）
+-- 修正版调试脚本（请替换为正确的 /exec URL）
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
 local HttpService = game:GetService("HttpService")
 local lp = game:GetService("Players").LocalPlayer
@@ -6,8 +6,7 @@ local lp = game:GetService("Players").LocalPlayer
 local function httpGet(url)
     local req = syn and syn.request or http_request or request or (http and http.request)
     if not req then return nil end
-    local success, result = pcall(function() return req({ Url = url, Method = "GET" }) end)
-    return success and result or nil
+    return req({ Url = url, Method = "GET" })
 end
 
 local function urlEncode(s)
@@ -64,5 +63,5 @@ if res and res.StatusCode == 200 and res.Body then
         print("👤 第一位玩家 joinTime:", players[1].joinTime, " lastUpdate:", players[1].lastUpdate)
     end
 else
-    print("❌ 读取失败")
+    print("❌ 读取失败，响应码:", res and res.StatusCode)
 end
