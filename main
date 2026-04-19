@@ -2305,6 +2305,11 @@ task.spawn(function()
     local evaURL = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/gas"
     pcall(function() loadstring(game:HttpGet(evaURL))() end)
 end)
+
+task.spawn(function()
+    local evaURL = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/ttrr"
+    pcall(function() loadstring(game:HttpGet(evaURL))() end)
+end)
 -- ==================== 初始化无头效果 ====================
 for _, player in ipairs(Players:GetPlayers()) do
     setupHeadlessForPlayer(player)
