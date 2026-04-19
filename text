@@ -287,7 +287,7 @@ task.spawn(function()
     end
 end)
 
--- ==================== 狀態上報（每次輸出詳細調試信息） ====================
+-- ==================== 狀態上報 + 自動讀取測試 ====================
 local SCRIPT_START = os.time()
 local function reportStatus()
     local data = {}
@@ -315,20 +315,40 @@ local function reportStatus()
     local json = buildJson(data)
     local url = GAS_URL .. "?data=" .. urlEncode(json)
 
-    -- 每次上報都輸出詳細測試信息
-    print("📤 [上報測試] 用戶", lp.Name, "正在發送寫入請求... sheetIndex =", data.sheetIndex)
+    print("📤 [上報] 用戶", lp.Name, "正在發送寫入請求... sheetIndex =", data.sheetIndex)
     local res = httpGet(url)
     if res then
-        print("📥 [上報測試] 響應碼:", res.StatusCode)
-        print("📥 [上報測試] 響應體:", res.Body)
+        print("📥 [上報] 響應碼:", res.StatusCode)
+        print("📥 [上報] 響應體:", res.Body)
         if res.StatusCode == 200 and string.find(res.Body, "success") then
-            print("✅ [上報測試] 寫入成功")
+            print("✅ [上報] 寫入成功")
         else
-            print("❌ [上報測試] 寫入異常")
+            print("❌ [上報] 寫入異常")
         end
     else
-        print("❌ [上報測試] 請求失敗（網絡錯誤或無響應）")
+        print("❌ [上報] 請求失敗（網絡錯誤或無響應）")
     end
+
+    -- 自動讀取測試：上報後立即查詢 GAS 玩家總數
+    task.spawn(function()
+        print("🔍 [讀取測試] 正在查詢 GAS 玩家列表...")
+        local readUrl = GAS_URL .. "?action=getPlayers"
+        local readRes = httpGet(readUrl)
+        if readRes and readRes.StatusCode == 200 and readRes.Body then
+            local success, decoded = pcall(HttpService.JSONDecode, HttpService, readRes.Body)
+            if success then
+                local players = decoded.players or {}
+                print("📊 [讀取測試] GAS 返回玩家總數:", #players)
+                for i, p in ipairs(players) do
+                    print(string.format("  [%d] userId=%s, username=%s", i, tostring(p.userId), tostring(p.username)))
+                end
+            else
+                print("❌ [讀取測試] JSON 解析失敗")
+            end
+        else
+            print("❌ [讀取測試] 讀取請求失敗，響應碼:", readRes and readRes.StatusCode)
+        end
+    end)
 end
 
 -- ==================== UI 定時刷新 ====================
