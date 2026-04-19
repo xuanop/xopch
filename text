@@ -11,7 +11,7 @@ local DEVELOPERS = {
     ["E5alR9"] = true,
 }
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
-local REPORT_INTERVAL = 60
+local REPORT_INTERVAL = 10
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 環境初始化 ====================
@@ -125,6 +125,20 @@ task.spawn(function()
         task.wait(REPORT_INTERVAL)
         reportStatus()
     end
+end)
+
+-- 角色生成時立即上報 ALIVE
+lp.CharacterAdded:Connect(function(character)
+    task.wait(0.5)  -- 等待 Humanoid 載入
+    reportStatus()
+end)
+
+-- 角色死亡時立即上報 DEAD（透過 Humanoid.Died 事件）
+lp.CharacterAdded:Connect(function(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    humanoid.Died:Connect(function()
+        reportStatus()
+    end)
 end)
 
 -- ==================== 增強版傳送 ====================
