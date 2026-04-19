@@ -289,7 +289,7 @@ end
 task.spawn(function()
     while true do
         reportStatus()
-        task.wait(math.random(30, 60)
+        task.wait(math.random(30, 60))
     end
 end)
 
