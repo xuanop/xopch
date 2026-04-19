@@ -351,20 +351,21 @@ end
 task.spawn(function()
     updateCache()
     while true do
-        task.wait(10)
+        task.wait(10)   -- 每 10 秒更新快取
         updateCache()
         if screenGui.Enabled then renderPlayerList() end
     end
 end)
 
--- UI 刷新循環
+-- UI 刷新循環（面板開啟時更高頻更新）
 local uiRefreshLoop = nil
 local function startUIRefresh()
     if uiRefreshLoop then return end
     uiRefreshLoop = task.spawn(function()
         while screenGui and screenGui.Enabled do
+            updateCache()      -- 每次循環都重新拉取 GAS
             renderPlayerList()
-            task.wait(1)
+            task.wait(3)       -- 每 3 秒刷新畫面
         end
         uiRefreshLoop = nil
     end)
