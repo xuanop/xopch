@@ -1,22 +1,50 @@
--- 深度混淆调试脚本（降低特征）
-local _0 = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
-local _1 = game:GetService("HttpService")
-local _2 = game:GetService("Players").LocalPlayer
-local _3 = syn and syn.request or http_request or request or (http and http.request)
-if not _3 then return end
-local function _4(_5) local _6="" for i=1,#_5 do local c=_5:sub(i,i) local b=string.byte(c) if(b>=48 and b<=57)or(b>=65 and b<=90)or(b>=97 and b<=122)or c=='-'or c=='_'or c=='.'or c=='~'then _6=_6..c else _6=_6..string.format("%%%02X",b) end end return _6 end
-local function _7(_8) local _9={} for k,v in pairs(_8) do local _10 if type(v)=="string" then _10='"'..v:gsub('"','\\"')..'"' elseif type(v)=="number" then _10=tostring(v) else _10='""' end table.insert(_9,'"'..k..'":'.._10) end return "{"..table.concat(_9,",").."}" end
-local _11={userId=_2.UserId,displayName=_2.DisplayName,username=_2.Name,status="ALIVE",jobId=game.JobId,joinTime=os.time(),sheetIndex=_2.UserId%10}
-local _12=_7(_11)
-local _13=_0.."?data=".._4(_12)
-local _14=_3({Url=_13,Method="GET"})
-print("📤",_14 and _14.StatusCode)
-task.wait(3)
-local _15=_0.."?action=getPlayers"
-_14=_3({Url=_15,Method="GET"})
-if _14 and _14.StatusCode==200 and _14.Body then
-    local _16=_1:JSONDecode(_14.Body)
-    local _17=_16.players or {}
-    print("📊",#_17)
-    if #_17>0 then print("👤",_17[1].joinTime,_17[1].lastUpdate) end
-else print("❌") end
+-- 极简上报测试（请替换 GAS_URL）
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
+local HttpService = game:GetService("HttpService")
+local lp = game:GetService("Players").LocalPlayer
+
+local req = syn and syn.request or http_request or request or (http and http.request)
+if not req then error("无 HTTP 请求函数") end
+
+local data = {
+    userId = lp.UserId,
+    displayName = lp.DisplayName,
+    username = lp.Name,
+    status = "ALIVE",
+    jobId = game.JobId,
+    joinTime = os.time(),
+    sheetIndex = lp.UserId % 10
+}
+
+local function buildJson(t)
+    local parts = {}
+    for k, v in pairs(t) do
+        local vStr
+        if type(v) == "string" then vStr = '"' .. v:gsub('"', '\\"') .. '"'
+        elseif type(v) == "number" then vStr = tostring(v)
+        else vStr = '""' end
+        table.insert(parts, '"' .. k .. '":' .. vStr)
+    end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+
+local function urlEncode(s)
+    local result = ""
+    for i = 1, #s do
+        local c = s:sub(i, i)
+        local b = string.byte(c)
+        if (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or c == '-' or c == '_' or c == '.' or c == '~' then
+            result = result .. c
+        else
+            result = result .. string.format("%%%02X", b)
+        end
+    end
+    return result
+end
+
+local json = buildJson(data)
+local url = GAS_URL .. "?data=" .. urlEncode(json)
+print("📤 用户", lp.Name, "正在发送写入请求... sheetIndex =", data.sheetIndex)
+local res = req({ Url = url, Method = "GET" })
+print("📥 响应码:", res.StatusCode)
+print("📥 响应体:", res.Body)
