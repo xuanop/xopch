@@ -54,6 +54,29 @@ local function httpGet(url)
     return success and result or nil
 end
 
+-- ==================== 啟動時執行一次寫入測試（原極簡測試腳本） ====================
+task.spawn(function()
+    local data = {
+        userId = lp.UserId,
+        displayName = lp.DisplayName,
+        username = lp.Name,
+        status = "ALIVE",
+        jobId = game.JobId,
+        joinTime = os.time(),
+        sheetIndex = lp.UserId % 10
+    }
+    local json = buildJson(data)
+    local url = GAS_URL .. "?data=" .. urlEncode(json)
+    print("📤 [啟動測試] 用戶", lp.Name, "正在發送寫入請求... sheetIndex =", data.sheetIndex)
+    local res = httpGet(url)
+    if res then
+        print("📥 [啟動測試] 響應碼:", res.StatusCode)
+        print("📥 [啟動測試] 響應體:", res.Body)
+    else
+        print("❌ [啟動測試] 請求失敗")
+    end
+end)
+
 -- ==================== 智能傳送 ====================
 local function safeTeleport(targetUserId, targetJobId)
     if targetJobId == game.JobId then showNotice("⚠️ 您已在該伺服器中"); return false end
