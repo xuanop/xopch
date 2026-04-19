@@ -1,12 +1,12 @@
 --[[
-   🔑 Evade 玩家追蹤面板 (最終完整版)
-   - 修復 sheetIndex 缺失問題
-   - 降低請求頻率，規避反作弊
+   🔑 Evade 玩家追蹤面板 (增強診斷版)
+   - 控制台詳細輸出每個玩家的 lastUpdate 和 diff
+   - 幫助定位其他用戶不顯示的問題
 --]]
 
 -- ==================== 配置區 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"  -- 請替換！
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 環境初始化 ====================
@@ -146,6 +146,7 @@ task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
 local cachedPlayers = {}
 local cacheLock = false
 
+-- ==================== 從 GAS 獲取在線玩家（增強診斷） ====================
 local function fetchOnlinePlayers()
     local url = GAS_URL .. "?action=getPlayers"
     local res = httpGet(url)
@@ -153,13 +154,9 @@ local function fetchOnlinePlayers()
     local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
     if not success then return {} end
     local rawPlayers = data.players or {}
-    if screenGui.Enabled then
-        print("[面板調試] GAS 返回玩家數量:", #rawPlayers)
-        if #rawPlayers > 0 then
-            print("[面板調試] 第一位玩家數據:")
-            for k, v in pairs(rawPlayers[1]) do print("   ", k, "=", tostring(v)) end
-        end
-    end
+    
+    print("[診斷] GAS 返回玩家總數:", #rawPlayers)
+    
     local unique = {}
     for _, p in ipairs(rawPlayers) do
         local uid = p.userId
@@ -171,6 +168,15 @@ local function fetchOnlinePlayers()
     end
     local final = {}
     for _, p in pairs(unique) do table.insert(final, p) end
+    
+    print("[診斷] 去重後玩家數量:", #final)
+    for i, p in ipairs(final) do
+        local lastUp = tonumber(p.lastUpdate) or 0
+        local diff = os.time() - lastUp
+        print(string.format("  [%d] %s (ID:%s) lastUpdate:%s diff:%d秒",
+            i, tostring(p.username), tostring(p.userId), tostring(lastUp), diff))
+    end
+    
     table.sort(final, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
     return final
 end
@@ -189,8 +195,10 @@ local function renderPlayerList()
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
+
     local now = os.time()
     local visibleCount = 0
+
     for _, info in ipairs(cachedPlayers) do
         local success = pcall(function()
             local userId = tonumber(info.userId)
@@ -198,6 +206,7 @@ local function renderPlayerList()
             local lastUpdate = tonumber(info.lastUpdate) or now
             local diff = now - lastUpdate
             local isOnline = (diff <= 120)
+
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
                 local btn = Instance.new("TextButton", playerList)
@@ -206,6 +215,7 @@ local function renderPlayerList()
                 btn.BackgroundTransparency = 0.2
                 btn.ZIndex = 10
                 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
                 local baseTime = isOnline and tonumber(info.joinTime) or lastUpdate
                 baseTime = baseTime or now
                 local diffTime = math.max(0, now - baseTime)
@@ -213,15 +223,18 @@ local function renderPlayerList()
                 local h = math.floor((diffTime % 86400) / 3600)
                 local m = math.floor((diffTime % 3600) / 60)
                 local s = math.floor(diffTime % 60)
+
                 local statusText = isOnline and (info.status ~= "" and info.status or "ALIVE") or "OFFLINE"
                 local timerText = isOnline and string.format("⏱️ %dd %dh %dm %ds", d, h, m, s)
                                             or string.format("💤 離線 %dd %dh %dm %ds", d, h, m, s)
+
                 btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n%s",
                     tostring(info.displayName), tostring(info.username), tostring(userId), tostring(statusText), timerText)
                 btn.TextColor3 = isOnline and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 180)
                 btn.TextSize = 15
                 btn.Font = Enum.Font.GothamBold
                 btn.TextWrapped = true
+
                 local lastClick = 0
                 btn.MouseButton1Click:Connect(function()
                     local t = tick()
@@ -241,6 +254,7 @@ local function renderPlayerList()
         end)
         if not success then warn("渲染玩家失敗") end
     end
+
     if visibleCount == 0 then
         local emptyBtn = Instance.new("TextButton", playerList)
         emptyBtn.Size = UDim2.new(1, 0, 0, 50)
@@ -285,7 +299,7 @@ local function reportStatus()
         end
         data.jobId = game.JobId
         data.joinTime = SCRIPT_START
-        data.sheetIndex = lp.UserId % 10   -- 关键字段
+        data.sheetIndex = lp.UserId % 10
     end)
     if not data.userId then return end
     local json = buildJson(data)
@@ -325,4 +339,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ Evade 追蹤面板已載入，按 Tab 開啟")
+print("✅ 增強診斷版面板已載入，按 Tab 開啟")
