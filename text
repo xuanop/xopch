@@ -1,12 +1,13 @@
 --[[
-   🔑 Evade 玩家追蹤面板 (最終完整版)
-   - 修復所有顯示問題（OFFLINE、重複、看不到自己）
-   - 強制 GAS 寫入最新記錄，讀取時精準判斷在線狀態
+   🔑 Evade 玩家追蹤面板 (最終穩定版)
+   - 修復所有顯示問題
+   - 降低請求頻率，規避反作弊
+   - 智能傳送，區分離線與伺服器不可用
 --]]
 
 -- ==================== 配置區 ====================
 local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
-local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"  -- 請替換！
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxr0VcunE41lyIar8Iq949W0LzlqJYSF8XfKkFCFhrNCkuQ4GtPQIK7NVivmQpI9V0RVA/exec"
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 環境初始化 ====================
@@ -99,9 +100,9 @@ local function showNotice(msg)
     task.delay(3, function() container:Destroy() end)
 end
 
--- ==================== 建立 UI 面板 ====================
+-- ==================== 建立 UI 面板（隱蔽命名） ====================
 local screenGui = Instance.new("ScreenGui", PlayerGui)
-screenGui.Name = "EvadePlayerPanel"
+screenGui.Name = "InfoPanel"
 screenGui.Enabled = false
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 9999
@@ -123,7 +124,7 @@ local title = Instance.new("TextLabel", mainFrame)
 title.Size = UDim2.new(1, 0, 0, 35)
 title.Position = UDim2.new(0, 0, 0, 5)
 title.BackgroundTransparency = 1
-title.Text = "🚀 Evade 玩家列表 (Tab 開關)"
+title.Text = "玩家列表"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
@@ -194,7 +195,7 @@ local function renderPlayerList()
             local isSelf = (userId == lp.UserId)
             local lastUpdate = tonumber(info.lastUpdate) or now
             local diff = now - lastUpdate
-            local isOnline = (diff <= 120)  -- 與 GAS 的 120 秒一致
+            local isOnline = (diff <= 120)
 
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
@@ -260,27 +261,36 @@ end
 -- ==================== 後台定時刷新緩存 ====================
 task.spawn(function()
     updateCache()
-    while true do task.wait(5); updateCache(); if screenGui.Enabled then renderPlayerList() end end
+    while true do
+        task.wait(math.random(90, 120))
+        updateCache()
+        if screenGui.Enabled then renderPlayerList() end
+    end
 end)
 
--- ==================== 狀態上報（傳遞 joinTime） ====================
-local SCRIPT_START = os.time()   -- 脚本启动时记录一次
-
+-- ==================== 狀態上報 ====================
+local SCRIPT_START = os.time()
 local function reportStatus()
     local data = {}
     pcall(function()
         data.userId = lp.UserId
         data.displayName = lp.DisplayName
         data.username = lp.Name
-        data.status = "ALIVE"
-        if lp.Character and lp.Character:FindFirstChild("Humanoid") then
-            local hum = lp.Character.Humanoid
-            if hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then
+        
+        local character = lp.Character
+        local humanoid = character and character:FindFirstChild("Humanoid")
+        if not character or not humanoid then
+            data.status = "DEAD"
+        else
+            if humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead then
                 data.status = "DEAD"
+            else
+                data.status = "ALIVE"
             end
         end
+        
         data.jobId = game.JobId
-        data.joinTime = SCRIPT_START   -- 关键：传递脚本启动时间
+        data.joinTime = SCRIPT_START
         data.sheetIndex = lp.UserId % 10
     end)
     if not data.userId then return end
@@ -288,6 +298,13 @@ local function reportStatus()
     local url = GAS_URL .. "?data=" .. urlEncode(json)
     httpGet(url)
 end
+
+task.spawn(function()
+    while true do
+        reportStatus()
+        task.wait(math.random(90, 120))
+    end
+end)
 
 -- ==================== UI 定時刷新 ====================
 local uiRefreshLoop = nil
@@ -314,4 +331,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ Evade 追蹤面板已載入（最終版），按 Tab 鍵開啟")
+print("✅ 面板已載入，按 Tab 開啟")
