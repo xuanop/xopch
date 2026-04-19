@@ -151,19 +151,79 @@ local function showNotice(msg)
     task.delay(3, function() noticeFrame:Destroy() end)
 end
 
--- 智能傳送
+-- ==================== 終極增強版傳送 ====================
 local function safeTeleport(targetUserId, targetJobId)
-    if targetJobId == game.JobId then showNotice("⚠️ 您已在該伺服器中"); return false end
-    local success, placeId, jobId = pcall(function() return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId) end)
-    if not success then showNotice("❌ 伺服器不可用或玩家不存在"); return false end
-    if not jobId or jobId == "" then showNotice("👻 玩家已離線"); return false end
-    showNotice("🚀 正在傳送到玩家所在伺服器...")
-    local teleportSuccess = pcall(function() TeleportService:TeleportToPlaceInstance(placeId, jobId, lp) end)
-    if not teleportSuccess then
-        showNotice("⚠️ 精準傳送失敗，嘗試普通傳送...")
-        pcall(function() TeleportService:Teleport(placeId, lp) end)
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local lp = Players.LocalPlayer
+
+    -- 1. 如果目標 JobId 與當前相同，無需傳送
+    if targetJobId == game.JobId then
+        showNotice("⚠️ 您已在該伺服器中")
+        return false
     end
-    return true
+
+    -- 2. 強制獲取目標玩家最新的服務器信息（繞過可能過時的 JobId）
+    showNotice("🔍 正在獲取目標玩家最新位置...")
+    local success, placeId, jobId = pcall(function()
+        return TeleportService:GetPlayerPlaceInstanceAsync(targetUserId)
+    end)
+
+    if not success then
+        -- 獲取失敗：玩家可能已離線或網絡問題
+        showNotice("❌ 無法獲取玩家位置，可能已離線")
+        return false
+    end
+
+    if not jobId or jobId == "" then
+        showNotice("👻 玩家已離線（無有效伺服器）")
+        return false
+    end
+
+    -- 3. 如果獲取到的 JobId 與傳入的不同，說明玩家已切換伺服器
+    if jobId ~= targetJobId then
+        print("[傳送] 目標伺服器已變更：", targetJobId, "->", jobId)
+    end
+
+    -- 4. 檢查目標是否仍為當前伺服器
+    if jobId == game.JobId then
+        showNotice("⚠️ 您已在該伺服器中")
+        return false
+    end
+
+    -- 5. 嘗試精準傳送
+    showNotice("🚀 正在傳送到玩家所在伺服器...")
+    local teleportSuccess, teleportErr = pcall(function()
+        TeleportService:TeleportToPlaceInstance(placeId, jobId, lp)
+    end)
+
+    if teleportSuccess then
+        return true
+    end
+
+    -- 6. 精準傳送失敗（771 錯誤或反作弊攔截），嘗試回退到普通傳送
+    warn("[傳送] 精準傳送失敗:", teleportErr)
+    showNotice("⚠️ 精準傳送失敗，嘗試普通傳送...")
+
+    local fallbackSuccess, fallbackErr = pcall(function()
+        TeleportService:Teleport(placeId, lp)
+    end)
+
+    if fallbackSuccess then
+        return true
+    end
+
+    -- 7. 所有方式均失敗，提示用戶手動加入
+    warn("[傳送] 普通傳送也失敗:", fallbackErr)
+    showNotice("❌ 傳送失敗，請嘗試手動加入該玩家")
+
+    -- 可選：將玩家 ID 複製到剪貼簿，方便手動搜尋
+    if setclipboard then
+        setclipboard(tostring(targetUserId))
+        showNotice("📋 玩家 ID 已複製，可手動搜尋加入")
+    end
+
+    return false
 end
 
 -- 建立 UI 面板（多重容錯）
