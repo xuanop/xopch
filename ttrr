@@ -1,4 +1,4 @@
--- 增强调试：写入 → 等待 → 读取
+-- 增强调试脚本（模拟完整面板行为，安全测试）
 local GAS_URL = "https://script.google.com/macros/library/d/1L_o-MWE4mCAuCtXCYXuahSnSRjI9IPZNzFS_5_a13pe4pF1MhO1OGej5/28"
 local HttpService = game:GetService("HttpService")
 local lp = game:GetService("Players").LocalPlayer
@@ -36,7 +36,7 @@ local function buildJson(t)
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
--- 写入测试数据
+-- 模拟上报一次
 local data = {
     userId = lp.UserId,
     displayName = lp.DisplayName,
@@ -49,7 +49,7 @@ local data = {
 local json = buildJson(data)
 local writeUrl = GAS_URL .. "?data=" .. urlEncode(json)
 local res = httpGet(writeUrl)
-print("📤 写入响应码:", res and res.StatusCode, res and res.Body and string.sub(res.Body, 1, 50))
+print("📤 写入响应码:", res and res.StatusCode)
 
 task.wait(3)
 
