@@ -44,7 +44,7 @@ local StarterGui = game:GetService("StarterGui")
 local HttpService = game:GetService("HttpService")
 
 -- ==================== Google 試算表分流上报 ====================
-local GAS_URL = "https://script.google.com/macros/s/AKfycbwnwe6tHkppxP5BbudUEWNvOaSVGTfszxP5aIIwuqoG7x9cKyWHm1fj6O6PfPH_gKk9_g/exec"
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
 local SCRIPT_START_TIME = os.time()
 
 local function getSheetIndex(userId)
