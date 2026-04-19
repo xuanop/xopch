@@ -365,7 +365,7 @@ local function startUIRefresh()
         while screenGui and screenGui.Enabled do
             updateCache()      -- 每次循環都重新拉取 GAS
             renderPlayerList()
-            task.wait(3)       -- 每 3 秒刷新畫面
+            task.wait(1)       -- 每 3 秒刷新畫面
         end
         uiRefreshLoop = nil
     end)
