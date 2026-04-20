@@ -144,22 +144,10 @@ local teleportGui = nil
 local broadcastWindowActive = false
 local broadcastGui = nil
 
--- ==================== GAS 广播系统（自检版） ====================
+-- ==================== GAS 广播系统（自包含 httpRequest） ====================
 print("[广播] 开始初始化...")
 
 -- 依赖检查
-if not GAS_URL then
-    warn("[广播] ❌ GAS_URL 未定义，请确保在配置区定义了 GAS_URL")
-    return
-end
-local GAS_BROADCAST_URL = GAS_URL  -- 复用主脚本的 GAS_URL，或您可手动指定新 URL
--- 若需要独立 URL，请取消下行注释并填写
--- GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"
-
-if not httpRequest then
-    warn("[广播] ❌ httpRequest 函数未定义，广播系统无法工作")
-    return
-end
 if not HttpService then
     warn("[广播] ❌ HttpService 未定义")
     return
@@ -172,7 +160,52 @@ if not showNotice then
     warn("[广播] ⚠️ showNotice 未定义，广播通知将无法显示")
 end
 
-print("[广播] 依赖检查通过")
+-- 内置 httpRequest 函数（原 Firebase 广播系统中的通用请求函数）
+local function httpRequest(method, url, body)
+    local req = syn and syn.request or http_request or request or (http and http.request)
+    if not req then
+        warn("[广播] 找不到 HTTP 请求函数")
+        return nil
+    end
+
+    local jsonBody = nil
+    if body then
+        local parts = {}
+        for k, v in pairs(body) do
+            local valueStr
+            if type(v) == "string" then
+                valueStr = '"' .. v:gsub('"', '\\"') .. '"'
+            elseif type(v) == "number" then
+                valueStr = tostring(v)
+            elseif type(v) == "boolean" then
+                valueStr = v and "true" or "false"
+            else
+                valueStr = '""'
+            end
+            table.insert(parts, '"' .. k .. '":' .. valueStr)
+        end
+        jsonBody = "{" .. table.concat(parts, ",") .. "}"
+    end
+
+    local success, result = pcall(function()
+        return req({
+            Url = url,
+            Method = method,
+            Headers = {["Content-Type"] = "application/json"},
+            Body = jsonBody,
+            Timeout = 10
+        })
+    end)
+    if success and result then
+        return result
+    else
+        warn("[广播] HTTP 请求失败:", result)
+        return nil
+    end
+end
+
+local GAS_BROADCAST_URL = GAS_URL  -- 复用主脚本的 GAS_URL，或替换为独立广播 GAS 的 URL
+-- GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"
 
 -- 内置 URL 编码
 local function urlEncode(s)
