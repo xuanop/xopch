@@ -217,12 +217,7 @@ function sendBroadcast(message)
             if success then
                 if data.result == "success" then
                     if showNotice then showNotice("✅ 广播已发送", true) end
-                    if broadcastGui then
-                        broadcastGui:Destroy()
-                        broadcastWindowActive = false
-                        broadcastGui = nil
-                    end
-                else
+
                     if showNotice then showNotice("❌ 广播发送失败: " .. (data.message or "未知错误"), true) end
                 end
             else
