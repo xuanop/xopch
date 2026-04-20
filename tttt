@@ -144,9 +144,24 @@ local teleportGui = nil
 local broadcastWindowActive = false
 local broadcastGui = nil
 
--- ==================== GAS 广播系统（纯 GET 版） ====================
+-- ==================== GAS 广播系统（纯 GET 版，自包含 urlEncode） ====================
 local GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"  -- 替换为新 URL
 _G.lastBroadcast = _G.lastBroadcast or ""
+
+-- 内置 URL 编码函数
+local function urlEncode(s)
+    local result = ""
+    for i = 1, #s do
+        local c = s:sub(i, i)
+        local b = string.byte(c)
+        if (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or c == '-' or c == '_' or c == '.' or c == '~' then
+            result = result .. c
+        else
+            result = result .. string.format("%%%02X", b)
+        end
+    end
+    return result
+end
 
 -- 发送广播（GET 方式）
 local function sendBroadcast(message)
