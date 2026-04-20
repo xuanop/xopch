@@ -144,34 +144,36 @@ local teleportGui = nil
 local broadcastWindowActive = false
 local broadcastGui = nil
 
--- ==================== GAS 广播系统 ====================
+-- ==================== GAS 广播系统（纯 GET 版） ====================
 local GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"  -- 替换为新 URL
 _G.lastBroadcast = _G.lastBroadcast or ""
 
+-- 发送广播（GET 方式）
 local function sendBroadcast(message)
     if message == "" then
         showNotice("⚠️ 消息不能为空", true)
         return
     end
-    local body = {
-        msg = message,
-        sender = lp.Name
-    }
-    local success = pcall(function()
-        httpRequest("POST", GAS_BROADCAST_URL, body)
-    end)
-    if success then
-        showNotice("✅ 广播已发送", true)
-        if broadcastGui then
-            broadcastGui:Destroy()
-            broadcastWindowActive = false
-            broadcastGui = nil
+    local url = GAS_BROADCAST_URL .. "?action=sendBroadcast&msg=" .. urlEncode(message) .. "&sender=" .. urlEncode(lp.Name)
+    local res = httpRequest("GET", url, nil)
+    if res and res.Body then
+        local data = HttpService:JSONDecode(res.Body)
+        if data and data.result == "success" then
+            showNotice("✅ 广播已发送", true)
+            if broadcastGui then
+                broadcastGui:Destroy()
+                broadcastWindowActive = false
+                broadcastGui = nil
+            end
+        else
+            showNotice("❌ 广播发送失败: " .. (data.message or "未知错误"), true)
         end
     else
-        showNotice("❌ 广播发送失败", true)
+        showNotice("❌ 广播发送失败（网络错误）", true)
     end
 end
 
+-- 接收广播（GET 轮询）
 task.spawn(function()
     task.wait(2)
     local res = httpRequest("GET", GAS_BROADCAST_URL .. "?action=getBroadcast")
@@ -205,6 +207,7 @@ task.spawn(function()
         task.wait(3)
     end
 end)
+
 -- ==================== 发送广播窗口 ====================
 local function createBroadcastWindow()
     if broadcastWindowActive and broadcastGui and broadcastGui.Parent then
