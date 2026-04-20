@@ -144,7 +144,7 @@ local teleportGui = nil
 local broadcastWindowActive = false
 local broadcastGui = nil
 
--- ==================== GAS 广播系统（自包含 httpRequest） ====================
+-- ==================== GAS 广播系统（完全自包含，无需外部 httpRequest） ====================
 print("[广播] 开始初始化...")
 
 -- 依赖检查
@@ -153,21 +153,20 @@ if not HttpService then
     return
 end
 if not lp then
-    warn("[广播] ❌ lp (本地玩家) 未定义")
+    warn("[广播] ❌ lp 未定义")
     return
 end
 if not showNotice then
-    warn("[广播] ⚠️ showNotice 未定义，广播通知将无法显示")
+    warn("[广播] ⚠️ showNotice 未定义")
 end
 
--- 内置 httpRequest 函数（原 Firebase 广播系统中的通用请求函数）
-local function httpRequest(method, url, body)
+-- 内置 HTTP 请求函数（独立版）
+local function broadcastHttpRequest(method, url, body)
     local req = syn and syn.request or http_request or request or (http and http.request)
     if not req then
         warn("[广播] 找不到 HTTP 请求函数")
         return nil
     end
-
     local jsonBody = nil
     if body then
         local parts = {}
@@ -186,7 +185,6 @@ local function httpRequest(method, url, body)
         end
         jsonBody = "{" .. table.concat(parts, ",") .. "}"
     end
-
     local success, result = pcall(function()
         return req({
             Url = url,
@@ -204,7 +202,9 @@ local function httpRequest(method, url, body)
     end
 end
 
-local GAS_BROADCAST_URL = GAS_URL  -- 复用主脚本的 GAS_URL，或替换为独立广播 GAS 的 URL
+-- 复用玩家追踪的 GAS_URL（或可独立指定）
+local GAS_BROADCAST_URL = GAS_URL  -- 共用同一个 GAS
+-- 若要独立广播 GAS，取消下行注释并填写：
 -- GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"
 
 -- 内置 URL 编码
@@ -225,14 +225,14 @@ end
 _G.lastBroadcast = _G.lastBroadcast or ""
 
 -- 发送广播
-local function sendBroadcast(message)
+function sendBroadcast(message)
     if message == "" then
         if showNotice then showNotice("⚠️ 消息不能为空", true) end
         return
     end
     local url = GAS_BROADCAST_URL .. "?action=sendBroadcast&msg=" .. urlEncode(message) .. "&sender=" .. urlEncode(lp.Name)
-    print("[广播] 发送请求 URL:", url:sub(1, 100) .. "...")
-    local res = httpRequest("GET", url, nil)
+    print("[广播] 发送请求...")
+    local res = broadcastHttpRequest("GET", url, nil)
     if res and res.Body then
         local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
         if success and data and data.result == "success" then
@@ -253,7 +253,7 @@ end
 -- 接收广播轮询
 task.spawn(function()
     task.wait(2)
-    local res = httpRequest("GET", GAS_BROADCAST_URL .. "?action=getBroadcast")
+    local res = broadcastHttpRequest("GET", GAS_BROADCAST_URL .. "?action=getBroadcast")
     if res and res.Body then
         local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
         if success and data and data.msg then
@@ -264,7 +264,7 @@ task.spawn(function()
     task.wait(1)
     while true do
         local success, result = pcall(function()
-            local res = httpRequest("GET", GAS_BROADCAST_URL .. "?action=getBroadcast")
+            local res = broadcastHttpRequest("GET", GAS_BROADCAST_URL .. "?action=getBroadcast")
             if res and res.Body then
                 local data = HttpService:JSONDecode(res.Body)
                 if data and data.msg and data.msg ~= _G.lastBroadcast then
@@ -286,6 +286,7 @@ task.spawn(function()
 end)
 
 print("[广播] 初始化完成")
+
 
 -- ==================== 发送广播窗口 ====================
 local function createBroadcastWindow()
