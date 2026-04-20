@@ -1,6 +1,6 @@
 --[[
    🔑 Evade 玩家追蹤系統（精簡版 - 無公告/私信）
-   - 普通用戶：每60秒後台上報
+   - 普通用戶：每10秒後台上報
    - 開發者：按 Tab 打開管理面板（雙擊傳送 / 單擊複製ID）
 --]]
 
@@ -8,7 +8,7 @@
 local DEVELOPERS = {
     ["xuan_1529"] = true,
     ["0xzzyi"] = true,
-    ["E5alR9"] = true,
+    ["E5alR9"] = true
 }
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
 local REPORT_INTERVAL = 10
@@ -111,12 +111,14 @@ local function reportStatus()
         status = status,
         jobId = game.JobId,
         joinTime = SCRIPT_START,
+        lastUpdate = os.time(),   -- ✅ 新增：最後活動時間
         sheetIndex = lp.UserId % 10
     }
 
     local json = buildJson(data)
     local url = GAS_URL .. "?data=" .. urlEncode(json)
-    httpGet(url)  -- 忽略結果
+    httpGet(url)
+    print("📤 上報狀態：", status, "｜ 時間：", os.time())
 end
 
 task.spawn(function()
@@ -129,11 +131,11 @@ end)
 
 -- 角色生成時立即上報 ALIVE
 lp.CharacterAdded:Connect(function(character)
-    task.wait(0.5)  -- 等待 Humanoid 載入
+    task.wait(0.5)
     reportStatus()
 end)
 
--- 角色死亡時立即上報 DEAD（透過 Humanoid.Died 事件）
+-- 角色死亡時立即上報 DEAD
 lp.CharacterAdded:Connect(function(character)
     local humanoid = character:WaitForChild("Humanoid")
     humanoid.Died:Connect(function()
@@ -147,13 +149,11 @@ local function safeTeleport(targetUserId, targetJobId)
     print("[傳送] 目標 JobId:", targetJobId)
     print("[傳送] 當前 JobId:", game.JobId)
 
-    -- 檢查目標 JobId 是否有效
     if not targetJobId or targetJobId == "" then
         showNotice("❌ 目標伺服器資訊無效")
         return false
     end
 
-    -- 檢查是否已在同一伺服器
     if targetJobId == game.JobId then
         showNotice("⚠️ 您已在該伺服器中")
         return false
@@ -161,7 +161,6 @@ local function safeTeleport(targetUserId, targetJobId)
 
     showNotice("🚀 正在傳送到玩家所在伺服器...")
     
-    -- 直接使用儲存的 JobId 進行精準傳送
     local success, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, lp)
     end)
@@ -170,7 +169,6 @@ local function safeTeleport(targetUserId, targetJobId)
         return true
     end
 
-    -- 若精準傳送失敗（例如伺服器已滿），提示並複製 ID
     warn("[傳送] 傳送失敗:", err)
     showNotice("❌ 傳送失敗，玩家可能已離線或伺服器已滿")
     
@@ -183,9 +181,8 @@ local function safeTeleport(targetUserId, targetJobId)
 end
 
 -- ==================== 管理面板 UI ====================
-if not isDeveloper then return end  -- 普通用戶到此結束
+if not isDeveloper then return end
 
--- 獲取隱蔽容器
 local container = nil
 if syn and syn.protect_gui then
     container = game:GetService("CoreGui")
@@ -283,7 +280,7 @@ local function renderPlayerList()
             local isSelf = (userId == lp.UserId)
             local lastUpdate = tonumber(info.lastUpdate) or now
             local diff = now - lastUpdate
-            local isOnline = (diff <= 180)
+            local isOnline = (diff <= 300)   -- ✅ 放寬至 5 分鐘（原 180 秒）
 
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
@@ -351,7 +348,7 @@ end
 task.spawn(function()
     updateCache()
     while true do
-        task.wait(10)   -- 每 10 秒更新快取
+        task.wait(10)
         updateCache()
         if screenGui.Enabled then renderPlayerList() end
     end
@@ -363,9 +360,9 @@ local function startUIRefresh()
     if uiRefreshLoop then return end
     uiRefreshLoop = task.spawn(function()
         while screenGui and screenGui.Enabled do
-            updateCache()      -- 每次循環都重新拉取 GAS
+            updateCache()
             renderPlayerList()
-            task.wait(1)       -- 每 3 秒刷新畫面
+            task.wait(1)   -- 每 1 秒刷新畫面
         end
         uiRefreshLoop = nil
     end)
