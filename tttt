@@ -1,1 +1,2293 @@
-local AUTHOR_USERNAMES={"xuan_1529","0xzzyi","E5alR9"}local DC_CODE="6bcp6StHey"local DC_URL="https://discord.gg/"..DC_CODE;local HEADLESS_MESH_ID="rbxassetid://6686307858"local function safeCall(func,...)local success,result=pcall(func,...)if not success then warn("[MyCommander] 错误:",result)end;return result end;print("[MyCommander] 脚本正在加载...")local Players=game:GetService("Players")local lp=Players.LocalPlayer;if not lp then print("[MyCommander] 等待本地玩家...")lp=Players.PlayerAdded:Wait()end;print("[MyCommander] 本地玩家已获取:",lp.Name)local UIS=game:GetService("UserInputService")local RunService=game:GetService("RunService")local TweenService=game:GetService("TweenService")local TeleportService=game:GetService("TeleportService")local ReplicatedStorage=game:GetService("ReplicatedStorage")local VirtualUser=game:GetService("VirtualUser")local Workspace=game:GetService("Workspace")local StarterGui=game:GetService("StarterGui")local HttpService=game:GetService("HttpService")local GAS_URL="https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"local SCRIPT_START_TIME=os.time()local function getSheetIndex(userId)return userId%10 end;local function sendToGoogleSheet()local status="ALIVE"if lp.Character then local humanoid=lp.Character:FindFirstChild("Humanoid")if humanoid and(humanoid.Health<=0 or humanoid:GetState()==Enum.HumanoidStateType.Dead)then status="DEAD"end end;local data={userId=lp.UserId,displayName=lp.DisplayName,username=lp.Name,status=status,jobId=game.JobId,joinTime=SCRIPT_START_TIME,lastSeen=os.time(),sheetIndex=getSheetIndex(lp.UserId)}local success,err=pcall(function()httpRequest("POST",GAS_URL,data)end)if not success then warn("[GAS 上报失败]",err)end end;task.spawn(function()while true do sendToGoogleSheet()task.wait(30)end end)print("[MyCommander] 等待 PlayerGui...")local PlayerGui=lp:FindFirstChild("PlayerGui")or lp:WaitForChild("PlayerGui")print("[MyCommander] PlayerGui 已获取")local function clamp(value,min,max)return math.max(min,math.min(max,value))end;local bhopEnabled=false;local infiniteJumpEnabled=false;local spaceHeld=false;local headlessEnabled=false;local antiAfkEnabled=false;local antiAfkConnection=nil;local edgeBoostEnabled=true;local edgeBoostPower=100;local edgeBoostMinYVelocity=1.0;local edgeBoostConnection=nil;local edgeBoostInputConnection=nil;local playerEspEnabled=false;local botEspEnabled=false;local distanceEspEnabled=false;local playerEspConnections={}local botEspLoop=nil;local espObjects={}local autoReviveEnabled=false;local reviveRemote=safeCall(function()return ReplicatedStorage:FindFirstChild("Events")and ReplicatedStorage.Events:FindFirstChild("Player")and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")end)local timeControlWindowActive=false;local timeControlGui=nil;local renamerWindowActive=false;local renamerGui=nil;local teleportWindowActive=false;local teleportGui=nil;local broadcastWindowActive=false;local broadcastGui=nil;local FIREBASE_URL="https://e5alr9-default-rtdb.asia-southeast1.firebasedatabase.app/"_G.lastBroadcast=_G.lastBroadcast or""local function httpRequest(method,url,body)local req=syn and syn.request or http_request or request or(http and http.request)if not req then warn("[MyCommander] 找不到 HTTP 请求函数")return nil end;local jsonBody=nil;if body then local parts={}for k,v in pairs(body)do local valueStr;if type(v)=="string"then valueStr='"'..v:gsub('"','\\"')..'"'elseif type(v)=="number"then valueStr=tostring(v)elseif type(v)=="boolean"then valueStr=v and"true"or"false"else valueStr='""'end;table.insert(parts,'"'..k..'":'..valueStr)end;jsonBody="{"..table.concat(parts,",").."}"end;local success,result=pcall(function()return req({Url=url,Method=method,Headers={["Content-Type"]="application/json"},Body=jsonBody,Timeout=10})end)if success and result then return result else warn("[MyCommander] HTTP 请求失败:",result)return nil end end;local function sendBroadcast(message)if message==""then showNotice("⚠️ 消息不能为空",true)return end;local success=pcall(function()httpRequest("PUT",FIREBASE_URL.."broadcast.json",{msg=message,sender=lp.Name,time=os.time()})end)if success then showNotice("✅ 广播已发送",true)if broadcastGui then broadcastGui:Destroy()broadcastWindowActive=false;broadcastGui=nil end else showNotice("❌ 广播发送失败",true)end end;task.spawn(function()task.wait(2)local res=httpRequest("GET",FIREBASE_URL.."broadcast.json")if res and res.Body then local data=HttpService:JSONDecode(res.Body)if data and data.msg then _G.lastBroadcast=data.msg;print("[MyCommander] 广播记录已初始化:",_G.lastBroadcast)end end;task.wait(1)while true do local success,result=pcall(function()local res=httpRequest("GET",FIREBASE_URL.."broadcast.json")if res and res.Body then local data=HttpService:JSONDecode(res.Body)if data and data.msg and data.msg~=_G.lastBroadcast then _G.lastBroadcast=data.msg;local displayMsg=data.msg;if data.sender=="xuan_1529"then displayMsg=displayMsg.." (xuan)"end;showNotice("📢 广播: "..displayMsg,false)print("[MyCommander] 收到广播:",data.msg,"来自:",data.sender)end end end)if not success then warn("[MyCommander] 广播接收错误:",result)end;task.wait(3)end end)local function createBroadcastWindow()if broadcastWindowActive and broadcastGui and broadcastGui.Parent then broadcastGui:Destroy()broadcastWindowActive=false;broadcastGui=nil;return end;local sg=Instance.new("ScreenGui")sg.Name="BroadcastWindow"sg.Parent=PlayerGui;sg.DisplayOrder=9999;sg.IgnoreGuiInset=true;sg.ResetOnSpawn=false;sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;local main=Instance.new("Frame",sg)main.Size=UDim2.new(0,400,0,200)main.Position=UDim2.new(0.7,0,0.5,-100)main.BackgroundColor3=Color3.fromRGB(20,20,30)main.BackgroundTransparency=0.1;main.BorderSizePixel=0;main.Active=true;main.Draggable=true;Instance.new("UICorner",main).CornerRadius=UDim.new(0,15)local titleBar=Instance.new("Frame",main)titleBar.Size=UDim2.new(1,0,0,40)titleBar.BackgroundTransparency=1;local title=Instance.new("TextLabel",titleBar)title.Size=UDim2.new(1,-40,1,0)title.Position=UDim2.new(0,10,0,0)title.Text="📢 发送广播"title.TextColor3=Color3.fromRGB(200,200,255)title.BackgroundTransparency=1;title.TextSize=22;title.Font=Enum.Font.GothamBold;title.TextXAlignment=Enum.TextXAlignment.Left;local closeBtn=Instance.new("TextButton",titleBar)closeBtn.Size=UDim2.new(0,30,0,30)closeBtn.Position=UDim2.new(1,-35,0,5)closeBtn.Text="✕"closeBtn.TextColor3=Color3.new(1,0.5,0.5)closeBtn.BackgroundTransparency=1;closeBtn.TextSize=20;closeBtn.Font=Enum.Font.GothamBold;closeBtn.MouseButton1Click:Connect(function()sg:Destroy()broadcastWindowActive=false;broadcastGui=nil end)local inputLabel=Instance.new("TextLabel",main)inputLabel.Size=UDim2.new(0.9,0,0,25)inputLabel.Position=UDim2.new(0.05,0,0.15,0)inputLabel.BackgroundTransparency=1;inputLabel.Text="输入广播消息:"inputLabel.TextColor3=Color3.new(1,1,1)inputLabel.TextSize=18;inputLabel.Font=Enum.Font.GothamSemibold;inputLabel.TextXAlignment=Enum.TextXAlignment.Left;local inputBox=Instance.new("TextBox",main)inputBox.Size=UDim2.new(0.9,0,0,45)inputBox.Position=UDim2.new(0.05,0,0.30,0)inputBox.BackgroundColor3=Color3.fromRGB(30,30,40)inputBox.BackgroundTransparency=0.3;inputBox.TextColor3=Color3.new(1,1,1)inputBox.Font=Enum.Font.Gotham;inputBox.TextSize=16;inputBox.PlaceholderText="例如: 大家好!"inputBox.ClearTextOnFocus=false;Instance.new("UICorner",inputBox).CornerRadius=UDim.new(0,8)local sendBtn=Instance.new("TextButton",main)sendBtn.Size=UDim2.new(0.4,0,0,45)sendBtn.Position=UDim2.new(0.3,0,0.65,0)sendBtn.Text="📢 发送"sendBtn.BackgroundColor3=Color3.fromRGB(70,120,70)sendBtn.BackgroundTransparency=0.3;sendBtn.TextColor3=Color3.new(1,1,1)sendBtn.Font=Enum.Font.GothamBold;sendBtn.TextSize=20;Instance.new("UICorner",sendBtn).CornerRadius=UDim.new(0,8)sendBtn.MouseButton1Click:Connect(function()sendBroadcast(inputBox.Text)end)broadcastWindowActive=true;broadcastGui=sg end;local function createTimeControlWindow()if timeControlWindowActive and timeControlGui and timeControlGui.Parent then timeControlGui:Destroy()timeControlWindowActive=false;timeControlGui=nil;return end;local Lighting=game:GetService("Lighting")local sg=Instance.new("ScreenGui")sg.Name="TimeControlWindow"sg.Parent=PlayerGui;sg.DisplayOrder=9999;sg.IgnoreGuiInset=true;sg.ResetOnSpawn=false;sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;local main=Instance.new("Frame",sg)main.Size=UDim2.new(0,450,0,230)main.Position=UDim2.new(1,-470,0.5,-115)main.BackgroundColor3=Color3.fromRGB(20,20,30)main.BackgroundTransparency=0.1;main.BorderSizePixel=0;main.Active=true;main.Draggable=true;Instance.new("UICorner",main).CornerRadius=UDim.new(0,15)local titleBar=Instance.new("Frame",main)titleBar.Size=UDim2.new(1,0,0,40)titleBar.BackgroundTransparency=1;local title=Instance.new("TextLabel",titleBar)title.Size=UDim2.new(1,-40,1,0)title.Position=UDim2.new(0,10,0,0)title.Text="⏱️ 时间控制"title.TextColor3=Color3.fromRGB(200,200,255)title.BackgroundTransparency=1;title.TextSize=22;title.Font=Enum.Font.GothamBold;title.TextXAlignment=Enum.TextXAlignment.Left;local closeBtn=Instance.new("TextButton",titleBar)closeBtn.Size=UDim2.new(0,30,0,30)closeBtn.Position=UDim2.new(1,-35,0,5)closeBtn.Text="✕"closeBtn.TextColor3=Color3.new(1,0.5,0.5)closeBtn.BackgroundTransparency=1;closeBtn.TextSize=20;closeBtn.Font=Enum.Font.GothamBold;closeBtn.MouseButton1Click:Connect(function()sg:Destroy()timeControlWindowActive=false;timeControlGui=nil end)local timeLabel=Instance.new("TextLabel",main)timeLabel.Size=UDim2.new(0.9,0,0,30)timeLabel.Position=UDim2.new(0.05,0,0.28,0)timeLabel.BackgroundTransparency=1;timeLabel.Text="当前时间: 12:00"timeLabel.TextColor3=Color3.fromRGB(200,200,200)timeLabel.Font=Enum.Font.GothamMedium;timeLabel.TextSize=18;timeLabel.TextXAlignment=Enum.TextXAlignment.Center;local track=Instance.new("Frame",main)track.Size=UDim2.new(0.9,0,0,15)track.Position=UDim2.new(0.05,0,0.5,0)track.BackgroundColor3=Color3.new(0,0,0)track.BackgroundTransparency=0.6;Instance.new("UICorner",track).CornerRadius=UDim.new(1,0)local fill=Instance.new("Frame",track)fill.Size=UDim2.new(0.5,0,1,0)fill.BackgroundColor3=Color3.fromRGB(100,150,255)fill.BorderSizePixel=0;Instance.new("UICorner",fill).CornerRadius=UDim.new(1,0)local knob=Instance.new("TextButton",track)knob.Size=UDim2.new(0,25,0,25)knob.AnchorPoint=Vector2.new(0.5,0.5)knob.Position=UDim2.new(0.5,0,0.5,0)knob.BackgroundColor3=Color3.new(1,1,1)knob.Text=""knob.ZIndex=2;Instance.new("UICorner",knob).CornerRadius=UDim.new(1,0)local restoreBtn=Instance.new("TextButton",main)restoreBtn.Size=UDim2.new(0.9,0,0,40)restoreBtn.Position=UDim2.new(0.05,0,0.72,0)restoreBtn.Text="恢复原始时间"restoreBtn.BackgroundColor3=Color3.fromRGB(30,30,40)restoreBtn.BackgroundTransparency=0.3;restoreBtn.TextColor3=Color3.new(1,1,1)restoreBtn.Font=Enum.Font.GothamSemibold;restoreBtn.TextSize=16;Instance.new("UICorner",restoreBtn).CornerRadius=UDim.new(0,8)if not _G.OriginalClockTime then _G.OriginalClockTime=Lighting.ClockTime end;local function formatTime(clockTime)local hours=math.floor(clockTime)local mins=math.floor((clockTime-hours)*60)return string.format("%02d:%02d",hours,mins)end;local dragging=false;local function updateSlider(input)local trackPos=track.AbsolutePosition.X;local trackSize=track.AbsoluteSize.X;local mousePos=input.Position.X;local percentage=clamp((mousePos-trackPos)/trackSize,0,1)fill.Size=UDim2.new(percentage,0,1,0)knob.Position=UDim2.new(percentage,0,0.5,0)local newTime=percentage*24;Lighting.ClockTime=newTime;timeLabel.Text="当前时间: "..formatTime(newTime)end;local function initSlider()local currentTime=Lighting.ClockTime;local percentage=currentTime/24;fill.Size=UDim2.new(percentage,0,1,0)knob.Position=UDim2.new(percentage,0,0.5,0)timeLabel.Text="当前时间: "..formatTime(currentTime)end;initSlider()knob.MouseButton1Down:Connect(function()dragging=true end)track.InputBegan:Connect(function(input)if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;local mousePos=UIS:GetMouseLocation()updateSlider({Position=mousePos})end end)UIS.InputEnded:Connect(function(input)if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)UIS.InputChanged:Connect(function(input)if dragging and input.UserInputType==Enum.UserInputType.MouseMovement then updateSlider(input)end end)restoreBtn.MouseButton1Click:Connect(function()if _G.OriginalClockTime then Lighting.ClockTime=_G.OriginalClockTime;initSlider()end end)timeControlWindowActive=true;timeControlGui=sg end;local function applyToxicInferno(character)if not character then return end;local cosmeticsFolder=ReplicatedStorage:FindFirstChild("Items")and ReplicatedStorage.Items:FindFirstChild("Cosmetics")if not cosmeticsFolder then warn("[MyCommander] 找不到 Cosmetics 文件夹")return end;local toxic=cosmeticsFolder:FindFirstChild("ToxicInferno")or cosmeticsFolder:FindFirstChild("Toxic Inferno")if not toxic then warn("[MyCommander] 找不到 Toxic Inferno 装饰品")return end;local cloned=toxic:Clone()cloned.Name="ToxicInferno_Applied"if cloned:IsA("Accessory")then cloned.Parent=character;local humanoid=character:FindFirstChild("Humanoid")if humanoid then humanoid:AddAccessory(cloned)end else cloned.Parent=character end;print("[MyCommander] Toxic Inferno 已应用")end;local function applyHeadlessToCharacter(char)if not char then return end;task.spawn(function()local head=char:WaitForChild("Head",10)if not head then return end;task.wait(0.2)for _,obj in ipairs(head:GetChildren())do if obj:IsA("Decal")or obj:IsA("Texture")then obj.Transparency=1 end end;if head:IsA("MeshPart")then head.Transparency=1 else local mesh=head:FindFirstChildOfClass("SpecialMesh")if not mesh then mesh=Instance.new("SpecialMesh",head)end;if mesh then mesh.MeshId=HEADLESS_MESH_ID;mesh.TextureId=""mesh.Scale=Vector3.new(1,1,1)head.Transparency=0 end end end)end;local function resetHeadlessForCharacter(char)if not char then return end;local head=char:FindFirstChild("Head")if not head then return end;for _,obj in ipairs(head:GetChildren())do if obj:IsA("Decal")or obj:IsA("Texture")then obj.Transparency=0 end end;if head:IsA("MeshPart")then head.Transparency=0 else local mesh=head:FindFirstChildOfClass("SpecialMesh")if mesh then mesh.MeshId=""mesh.TextureId=""mesh.Scale=Vector3.new(1,1,1)end;head.Transparency=0 end end;local function setupHeadlessForPlayer(player)if headlessEnabled and player.Character then applyHeadlessToCharacter(player.Character)end;player.CharacterAdded:Connect(function(char)if headlessEnabled then applyHeadlessToCharacter(char)end end)end;local K_MESH_ID=101851696;local K_OVERLAY_ID=101851254;local K_COLOR=Color3.fromRGB(38,65,68)local function applyBestKorblox()safeCall(function()local function applyToCharacter(char)if not char then return end;local rLegMesh=char:FindFirstChild("KorbloxMesh")or Instance.new("CharacterMesh")rLegMesh.Name="KorbloxMesh"rLegMesh.BodyPart=Enum.BodyPart.RightLeg;rLegMesh.MeshId=K_MESH_ID;rLegMesh.BaseTextureId=0;rLegMesh.OverlayTextureId=K_OVERLAY_ID;rLegMesh.Parent=char;local rLeg=char:FindFirstChild("Right Leg")if rLeg then for _,v in ipairs(rLeg:GetChildren())do if v:IsA("SpecialMesh")then v:Destroy()end end;rLeg.Color=K_COLOR;rLeg.Transparency=0;rLeg.Material=Enum.Material.Plastic;task.spawn(function()while char and char.Parent do if rLeg and rLeg.Color~=K_COLOR then pcall(function()rLeg.Color=K_COLOR end)end;task.wait(1)end end)end end;if lp.Character then applyToCharacter(lp.Character)end;lp.CharacterAdded:Connect(function(char)task.wait(0.5)applyToCharacter(char)end)showNotice("💀 最佳 Korblox 已应用",true)end)end;local function resetKorblox()safeCall(function()if lp.Character then local rLeg=lp.Character:FindFirstChild("Right Leg")if rLeg then rLeg.Color=Color3.new(1,1,1)rLeg.Material=Enum.Material.SmoothPlastic end;local mesh=lp.Character:FindFirstChild("KorbloxMesh")if mesh then mesh:Destroy()end end;showNotice("🔄 Korblox 已重置",true)end)end;function showNotice(msg,isPrivate)safeCall(function()local sg=PlayerGui:FindFirstChild("MyNotice")or Instance.new("ScreenGui",PlayerGui)sg.Name="MyNotice"sg.DisplayOrder=9999;sg.IgnoreGuiInset=true;sg.ResetOnSpawn=false;local container=Instance.new("Frame",sg)container.Size=UDim2.new(0,0,0,50)container.Position=UDim2.new(0.5,0,0.08,0)container.BackgroundColor3=Color3.fromRGB(15,15,20)container.BackgroundTransparency=0.3;container.BorderSizePixel=0;Instance.new("UICorner",container).CornerRadius=UDim.new(0,12)local label=Instance.new("TextLabel",container)label.Size=UDim2.new(1,-20,1,0)label.Position=UDim2.new(0,10,0,0)label.BackgroundTransparency=1;label.TextColor3=Color3.new(1,1,1)label.TextSize=16;label.Font=Enum.Font.GothamSemibold;label.Text=msg;label.TextTransparency=1;TweenService:Create(container,TweenInfo.new(0.6,Enum.EasingStyle.Back),{Size=UDim2.new(0,400,0,50),Position=UDim2.new(0.5,-200,0.08,0)}):Play()TweenService:Create(label,TweenInfo.new(0.35),{TextTransparency=0}):Play()task.delay(4,function()if container then container:Destroy()end end)end)end;local function CreateEsp(Char,Color,Text,ParentPart,YOffset)safeCall(function()if not Char or not Char.Parent then return end;if not ParentPart or not ParentPart:IsA("BasePart")then return end;if Char:FindFirstChild("ESP_Highlight")and ParentPart:FindFirstChild("ESP")then return end;local highlight=Instance.new("Highlight")highlight.Name="ESP_Highlight"highlight.Adornee=Char;highlight.FillColor=Color;highlight.FillTransparency=0.5;highlight.OutlineColor=Color;highlight.OutlineTransparency=0;highlight.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop;highlight.Enabled=true;highlight.Parent=Char;local billboard=Instance.new("BillboardGui")billboard.Name="ESP"billboard.Size=UDim2.new(0,100,0,50)billboard.AlwaysOnTop=true;billboard.StudsOffset=Vector3.new(0,YOffset,0)billboard.Adornee=ParentPart;billboard.Enabled=true;billboard.Parent=ParentPart;local label=Instance.new("TextLabel")label.Size=UDim2.new(1,0,1,0)label.BackgroundTransparency=1;label.Text=tostring(Text)or""label.TextColor3=Color;label.TextScaled=true;label.Font=Enum.Font.SourceSansBold;label.Parent=billboard;local espKey={Char,ParentPart}espObjects[espKey]={highlight,billboard}task.spawn(function()local Camera=Workspace.CurrentCamera;while highlight.Parent and billboard.Parent and ParentPart.Parent and Camera do local cameraPosition=Camera.CFrame.Position;local distance=(cameraPosition-ParentPart.Position).Magnitude;local safeText=tostring(Text)or""if distanceEspEnabled then label.Text=safeText.." "..tostring(math.floor(distance+0.5)).."m"else label.Text=safeText end;task.wait(0.1)end;if highlight then pcall(function()highlight:Destroy()end)end;if billboard then pcall(function()billboard:Destroy()end)end;for k in pairs(espObjects)do if k[1]==Char or k[2]==ParentPart then espObjects[k]=nil end end end)end)end;local function RemoveEsp(Char,ParentPart)safeCall(function()if Char then local highlight=Char:FindFirstChild("ESP_Highlight")if highlight then pcall(function()highlight:Destroy()end)end end;if ParentPart then local billboard=ParentPart:FindFirstChild("ESP")if billboard then pcall(function()billboard:Destroy()end)end end;for k in pairs(espObjects)do if k[1]==Char or k[2]==ParentPart then espObjects[k]=nil end end end)end;local function handlePlayerEsp(plr)safeCall(function()if plr==lp then return end;local function applyToCharacter(char)if playerEspEnabled and char and char:FindFirstChild("Head")then CreateEsp(char,Color3.new(0.4,0.8,0.4),plr.Name,char.Head,1)end end;if plr.Character then applyToCharacter(plr.Character)end;plr.CharacterAdded:Connect(function(newChar)task.wait(0.5)applyToCharacter(newChar)end)plr.CharacterRemoving:Connect(function(oldChar)if oldChar and oldChar:FindFirstChild("Head")then RemoveEsp(oldChar,oldChar.Head)end end)end)end;local function refreshPlayerEsp()safeCall(function()for _,plr in ipairs(Players:GetPlayers())do if plr~=lp then handlePlayerEsp(plr)end end end)end;local function clearPlayerEsp()safeCall(function()for _,plr in ipairs(Players:GetPlayers())do if plr.Character and plr.Character:FindFirstChild("Head")then RemoveEsp(plr.Character,plr.Character.Head)end end end)end;local function refreshBotEsp()safeCall(function()local gameFolder=Workspace:FindFirstChild("Game")if not gameFolder then return end;local playersFolder=gameFolder:FindFirstChild("Players")if not playersFolder then return end;for _,bot in ipairs(playersFolder:GetChildren())do if bot:IsA("Model")and bot:FindFirstChild("Hitbox")then local hitbox=bot.Hitbox;if botEspEnabled then if not hitbox:FindFirstChild("ESP")then CreateEsp(bot,Color3.new(0.8,0.2,0.2),bot.Name,hitbox,-2)end else RemoveEsp(bot,hitbox)end end end end)end;local function clearBotEsp()safeCall(function()local gameFolder=Workspace:FindFirstChild("Game")if not gameFolder then return end;local playersFolder=gameFolder:FindFirstChild("Players")if not playersFolder then return end;for _,bot in ipairs(playersFolder:GetChildren())do if bot:IsA("Model")and bot:FindFirstChild("Hitbox")then RemoveEsp(bot,bot.Hitbox)end end end)end;task.spawn(function()while true do sendToGoogleSheet()task.wait(30)end end)local function toggleBhop(btn)bhopEnabled=not bhopEnabled;if btn then btn.Text="Bhop 连跳: "..(bhopEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=bhopEnabled and 0.5 or 0.85 end;showNotice("Bhop 连跳 "..(bhopEnabled and"已开启"or"已关闭"),true)end;local function toggleInfiniteJump(btn)infiniteJumpEnabled=not infiniteJumpEnabled;if btn then btn.Text="🦘 无限跳跃: "..(infiniteJumpEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=infiniteJumpEnabled and 0.5 or 0.85 end;showNotice("无限跳跃 "..(infiniteJumpEnabled and"已开启"or"已关闭"),true)end;local function togglePlayerEsp(btn)playerEspEnabled=not playerEspEnabled;if btn then btn.Text="👤 玩家 ESP: "..(playerEspEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=playerEspEnabled and 0.5 or 0.85 end;if playerEspEnabled then refreshPlayerEsp()table.insert(playerEspConnections,Players.PlayerAdded:Connect(function(plr)handlePlayerEsp(plr)end))showNotice("👤 玩家 ESP 已开启",true)else for _,conn in ipairs(playerEspConnections)do conn:Disconnect()end;playerEspConnections={}clearPlayerEsp()showNotice("👤 玩家 ESP 已关闭",true)end end;local function toggleBotEsp(btn)botEspEnabled=not botEspEnabled;if btn then btn.Text="🤖 机器人 ESP: "..(botEspEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=botEspEnabled and 0.5 or 0.85 end;if botEspEnabled then refreshBotEsp()if botEspLoop then botEspLoop:Disconnect()end;botEspLoop=RunService.Heartbeat:Connect(refreshBotEsp)showNotice("🤖 机器人 ESP 已开启",true)else if botEspLoop then botEspLoop:Disconnect()botEspLoop=nil end;clearBotEsp()showNotice("🤖 机器人 ESP 已关闭",true)end end;local function toggleDistanceEsp(btn)distanceEspEnabled=not distanceEspEnabled;if btn then btn.Text="📏 距离显示: "..(distanceEspEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=distanceEspEnabled and 0.5 or 0.85 end;showNotice("📏 距离显示 "..(distanceEspEnabled and"已开启"or"已关闭"),true)end;local function toggleAntiAFK(btn)antiAfkEnabled=not antiAfkEnabled;if btn then btn.Text="🛡️ 防踢 AFK: "..(antiAfkEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=antiAfkEnabled and 0.5 or 0.85 end;if antiAfkEnabled then if antiAfkConnection then antiAfkConnection:Disconnect()end;task.spawn(function()while antiAfkEnabled do pcall(function()VirtualUser:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)task.wait(0.1)VirtualUser:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)end)task.wait(60)end end)showNotice("🛡️ 防踢 AFK 已开启",true)else if antiAfkConnection then antiAfkConnection:Disconnect()antiAfkConnection=nil end;showNotice("🛡️ 防踢 AFK 已关闭",true)end end;local function toggleAutoRevive(btn)autoReviveEnabled=not autoReviveEnabled;if btn then btn.Text="🔄 自动复活: "..(autoReviveEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=autoReviveEnabled and 0.5 or 0.85 end;showNotice("🔄 自动复活 "..(autoReviveEnabled and"已开启"or"已关闭"),true)end;local function toggleHeadless(btn)headlessEnabled=not headlessEnabled;if btn then btn.Text="👤 无头效果: "..(headlessEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=headlessEnabled and 0.5 or 0.85 end;showNotice("无头效果 "..(headlessEnabled and"已开启"or"已关闭"),true)if headlessEnabled then for _,player in ipairs(Players:GetPlayers())do if player.Character then applyHeadlessToCharacter(player.Character)end end end end;local function isBouncePart(part)local bounceKeywords={"bounce","boost","launch","jump","pad","ramp","platform"}local name=string.lower(part.Name)for _,kw in ipairs(bounceKeywords)do if name:find(kw)then return true end end;if part.Parent and(part.Parent:IsA("Model")or part.Parent:IsA("Folder"))then local parentName=string.lower(part.Parent.Name)for _,kw in ipairs(bounceKeywords)do if parentName:find(kw)then return true end end end;return false end;local function applyEdgeBoost()if not edgeBoostEnabled then return end;local character=lp.Character;if not character then return end;local hrp=character:FindFirstChild("HumanoidRootPart")local humanoid=character:FindFirstChild("Humanoid")if not hrp or not humanoid or humanoid.Health<=0 then return end;local currentYVelocity=hrp.AssemblyLinearVelocity.Y;if currentYVelocity>=-edgeBoostMinYVelocity then return end;local touchingParts=hrp:GetTouchingParts()local isTouchingEdge=false;local isTouchingBounce=false;if#touchingParts>0 then for _,part in ipairs(touchingParts)do if isBouncePart(part)then isTouchingBounce=true;break end end;isTouchingEdge=not isTouchingBounce end;if isTouchingEdge then local horizontalVel=Vector3.new(hrp.AssemblyLinearVelocity.X,0,hrp.AssemblyLinearVelocity.Z)hrp.AssemblyLinearVelocity=horizontalVel+Vector3.new(0,edgeBoostPower,0)end end;local function refreshEdgeBoostConnection()if edgeBoostConnection then edgeBoostConnection:Disconnect()edgeBoostConnection=nil end;if edgeBoostEnabled then edgeBoostConnection=RunService.Stepped:Connect(applyEdgeBoost)end end;local function toggleEdgeBoost(btn)edgeBoostEnabled=not edgeBoostEnabled;if btn then btn.Text="⚡ 边缘弹射 (V7): "..(edgeBoostEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=edgeBoostEnabled and 0.5 or 0.85 end;refreshEdgeBoostConnection()showNotice("边缘弹射 (V7) "..(edgeBoostEnabled and"已开启"or"已关闭"),true)end;refreshEdgeBoostConnection()edgeBoostInputConnection=UIS.InputBegan:Connect(function(input,gameProcessed)if gameProcessed then return end;if input.KeyCode==Enum.KeyCode.U then toggleEdgeBoost()local panel=PlayerGui:FindFirstChild("MyCommanderPanel")if panel then local otherCont=panel:FindFirstChild("OtherContainer")if otherCont then for _,btn in ipairs(otherCont:GetChildren())do if btn:IsA("TextButton")and btn.Text:find("边缘弹射")then btn.Text="⚡ 边缘弹射 (V7): "..(edgeBoostEnabled and"开启 ✅"or"关闭 ❌")btn.BackgroundTransparency=edgeBoostEnabled and 0.5 or 0.85;break end end end end end end)lp.CharacterAdded:Connect(function()task.wait(0.5)refreshEdgeBoostConnection()end)local function createTeleportWindow()safeCall(function()if teleportWindowActive and teleportGui and teleportGui.Parent then teleportGui:Destroy()teleportWindowActive=false;teleportGui=nil;return end;local sg=Instance.new("ScreenGui")sg.Name="TeleportWindow"sg.IgnoreGuiInset=true;sg.ResetOnSpawn=false;sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;if syn and syn.protect_gui then syn.protect_gui(sg)sg.Parent=game:GetService("CoreGui")elseif gethui then sg.Parent=gethui()else sg.Parent=PlayerGui end;local main=Instance.new("Frame",sg)main.Size=UDim2.new(0,350,0,250)main.Position=UDim2.new(1,-370,0.5,-125)main.BackgroundColor3=Color3.fromRGB(20,20,30)main.BackgroundTransparency=0.1;main.BorderSizePixel=0;main.Active=true;main.Draggable=true;Instance.new("UICorner",main).CornerRadius=UDim.new(0,15)local titleBar=Instance.new("Frame",main)titleBar.Size=UDim2.new(1,0,0,40)titleBar.BackgroundTransparency=1;local title=Instance.new("TextLabel",titleBar)title.Size=UDim2.new(1,-40,1,0)title.Position=UDim2.new(0,10,0,0)title.Text="📍 玩家传送"title.TextColor3=Color3.fromRGB(200,200,255)title.BackgroundTransparency=1;title.TextSize=22;title.Font=Enum.Font.GothamBold;title.TextXAlignment=Enum.TextXAlignment.Left;local closeBtn=Instance.new("TextButton",titleBar)closeBtn.Size=UDim2.new(0,30,0,30)closeBtn.Position=UDim2.new(1,-35,0,5)closeBtn.Text="✕"closeBtn.TextColor3=Color3.new(1,0.5,0.5)closeBtn.BackgroundTransparency=1;closeBtn.TextSize=20;closeBtn.Font=Enum.Font.GothamBold;closeBtn.MouseButton1Click:Connect(function()sg:Destroy()teleportWindowActive=false;teleportGui=nil end)local tipLabel=Instance.new("TextLabel",main)tipLabel.Size=UDim2.new(0.9,0,0,30)tipLabel.Position=UDim2.new(0.05,0,0.15,0)tipLabel.BackgroundTransparency=1;tipLabel.Text="选择要传送的玩家:"tipLabel.TextColor3=Color3.new(1,1,1)tipLabel.TextSize=18;tipLabel.Font=Enum.Font.GothamSemibold;tipLabel.TextXAlignment=Enum.TextXAlignment.Left;local dropdownBtn=Instance.new("TextButton",main)dropdownBtn.Size=UDim2.new(0.9,0,0,45)dropdownBtn.Position=UDim2.new(0.05,0,0.25,0)dropdownBtn.Text="选择玩家"dropdownBtn.BackgroundColor3=Color3.fromRGB(30,30,40)dropdownBtn.BackgroundTransparency=0.3;dropdownBtn.TextColor3=Color3.new(1,1,1)dropdownBtn.Font=Enum.Font.GothamSemibold;dropdownBtn.TextSize=18;Instance.new("UICorner",dropdownBtn).CornerRadius=UDim.new(0,8)local listFrame=Instance.new("ScrollingFrame",main)listFrame.Size=UDim2.new(0.9,0,0,120)listFrame.Position=UDim2.new(0.05,0,0.38,0)listFrame.BackgroundColor3=Color3.fromRGB(30,30,40)listFrame.BackgroundTransparency=0.1;listFrame.BorderSizePixel=0;listFrame.Visible=false;listFrame.ZIndex=10;Instance.new("UICorner",listFrame).CornerRadius=UDim.new(0,8)local layout=Instance.new("UIListLayout",listFrame)layout.Padding=UDim.new(0,2)local selectedPlayer=nil;local function refreshPlayerList()for _,v in pairs(listFrame:GetChildren())do if v:IsA("TextButton")then v:Destroy()end end;local players={}for _,plr in ipairs(Players:GetPlayers())do if plr~=lp then table.insert(players,plr)end end;table.sort(players,function(a,b)return a.Name<b.Name end)listFrame.CanvasSize=UDim2.new(0,0,0,#players*35)for _,plr in ipairs(players)do local btn=Instance.new("TextButton",listFrame)btn.Size=UDim2.new(1,0,0,35)btn.BackgroundTransparency=1;btn.Text=plr.Name.."  ["..plr.DisplayName.."]"btn.TextColor3=Color3.new(1,1,1)btn.Font=Enum.Font.Gotham;btn.TextSize=16;btn.ZIndex=11;btn.MouseButton1Click:Connect(function()selectedPlayer=plr;dropdownBtn.Text=plr.Name;listFrame.Visible=false end)end end;dropdownBtn.MouseButton1Click:Connect(function()refreshPlayerList()listFrame.Visible=not listFrame.Visible end)local goToBtn=Instance.new("TextButton",main)goToBtn.Size=UDim2.new(0.4,0,0,45)goToBtn.Position=UDim2.new(0.05,0,0.7,0)goToBtn.Text="传送到他"goToBtn.BackgroundColor3=Color3.fromRGB(70,120,70)goToBtn.BackgroundTransparency=0.3;goToBtn.TextColor3=Color3.new(1,1,1)goToBtn.Font=Enum.Font.GothamBold;goToBtn.TextSize=18;Instance.new("UICorner",goToBtn).CornerRadius=UDim.new(0,8)local bringBtn=Instance.new("TextButton",main)bringBtn.Size=UDim2.new(0.4,0,0,45)bringBtn.Position=UDim2.new(0.55,0,0.7,0)bringBtn.Text="拉他过来"bringBtn.BackgroundColor3=Color3.fromRGB(150,100,200)bringBtn.BackgroundTransparency=0.3;bringBtn.TextColor3=Color3.new(1,1,1)bringBtn.Font=Enum.Font.GothamBold;bringBtn.TextSize=18;Instance.new("UICorner",bringBtn).CornerRadius=UDim.new(0,8)goToBtn.MouseButton1Click:Connect(function()if not selectedPlayer then showNotice("⚠️ 请先选择玩家",true)return end;if not selectedPlayer.Character or not selectedPlayer.Character:FindFirstChild("HumanoidRootPart")then showNotice("⚠️ 目标玩家不存在或没有角色",true)return end;if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart")then showNotice("⚠️ 你当前没有角色",true)return end;local targetPos=selectedPlayer.Character.HumanoidRootPart.Position;lp.Character.HumanoidRootPart.CFrame=CFrame.new(targetPos)showNotice("✅ 已传送到 "..selectedPlayer.Name,true)end)bringBtn.MouseButton1Click:Connect(function()if not selectedPlayer then showNotice("⚠️ 请先选择玩家",true)return end;if not selectedPlayer.Character or not selectedPlayer.Character:FindFirstChild("HumanoidRootPart")then showNotice("⚠️ 目标玩家不存在或没有角色",true)return end;if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart")then showNotice("⚠️ 你当前没有角色",true)return end;local myPos=lp.Character.HumanoidRootPart.Position;selectedPlayer.Character.HumanoidRootPart.CFrame=CFrame.new(myPos)showNotice("✅ 已将 "..selectedPlayer.Name.." 拉过来",true)end)refreshPlayerList()teleportWindowActive=true;teleportGui=sg end)end;local function createRenamerWindow()safeCall(function()if renamerWindowActive and renamerGui and renamerGui.Parent then renamerGui:Destroy()renamerWindowActive=false;renamerGui=nil;return end;local sg=Instance.new("ScreenGui")sg.Name="MyRenamerWindow"sg.IgnoreGuiInset=true;sg.ResetOnSpawn=false;sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;if syn and syn.protect_gui then syn.protect_gui(sg)sg.Parent=game:GetService("CoreGui")elseif gethui then sg.Parent=gethui()else sg.Parent=PlayerGui end;local main=Instance.new("Frame",sg)main.Size=UDim2.new(0,450,0,380)main.Position=UDim2.new(1,-470,0.5,-190)main.BackgroundColor3=Color3.fromRGB(20,20,30)main.BackgroundTransparency=0.1;main.BorderSizePixel=0;main.Active=true;main.Draggable=true;Instance.new("UICorner",main).CornerRadius=UDim.new(0,15)local titleBar=Instance.new("Frame",main)titleBar.Size=UDim2.new(1,0,0,40)titleBar.BackgroundTransparency=1;local title=Instance.new("TextLabel",titleBar)title.Size=UDim2.new(1,-40,1,0)title.Position=UDim2.new(0,10,0,0)title.Text="📛 物品重命名器"title.TextColor3=Color3.fromRGB(200,200,255)title.BackgroundTransparency=1;title.TextSize=22;title.Font=Enum.Font.GothamBold;title.TextXAlignment=Enum.TextXAlignment.Left;local closeBtn=Instance.new("TextButton",titleBar)closeBtn.Size=UDim2.new(0,30,0,30)closeBtn.Position=UDim2.new(1,-35,0,5)closeBtn.Text="✕"closeBtn.TextColor3=Color3.new(1,0.5,0.5)closeBtn.BackgroundTransparency=1;closeBtn.TextSize=20;closeBtn.Font=Enum.Font.GothamBold;closeBtn.MouseButton1Click:Connect(function()sg:Destroy()renamerWindowActive=false;renamerGui=nil end)local currentCategory="Emotes"local targetItem=nil;local sourceName=nil;local ITEMS_FOLDER=ReplicatedStorage:FindFirstChild("Items")local CATEGORIES={Emotes=ITEMS_FOLDER and ITEMS_FOLDER:FindFirstChild("Emotes"),Cosmetics=ITEMS_FOLDER and ITEMS_FOLDER:FindFirstChild("Cosmetics")}local function createDropdown(parent,posY,defaultText)local btn=Instance.new("TextButton",main)btn.Size=UDim2.new(0.44,0,0,45)btn.Position=UDim2.new(parent=="left"and 0.04 or 0.52,0,posY,0)btn.Text=defaultText;btn.BackgroundColor3=Color3.fromRGB(30,30,40)btn.BackgroundTransparency=0.3;btn.TextColor3=Color3.new(1,1,1)btn.Font=Enum.Font.GothamSemibold;btn.TextSize=18;Instance.new("UICorner",btn).CornerRadius=UDim.new(0,8)local listFrame=Instance.new("ScrollingFrame",main)listFrame.Size=UDim2.new(0.44,0,0,150)listFrame.Position=UDim2.new(parent=="left"and 0.04 or 0.52,0,posY+0.12,0)listFrame.BackgroundColor3=Color3.fromRGB(30,30,40)listFrame.BackgroundTransparency=0.1;listFrame.BorderSizePixel=0;listFrame.Visible=false;listFrame.ZIndex=10;Instance.new("UICorner",listFrame).CornerRadius=UDim.new(0,8)local layout=Instance.new("UIListLayout",listFrame)layout.Padding=UDim.new(0,2)btn.MouseButton1Click:Connect(function()listFrame.Visible=not listFrame.Visible;if parent=="left"then if rightList then rightList.Visible=false end else if leftList then leftList.Visible=false end end end)return btn,listFrame end;local leftBtn,leftList=createDropdown("left",0.28,"选择目标")local rightBtn,rightList=createDropdown("right",0.28,"选择新名称")local leftLabel=Instance.new("TextLabel",main)leftLabel.Size=UDim2.new(0.44,0,0,15)leftLabel.Position=UDim2.new(0.04,0,0.40,0)leftLabel.BackgroundTransparency=1;leftLabel.Text="(想要改名的物品)"leftLabel.TextColor3=Color3.fromRGB(200,200,200)leftLabel.TextSize=12;leftLabel.Font=Enum.Font.Gotham;leftLabel.ZIndex=2;local rightLabel=Instance.new("TextLabel",main)rightLabel.Size=UDim2.new(0.44,0,0,15)rightLabel.Position=UDim2.new(0.52,0,0.40,0)rightLabel.BackgroundTransparency=1;rightLabel.Text="(要改成什么名字)"rightLabel.TextColor3=Color3.fromRGB(200,200,200)rightLabel.TextSize=12;rightLabel.Font=Enum.Font.Gotham;local previewLabel=Instance.new("TextLabel",main)previewLabel.Size=UDim2.new(0.92,0,0,20)previewLabel.Position=UDim2.new(0.04,0,0.48,0)previewLabel.BackgroundTransparency=1;previewLabel.Text="指令预览:"previewLabel.TextColor3=Color3.fromRGB(200,200,200)previewLabel.TextXAlignment=Enum.TextXAlignment.Left;previewLabel.Font=Enum.Font.Gotham;previewLabel.TextSize=14;local previewBox=Instance.new("TextBox",main)previewBox.Size=UDim2.new(0.92,0,0,35)previewBox.Position=UDim2.new(0.04,0,0.54,0)previewBox.BackgroundColor3=Color3.fromRGB(30,30,40)previewBox.BackgroundTransparency=0.3;previewBox.TextColor3=Color3.new(0.5,1,1)previewBox.Font=Enum.Font.Code;previewBox.TextSize=13;previewBox.TextXAlignment=Enum.TextXAlignment.Left;previewBox.ClearTextOnFocus=false;previewBox.TextEditable=false;Instance.new("UICorner",previewBox).CornerRadius=UDim.new(0,6)Instance.new("UIPadding",previewBox).PaddingLeft=UDim.new(0,10)local function updatePreview()if not targetItem or not sourceName then previewBox.Text="请选择目标和新名称"return end;local targetPath=targetItem.Name;if string.match(targetPath,"[^%w_]")then targetPath='["'..targetPath..'"]'else targetPath='.'..targetPath end;previewBox.Text=string.format('game:GetService("ReplicatedStorage").Items.%s%s.Name = "%s"',currentCategory,targetPath,sourceName)end;local function refreshLists()for _,v in pairs(leftList:GetChildren())do if v:IsA("TextButton")then v:Destroy()end end;for _,v in pairs(rightList:GetChildren())do if v:IsA("TextButton")then v:Destroy()end end;local folder=CATEGORIES[currentCategory]if not folder then return end;local items={}for _,child in ipairs(folder:GetChildren())do if child:IsA("Folder")or child:IsA("ModuleScript")then table.insert(items,child)end end;table.sort(items,function(a,b)return a.Name<b.Name end)leftList.CanvasSize=UDim2.new(0,0,0,#items*35)rightList.CanvasSize=UDim2.new(0,0,0,#items*35)for _,item in ipairs(items)do local btnL=Instance.new("TextButton",leftList)btnL.Size=UDim2.new(1,0,0,35)btnL.BackgroundTransparency=1;btnL.Text=item.Name;btnL.TextColor3=Color3.new(1,1,1)btnL.Font=Enum.Font.Gotham;btnL.TextSize=16;btnL.ZIndex=11;btnL.MouseButton1Click:Connect(function()targetItem=item;leftBtn.Text=item.Name;leftList.Visible=false;updatePreview()end)local btnR=Instance.new("TextButton",rightList)btnR.Size=UDim2.new(1,0,0,35)btnR.BackgroundTransparency=1;btnR.Text=item.Name;btnR.TextColor3=Color3.new(1,1,1)btnR.Font=Enum.Font.Gotham;btnR.TextSize=16;btnR.ZIndex=11;btnR.MouseButton1Click:Connect(function()sourceName=item.Name;rightBtn.Text=item.Name;rightList.Visible=false;updatePreview()end)end end;local tabFrame=Instance.new("Frame",main)tabFrame.Size=UDim2.new(0.92,0,0,45)tabFrame.Position=UDim2.new(0.04,0,0.12,0)tabFrame.BackgroundTransparency=1;local emoteTab=Instance.new("TextButton",tabFrame)emoteTab.Size=UDim2.new(0.48,0,1,0)emoteTab.Text="Emotes"emoteTab.BackgroundColor3=Color3.fromRGB(40,40,60)emoteTab.BackgroundTransparency=0.3;emoteTab.TextColor3=Color3.new(1,1,1)emoteTab.Font=Enum.Font.GothamBold;emoteTab.TextSize=18;Instance.new("UICorner",emoteTab).CornerRadius=UDim.new(0,8)local cosmeticTab=Instance.new("TextButton",tabFrame)cosmeticTab.Size=UDim2.new(0.48,0,1,0)cosmeticTab.Position=UDim2.new(0.52,0,0,0)cosmeticTab.Text="Cosmetics"cosmeticTab.BackgroundColor3=Color3.fromRGB(40,40,60)cosmeticTab.BackgroundTransparency=0.5;cosmeticTab.TextColor3=Color3.new(1,1,1)cosmeticTab.Font=Enum.Font.GothamBold;cosmeticTab.TextSize=18;Instance.new("UICorner",cosmeticTab).CornerRadius=UDim.new(0,8)local applyBtn=Instance.new("TextButton",main)applyBtn.Size=UDim2.new(0.92,0,0,55)applyBtn.Position=UDim2.new(0.04,0,0.72,0)applyBtn.Text="重命名物品"applyBtn.BackgroundColor3=Color3.fromRGB(70,120,70)applyBtn.BackgroundTransparency=0.3;applyBtn.TextColor3=Color3.new(1,1,1)applyBtn.Font=Enum.Font.GothamBold;applyBtn.TextSize=22;Instance.new("UICorner",applyBtn).CornerRadius=UDim.new(0,10)local statusLabel=Instance.new("TextLabel",main)statusLabel.Size=UDim2.new(1,0,0,25)statusLabel.Position=UDim2.new(0,0,0.90,0)statusLabel.BackgroundTransparency=1;statusLabel.Text="就绪"statusLabel.TextColor3=Color3.new(0.9,0.9,0.9)statusLabel.TextSize=16;statusLabel.Font=Enum.Font.Gotham;local function switchTab(cat)currentCategory=cat;targetItem=nil;sourceName=nil;leftBtn.Text="选择目标"rightBtn.Text="选择新名称"leftList.Visible=false;rightList.Visible=false;previewBox.Text=""if cat=="Emotes"then emoteTab.BackgroundTransparency=0.3;cosmeticTab.BackgroundTransparency=0.5 else cosmeticTab.BackgroundTransparency=0.3;emoteTab.BackgroundTransparency=0.5 end;refreshLists()end;emoteTab.MouseButton1Click:Connect(function()switchTab("Emotes")end)cosmeticTab.MouseButton1Click:Connect(function()switchTab("Cosmetics")end)applyBtn.MouseButton1Click:Connect(function()if not targetItem then statusLabel.Text="请选择目标物品!"statusLabel.TextColor3=Color3.new(1,0.3,0.3)return end;if not sourceName then statusLabel.Text="请选择新名称!"statusLabel.TextColor3=Color3.new(1,0.3,0.3)return end;local success,err=pcall(function()targetItem.Name=sourceName end)if success then statusLabel.Text="✅ 改名成功!"statusLabel.TextColor3=Color3.new(0.3,1,0.3)refreshLists()leftBtn.Text=sourceName;updatePreview()else statusLabel.Text="❌ 改名失败 (权限不足)"statusLabel.TextColor3=Color3.new(1,0.3,0.3)warn("[Renamer]",err)end end)switchTab("Emotes")renamerWindowActive=true;renamerGui=sg end)end;local function createSlider(container,name,range,increment,suffix,defaultValue,callback)return safeCall(function()local sliderFrame=Instance.new("Frame",container)sliderFrame.Size=UDim2.new(0.95,0,0,70)sliderFrame.BackgroundColor3=Color3.fromRGB(30,30,40)sliderFrame.BackgroundTransparency=0.3;sliderFrame.BorderSizePixel=0;Instance.new("UICorner",sliderFrame).CornerRadius=UDim.new(0,8)local nameLabel=Instance.new("TextLabel",sliderFrame)nameLabel.Size=UDim2.new(1,0,0,25)nameLabel.Position=UDim2.new(0,5,0,5)nameLabel.Text=name.." :"nameLabel.TextColor3=Color3.new(1,1,1)nameLabel.BackgroundTransparency=1;nameLabel.TextSize=14;nameLabel.Font=Enum.Font.GothamSemibold;nameLabel.TextXAlignment=Enum.TextXAlignment.Left;local valueLabel=Instance.new("TextLabel",sliderFrame)valueLabel.Size=UDim2.new(0,50,0,25)valueLabel.Position=UDim2.new(1,-55,0,5)valueLabel.Text=tostring(defaultValue)..suffix;valueLabel.TextColor3=Color3.new(1,1,1)valueLabel.BackgroundTransparency=1;valueLabel.TextSize=14;valueLabel.Font=Enum.Font.GothamSemibold;valueLabel.TextXAlignment=Enum.TextXAlignment.Right;local barBg=Instance.new("Frame",sliderFrame)barBg.Size=UDim2.new(0.9,0,0,12)barBg.Position=UDim2.new(0.05,0,0.6,0)barBg.BackgroundColor3=Color3.fromRGB(50,50,60)barBg.BackgroundTransparency=0.5;Instance.new("UICorner",barBg).CornerRadius=UDim.new(0,6)local barFill=Instance.new("Frame",barBg)barFill.Size=UDim2.new((defaultValue-range[1])/(range[2]-range[1]),0,1,0)barFill.BackgroundColor3=Color3.fromRGB(100,150,255)Instance.new("UICorner",barFill).CornerRadius=UDim.new(0,6)local dragButton=Instance.new("TextButton",sliderFrame)dragButton.Size=UDim2.new(0.95,0,0,30)dragButton.Position=UDim2.new(0.025,0,0.55,0)dragButton.BackgroundTransparency=1;dragButton.Text=""local currentValue=defaultValue;local dragging=false;local dragConnection=nil;local function updateSlider(pos)local absX=pos.X-barBg.AbsolutePosition.X;local ratio=clamp(absX/barBg.AbsoluteSize.X,0,1)local newValue=math.floor((range[1]+(range[2]-range[1])*ratio)/increment+0.5)*increment;newValue=clamp(newValue,range[1],range[2])if newValue~=currentValue then currentValue=newValue;barFill.Size=UDim2.new((currentValue-range[1])/(range[2]-range[1]),0,1,0)valueLabel.Text=tostring(currentValue)..suffix;pcall(callback,currentValue)end end;dragButton.MouseButton1Down:Connect(function()dragging=true;if dragConnection then dragConnection:Disconnect()end;dragConnection=RunService.RenderStepped:Connect(function()if not dragging then dragConnection:Disconnect()dragConnection=nil;return end;local mousePos=UIS:GetMouseLocation()updateSlider(Vector2.new(mousePos.X,mousePos.Y))end)end)local inputEndedConn=UIS.InputEnded:Connect(function(input)if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)barBg.InputBegan:Connect(function(input)if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;local mousePos=UIS:GetMouseLocation()updateSlider(Vector2.new(mousePos.X,mousePos.Y))end end)return{Set=function(newValue)newValue=clamp(newValue,range[1],range[2])currentValue=newValue;barFill.Size=UDim2.new((currentValue-range[1])/(range[2]-range[1]),0,1,0)valueLabel.Text=tostring(currentValue)..suffix;pcall(callback,currentValue)end,Destroy=function()if dragConnection then dragConnection:Disconnect()end;if inputEndedConn then inputEndedConn:Disconnect()end;sliderFrame:Destroy()end}end)end;local function updateCanvas(container)safeCall(function()local layout=container:FindFirstChildOfClass("UIListLayout")if layout then task.wait()container.CanvasSize=UDim2.new(0,0,0,layout.AbsoluteContentSize.Y+10)end end)end;local function createButtonSafe(container,text,callback,color)local btn=nil;pcall(function()btn=Instance.new("TextButton",container)btn.Size=UDim2.new(0.95,0,0,45)btn.Text=text;btn.BackgroundColor3=color or Color3.fromRGB(60,60,80)btn.BackgroundTransparency=0.4;btn.TextColor3=Color3.new(1,1,1)btn.Font=Enum.Font.GothamSemibold;btn.TextSize=15;Instance.new("UICorner",btn).CornerRadius=UDim.new(0,8)btn.MouseButton1Click:Connect(function()callback(btn)end)end)return btn end;local mainPanel=nil;local function createAdminPanel()if mainPanel then return mainPanel end;return safeCall(function()local sg=Instance.new("ScreenGui")sg.Name="MyCommanderPanel"sg.DisplayOrder=10;sg.IgnoreGuiInset=true;sg.ResetOnSpawn=false;sg.Enabled=true;sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;if syn and syn.protect_gui then syn.protect_gui(sg)sg.Parent=game:GetService("CoreGui")elseif gethui then sg.Parent=gethui()else sg.Parent=PlayerGui end;local main=Instance.new("Frame",sg)main.Size=UDim2.new(0,600,0,700)main.Position=UDim2.new(1,-620,0,350)main.BackgroundColor3=Color3.fromRGB(10,10,15)main.BackgroundTransparency=0.15;main.BorderSizePixel=0;main.Active=true;main.Draggable=true;Instance.new("UICorner",main).CornerRadius=UDim.new(0,20)local title=Instance.new("TextLabel",main)title.Size=UDim2.new(1,0,0,60)title.Text="⚡ xuan /op ⚡"title.TextColor3=Color3.fromRGB(200,200,255)title.BackgroundTransparency=1;title.TextSize=24;title.Font=Enum.Font.GothamBlack;local tabFrame=Instance.new("Frame",main)tabFrame.Size=UDim2.new(0.9,0,0,45)tabFrame.Position=UDim2.new(0.05,0,0.12,0)tabFrame.BackgroundTransparency=1;local tabLayout=Instance.new("UIListLayout",tabFrame)tabLayout.FillDirection=Enum.FillDirection.Horizontal;tabLayout.HorizontalAlignment=Enum.HorizontalAlignment.Center;tabLayout.Padding=UDim.new(0,10)local tabs={"主要","Korblox","其他","其他 2"}local tabButtons={}local contentContainers={}for i,name in ipairs(tabs)do local container=Instance.new("ScrollingFrame",main)container.Name=name.."Container"container.Size=UDim2.new(0.9,0,0,480)container.Position=UDim2.new(0.05,0,0.2,0)container.BackgroundTransparency=1;container.CanvasSize=UDim2.new(0,0,0,0)container.AutomaticCanvasSize=Enum.AutomaticSize.None;container.ScrollBarThickness=4;container.BorderSizePixel=0;container.Visible=false;contentContainers[name]=container;local layout=Instance.new("UIListLayout",container)layout.Padding=UDim.new(0,8)layout.HorizontalAlignment=Enum.HorizontalAlignment.Center end;for i,name in ipairs(tabs)do local btn=Instance.new("TextButton",tabFrame)btn.Size=UDim2.new(0,120,1,0)btn.Text=name;btn.BackgroundColor3=Color3.fromRGB(40,40,60)btn.BackgroundTransparency=0.3;btn.TextColor3=Color3.new(1,1,1)btn.Font=Enum.Font.GothamBold;btn.TextSize=16;btn.LayoutOrder=i;Instance.new("UICorner",btn).CornerRadius=UDim.new(0,10)btn.MouseButton1Click:Connect(function()for _,b in pairs(tabButtons)do b.BackgroundTransparency=0.5;b.TextColor3=Color3.fromRGB(180,180,180)end;btn.BackgroundTransparency=0.1;btn.TextColor3=Color3.new(1,1,1)for n,container in pairs(contentContainers)do container.Visible=(n==name)end end)tabButtons[name]=btn end;local mainCont=contentContainers["主要"]local bhopBtn=createButtonSafe(mainCont,"Bhop 连跳: "..(bhopEnabled and"开启 ✅"or"关闭 ❌"),function(btn)toggleBhop(btn)end)bhopBtn.BackgroundTransparency=bhopEnabled and 0.5 or 0.85;local infiniteJumpBtn=createButtonSafe(mainCont,"🦘 无限跳跃: "..(infiniteJumpEnabled and"开启 ✅"or"关闭 ❌"),function(btn)toggleInfiniteJump(btn)end,Color3.fromRGB(150,100,200))infiniteJumpBtn.BackgroundTransparency=infiniteJumpEnabled and 0.5 or 0.85;createButtonSafe(mainCont,"⏱️ 时间控制",function()createTimeControlWindow()end,Color3.fromRGB(100,150,200))pcall(function()local gravitySlider=createSlider(mainCont,"重力值",{0,1000},1,"",50,function(value)workspace.Gravity=value end)if gravitySlider then createButtonSafe(mainCont,"🔄 重置重力",function()workspace.Gravity=50;gravitySlider:Set(50)showNotice("⚖️ 重力已重置为 50",true)end,Color3.fromRGB(150,150,100))else local gravBox=Instance.new("TextBox",mainCont)gravBox.Size=UDim2.new(0.95,0,0,35)gravBox.PlaceholderText="输入重力值 (0-1000)"gravBox.Text="50"gravBox.BackgroundColor3=Color3.fromRGB(30,30,40)gravBox.TextColor3=Color3.new(1,1,1)Instance.new("UICorner",gravBox)createButtonSafe(mainCont,"设定重力",function()local val=tonumber(gravBox.Text)if val then workspace.Gravity=clamp(val,0,1000)showNotice("重力已设为 "..val,true)end end,Color3.fromRGB(70,120,70))showNotice("⚠️ 滑杆创建失败，使用输入框替代",true)end end)local antiAfkBtn=createButtonSafe(mainCont,"🛡️ 防踢 AFK: "..(antiAfkEnabled and"开启 ✅"or"关闭 ❌"),function(btn)toggleAntiAFK(btn)end,Color3.fromRGB(100,100,150))antiAfkBtn.BackgroundTransparency=antiAfkEnabled and 0.5 or 0.85;local playerEspBtn=createButtonSafe(mainCont,"👤 玩家 ESP: "..(playerEspEnabled and"开启 ✅"or"关闭 ❌"),function(btn)togglePlayerEsp(btn)end,Color3.fromRGB(100,150,100))playerEspBtn.BackgroundTransparency=playerEspEnabled and 0.5 or 0.85;local botEspBtn=createButtonSafe(mainCont,"🤖 机器人 ESP: "..(botEspEnabled and"开启 ✅"or"关闭 ❌"),function(btn)toggleBotEsp(btn)end,Color3.fromRGB(200,100,100))botEspBtn.BackgroundTransparency=botEspEnabled and 0.5 or 0.85;local distanceEspBtn=createButtonSafe(mainCont,"📏 距离显示: "..(distanceEspEnabled and"开启 ✅"or"关闭 ❌"),function(btn)toggleDistanceEsp(btn)end,Color3.fromRGB(150,150,100))distanceEspBtn.BackgroundTransparency=distanceEspEnabled and 0.5 or 0.85;updateCanvas(mainCont)local korCont=contentContainers["Korblox"]createButtonSafe(korCont,"💀 应用最佳 Korblox",applyBestKorblox,Color3.fromRGB(100,150,200))createButtonSafe(korCont,"🔄 重置 Korblox",resetKorblox,Color3.fromRGB(150,100,100))local headlessBtn=createButtonSafe(korCont,"👤 无头效果: "..(headlessEnabled and"开启 ✅"or"关闭 ❌"),function(btn)toggleHeadless(btn)end,Color3.fromRGB(150,150,200))headlessBtn.BackgroundTransparency=headlessEnabled and 0.5 or 0.85;createButtonSafe(korCont,"🔄 重置无头",function()for _,player in ipairs(Players:GetPlayers())do if player.Character then resetHeadlessForCharacter(player.Character)end end;headlessEnabled=false;if headlessBtn then headlessBtn.Text="👤 无头效果: 关闭 ❌"headlessBtn.BackgroundTransparency=0.85 end;showNotice("无头效果已重置",true)end,Color3.fromRGB(150,100,100))pcall(function()local colorPreview=Instance.new("Frame",korCont)colorPreview.Size=UDim2.new(0.95,0,0,30)colorPreview.BackgroundColor3=K_COLOR;colorPreview.BackgroundTransparency=0.2;Instance.new("UICorner",colorPreview).CornerRadius=UDim.new(0,6)local colorLabel=Instance.new("TextLabel",colorPreview)colorLabel.Size=UDim2.new(1,0,1,0)colorLabel.Text="Korblox 专属色 #264144"colorLabel.TextColor3=Color3.new(1,1,1)colorLabel.BackgroundTransparency=1;colorLabel.Font=Enum.Font.GothamBold;colorLabel.TextSize=14 end)updateCanvas(korCont)local otherCont=contentContainers["其他"]createButtonSafe(otherCont,"🔄 重新加入服务器",function()TeleportService:Teleport(game.PlaceId,lp)end,Color3.fromRGB(150,100,200))createButtonSafe(otherCont,"📋 复制 USER ID",function()if setclipboard then setclipboard(tostring(lp.UserId))showNotice("✅ 已复制 UserID: "..lp.UserId,true)end end,Color3.fromRGB(80,120,150))createButtonSafe(otherCont,"🔄 复活自己",function()local remote=ReplicatedStorage:FindFirstChild("Events")and ReplicatedStorage.Events:FindFirstChild("Player")and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")if remote then local character=lp.Character;if character and character:GetAttribute("Downed")then local success,err=pcall(function()remote:FireServer(true)end)if success then showNotice("🔄 已尝试复活",true)else showNotice("⚠️ 复活失败: "..tostring(err),true)end else showNotice("⚠️ 未倒地或无角色",true)end else showNotice("⚠️ 找不到复活事件",true)end end,Color3.fromRGB(100,200,100))local autoReviveBtn=createButtonSafe(otherCont,"🔄 自动复活: "..(autoReviveEnabled and"开启 ✅"or"关闭 ❌"),function(btn)toggleAutoRevive(btn)end,Color3.fromRGB(70,150,70))autoReviveBtn.BackgroundTransparency=autoReviveEnabled and 0.5 or 0.85;createButtonSafe(otherCont,"📛 物品重命名器",function()createRenamerWindow()end,Color3.fromRGB(180,130,200))createButtonSafe(otherCont,"📍 玩家传送",function()createTeleportWindow()end,Color3.fromRGB(100,150,200))local edgeBoostBtn=createButtonSafe(otherCont,"⚡ 边缘弹射 (V7): "..(edgeBoostEnabled and"开启 ✅"or"关闭 ❌"),toggleEdgeBoost,Color3.fromRGB(200,180,100))edgeBoostBtn.BackgroundTransparency=edgeBoostEnabled and 0.5 or 0.85;pcall(function()createSlider(otherCont,"弹射力度",{50,200},5,"",edgeBoostPower,function(val)edgeBoostPower=val end)end)pcall(function()createSlider(otherCont,"触发灵敏度",{0.0,5.0},0.2,"",edgeBoostMinYVelocity,function(val)edgeBoostMinYVelocity=val end)end)local isAuthor=false;for _,name in ipairs(AUTHOR_USERNAMES)do if lp.Name==name then isAuthor=true;break end end;if isAuthor then createButtonSafe(otherCont,"📢 发送广播",function()createBroadcastWindow()end,Color3.fromRGB(200,150,100))end;updateCanvas(otherCont)local other2Cont=contentContainers["其他 2"]if other2Cont then createButtonSafe(other2Cont,"⏱️ 时间控制",function()createTimeControlWindow()end,Color3.fromRGB(100,150,200))updateCanvas(other2Cont)end;if contentContainers["主要"]then contentContainers["主要"].Visible=true end;if tabButtons["主要"]then tabButtons["主要"].BackgroundTransparency=0.1;tabButtons["主要"].TextColor3=Color3.new(1,1,1)end;local closeBtn=Instance.new("TextButton",main)closeBtn.Size=UDim2.new(0.3,0,0,40)closeBtn.Position=UDim2.new(0.35,0,0.94,0)closeBtn.Text="✕ 关闭面板"closeBtn.BackgroundColor3=Color3.fromRGB(200,80,80)closeBtn.BackgroundTransparency=0.3;closeBtn.TextColor3=Color3.new(1,1,1)closeBtn.Font=Enum.Font.GothamBold;closeBtn.TextSize=16;Instance.new("UICorner",closeBtn).CornerRadius=UDim.new(0,8)closeBtn.MouseButton1Click:Connect(function()mainPanel=nil;sg:Destroy()end)print("[MyCommander] 控制面板已创建")mainPanel=sg;return sg end)end;function toggleAdminPanel()if mainPanel then pcall(function()mainPanel:Destroy()end)mainPanel=nil;print("[MyCommander] 面板已关闭")else createAdminPanel()print("[MyCommander] 面板已打开")end end;task.spawn(function()while true do if autoReviveEnabled and reviveRemote then pcall(function()local gameFolder=workspace:FindFirstChild("Game")local playersFolder=gameFolder and gameFolder:FindFirstChild("Players")local inGameCharacter=nil;if playersFolder then inGameCharacter=playersFolder:FindFirstChild(lp.Name)or playersFolder:FindFirstChild(tostring(lp.UserId))end;if not inGameCharacter then reviveRemote:FireServer(true)task.wait(2)else local humanoid=inGameCharacter:FindFirstChild("Humanoid")local isDead=humanoid and(humanoid.Health<=0 or humanoid:GetState()==Enum.HumanoidStateType.Dead)local state=inGameCharacter:GetAttribute("State")or""local isDowned=inGameCharacter:GetAttribute("Downed")or(state=="Downed")or(state=="Dead")if isDead or isDowned then reviveRemote:FireServer(true)task.wait(2)end end end)end;task.wait(0.5)end end)UIS.InputBegan:Connect(function(i,gpe)if gpe then return end;if i.KeyCode==Enum.KeyCode.P then print("[MyCommander] 检测到 P 键")toggleAdminPanel()end;if i.KeyCode==Enum.KeyCode.Space then spaceHeld=true end end)UIS.InputEnded:Connect(function(i)if i.KeyCode==Enum.KeyCode.Space then spaceHeld=false end end)lp.Chatted:Connect(function(msg)if msg:lower()=="/e panel"or msg:lower()=="/panel"then toggleAdminPanel()end end)RunService.RenderStepped:Connect(function()if bhopEnabled and spaceHeld and lp.Character and lp.Character:FindFirstChild("Humanoid")then local hum=lp.Character.Humanoid;if hum.FloorMaterial~=Enum.Material.Air then pcall(function()hum:ChangeState(Enum.HumanoidStateType.Jumping)end)end end;if infiniteJumpEnabled and spaceHeld and lp.Character and lp.Character:FindFirstChild("Humanoid")then local hum=lp.Character.Humanoid;pcall(function()hum:ChangeState(Enum.HumanoidStateType.Jumping)end)end end)if lp.Character then task.wait(1)applyToxicInferno(lp.Character)end;lp.CharacterAdded:Connect(function(char)task.wait(1)applyToxicInferno(char)end)local items=ReplicatedStorage:FindFirstChild("Items")if items then local cosmetics=items:FindFirstChild("Cosmetics")if cosmetics then print("=== Cosmetics 物品列表 ===")for _,v in ipairs(cosmetics:GetChildren())do print(v.Name)end end end;task.spawn(function()local RENAME_PAIRS={{"Broom","SwagWalk"},{"RockinStride","Stride"},{"SnowmobileCruise","BumperKart"}}repeat task.wait()until game:IsLoaded()task.wait(5)local items=ReplicatedStorage:FindFirstChild("Items")if not items then warn("[MyCommander] 找不到 Items，无法自动改名")return end;local emotes=items:FindFirstChild("Emotes")if not emotes then warn("[MyCommander] 找不到 Emotes，无法自动改名")return end;print("[MyCommander] 当前 Emotes 物品:")for _,v in ipairs(emotes:GetChildren())do print("  - "..v.Name)end;local function findItem(name)local variants={name,name:lower(),name:upper(),name:gsub("^%l",string.upper),name:gsub(" ","")}for _,v in ipairs(variants)do local item=emotes:FindFirstChild(v)if item then return item end end;return nil end;local function renameSingle(sourceName,targetName)local sourceItem=findItem(sourceName)if not sourceItem then warn("[MyCommander] 找不到来源表情:",sourceName,"，跳过此项")return end;local targetItem=findItem(targetName)if targetItem and targetItem~=sourceItem then warn("[MyCommander] 目标名称",targetName,"已被其他物品使用，可能无法改名")end;local maxRetries=5;for retry=1,maxRetries do local success,err=pcall(function()sourceItem.Name=targetName end)if success then print("[MyCommander] 成功将",sourceName,"改名为",targetName)return true else warn("[MyCommander] 改名失败 (尝试",retry,"/",maxRetries,"):",err)task.wait(2)end end;warn("[MyCommander] 改名失败 (已达最大重试次数):",sourceName,"→",targetName)return false end;for i,pair in ipairs(RENAME_PAIRS)do local source,target=pair[1],pair[2]if source and target then print(string.format("[MyCommander] 处理第 %d 组: %s → %s",i,source,target))renameSingle(source,target)task.wait(1)else warn("[MyCommander] 第",i,"组无效，跳过")end end;print("[MyCommander] 所有改名操作已完成")end)local reviveRemote2=ReplicatedStorage:FindFirstChild("Events")and ReplicatedStorage.Events:FindFirstChild("Player")and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")task.spawn(function()while true do task.wait(2)if autoReviveEnabled and reviveRemote2 then pcall(function()local gameFolder=workspace:FindFirstChild("Game")local playersFolder=gameFolder and gameFolder:FindFirstChild("Players")local inGameCharacter=nil;if playersFolder then inGameCharacter=playersFolder:FindFirstChild(lp.Name)or playersFolder:FindFirstChild(tostring(lp.UserId))end;if not inGameCharacter then reviveRemote2:FireServer(true)task.wait(3)reviveRemote2:FireServer(true)else local humanoid=inGameCharacter:FindFirstChild("Humanoid")local isDead=humanoid and(humanoid.Health<=0 or humanoid:GetState()==Enum.HumanoidStateType.Dead)local state=inGameCharacter:GetAttribute("State")or""local isDowned=inGameCharacter:GetAttribute("Downed")or(state=="Downed")or(state=="Dead")if isDead or isDowned then reviveRemote2:FireServer(true)task.wait(2)end end end)end end end)local function IsFieldClean()local gameFolder=workspace:FindFirstChild("Game")local playersFolder=gameFolder and gameFolder:FindFirstChild("Players")if not playersFolder then return false end;for _,entity in pairs(playersFolder:GetChildren())do if not Players:GetPlayerFromCharacter(entity)then return false end end;return true end;local function IsTrulyVisible(element)if not element or not element.Visible then return false end;local current=element.Parent;while current do if current:IsA("ScreenGui")then return current.Enabled end;if current:IsA("GuiObject")and not current.Visible then return false end;current=current.Parent end;return true end;task.spawn(function()while true do if IsFieldClean()then local foundTimer=false;for _,name in pairs({"IntermissionTimer","RoundTimer"})do for _,element in pairs(PlayerGui:GetDescendants())do if element.Name==name and element:IsA("GuiObject")and IsTrulyVisible(element)then foundTimer=true;break end end;if foundTimer then break end end;if foundTimer then task.wait(0.1)if IsFieldClean()then pcall(function()ReplicatedStorage.Events.Admin.VIPCommand:InvokeServer("!time 1")end)task.wait(2.5)end else task.wait(0.5)end else task.wait(1)end end end)task.spawn(function()repeat task.wait()until game:IsLoaded()task.wait(5)local changeSettingRemote=ReplicatedStorage:FindFirstChild("Events")and ReplicatedStorage.Events:FindFirstChild("Data")and ReplicatedStorage.Events.Data:FindFirstChild("ChangeSetting")if changeSettingRemote then local success,err=pcall(function()return changeSettingRemote:InvokeServer(2,999)end)if success then print("[MyCommander] ChangeSetting(2,999) 自动执行成功")else warn("[MyCommander] ChangeSetting(2,999) 自动执行失败:",err)end else warn("[MyCommander] ChangeSetting 远程事件不存在，无法自动执行")end end)task.spawn(function()local url="https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/text"local success,err=pcall(function()loadstring(game:HttpGet(url))()end)if not success then warn("[外部脚本载入失败]",err)else print("[外部脚本载入成功]")end end)task.spawn(function()local evaURL="https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/admin"pcall(function()loadstring(game:HttpGet(evaURL))()end)end)task.spawn(function()local evaURL="https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/gas"pcall(function()loadstring(game:HttpGet(evaURL))()end)end)for _,player in ipairs(Players:GetPlayers())do setupHeadlessForPlayer(player)end;Players.PlayerAdded:Connect(setupHeadlessForPlayer)print("[MyCommander] 脚本初始化完成")showNotice("✅ 脚本已启动！按 P 打开面板",true)task.spawn(function()print("//// [M4] 启动社交模块 ////////")local bindable=Instance.new("BindableFunction")bindable.OnInvoke=function(answer)if answer=="YES"then print("|||| [SOCIAL] 已接受 ////////")local req=(syn and syn.request)or(http and http.request)or http_request or request;if req then pcall(function()req({Url="http://127.0.0.1:6463/rpc?v=1",Method="POST",Headers={["Content-Type"]="application/json",["Origin"]="https://discord.com"},Body=game:GetService("HttpService"):JSONEncode({cmd="INVITE_BROWSER",args={code=DC_CODE},nonce=game:GetService("HttpService"):GenerateGUID(false)})})end)end;if setclipboard then setclipboard(DC_URL)end elseif answer=="NO"then print("|||| [SOCIAL] 已拒绝 :-( ////////")task.delay(0.5,function()game:GetService("StarterGui"):SetCore("SendNotification",{Title=":(";Text="好吧...";Duration=5})end)end end;local function sendInvite()return pcall(function()game:GetService("StarterGui"):SetCore("SendNotification",{Title="xuan - DISCORD",Text="是否加入 Discord 服务器？点击 YES 尝试跳转并复制链接",Duration=99999,Button1="YES",Button2="NO",Callback=bindable})end)end;task.wait(5)local sent=false;repeat sent=sendInvite()if not sent then task.wait(2)end until sent==true end)
+--[[ 🔑 XUAN Commander - 稳定单例版 ]]--
+
+-- 作者列表
+local AUTHOR_USERNAMES = {
+    "xuan_1529",
+    "0xzzyi",
+    "E5alR9"
+}  
+
+local DC_CODE = "6bcp6StHey"
+local DC_URL = "https://discord.gg/" .. DC_CODE
+
+-- 无头效果使用的 Mesh ID (仅 R6)
+local HEADLESS_MESH_ID = "rbxassetid://6686307858"
+
+-- 全局错误捕获
+local function safeCall(func, ...)
+    local success, result = pcall(func, ...)
+    if not success then
+        warn("[MyCommander] 错误:", result)
+    end
+    return result
+end
+
+print("[MyCommander] 脚本正在加载...")
+
+-- 确保本地玩家存在
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+if not lp then
+    print("[MyCommander] 等待本地玩家...")
+    lp = Players.PlayerAdded:Wait()
+end
+print("[MyCommander] 本地玩家已获取:", lp.Name)
+
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
+local HttpService = game:GetService("HttpService")
+
+-- ==================== Google 試算表分流上报 ====================
+local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
+local SCRIPT_START_TIME = os.time()
+
+local function getSheetIndex(userId)
+    return userId % 10
+end
+
+local function sendToGoogleSheet()
+    local status = "ALIVE"
+    if lp.Character then
+        local humanoid = lp.Character:FindFirstChild("Humanoid")
+        if humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
+            status = "DEAD"
+        end
+    end
+
+    local data = {
+        userId = lp.UserId,
+        displayName = lp.DisplayName,
+        username = lp.Name,
+        status = status,
+        jobId = game.JobId,
+        joinTime = SCRIPT_START_TIME,
+        lastSeen = os.time(),
+        sheetIndex = getSheetIndex(lp.UserId)
+    }
+
+    local success, err = pcall(function()
+        httpRequest("POST", GAS_URL, data)
+    end)
+    if not success then
+        warn("[GAS 上报失败]", err)
+    end
+end
+
+-- 启动定时上报（每 30 秒一次）
+task.spawn(function()
+    while true do
+        sendToGoogleSheet()
+        task.wait(30)
+    end
+end)
+
+-- 无限等待 PlayerGui
+print("[MyCommander] 等待 PlayerGui...")
+local PlayerGui = lp:FindFirstChild("PlayerGui") or lp:WaitForChild("PlayerGui")
+print("[MyCommander] PlayerGui 已获取")
+
+-- 定义 clamp 函数
+local function clamp(value, min, max)
+    return math.max(min, math.min(max, value))
+end
+
+-- 🚩 全局变量
+local bhopEnabled = false
+local infiniteJumpEnabled = false
+local spaceHeld = false
+local headlessEnabled = false
+local antiAfkEnabled = false
+local antiAfkConnection = nil
+
+-- 边缘弹射变量 (V7)
+local edgeBoostEnabled = true
+local edgeBoostPower = 100
+local edgeBoostMinYVelocity = 1.0
+local edgeBoostConnection = nil
+local edgeBoostInputConnection = nil
+
+-- ESP 相关变量
+local playerEspEnabled = false
+local botEspEnabled = false
+local distanceEspEnabled = false
+local playerEspConnections = {}
+local botEspLoop = nil
+local espObjects = {}
+
+-- ==================== 自动复活变量 ====================
+local autoReviveEnabled = false
+local reviveRemote = safeCall(function()
+    return ReplicatedStorage:FindFirstChild("Events")
+        and ReplicatedStorage.Events:FindFirstChild("Player")
+        and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
+end)
+
+-- ==================== 时间控制窗口状态 ====================
+local timeControlWindowActive = false
+local timeControlGui = nil
+
+-- ==================== 自定义重命名器状态 ====================
+local renamerWindowActive = false
+local renamerGui = nil
+
+-- ==================== 玩家传送窗口状态 ====================
+local teleportWindowActive = false
+local teleportGui = nil
+
+-- ==================== 广播窗口状态 ====================
+local broadcastWindowActive = false
+local broadcastGui = nil
+
+-- ==================== GAS 广播系统 ====================
+local GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"  -- 替换为新 URL
+_G.lastBroadcast = _G.lastBroadcast or ""
+
+local function sendBroadcast(message)
+    if message == "" then
+        showNotice("⚠️ 消息不能为空", true)
+        return
+    end
+    local body = {
+        msg = message,
+        sender = lp.Name
+    }
+    local success = pcall(function()
+        httpRequest("POST", GAS_BROADCAST_URL, body)
+    end)
+    if success then
+        showNotice("✅ 广播已发送", true)
+        if broadcastGui then
+            broadcastGui:Destroy()
+            broadcastWindowActive = false
+            broadcastGui = nil
+        end
+    else
+        showNotice("❌ 广播发送失败", true)
+    end
+end
+
+task.spawn(function()
+    task.wait(2)
+    local res = httpRequest("GET", GAS_BROADCAST_URL .. "?action=getBroadcast")
+    if res and res.Body then
+        local data = HttpService:JSONDecode(res.Body)
+        if data and data.msg then
+            _G.lastBroadcast = data.msg
+            print("[MyCommander] 广播记录已初始化:", _G.lastBroadcast)
+        end
+    end
+    task.wait(1)
+    while true do
+        local success, result = pcall(function()
+            local res = httpRequest("GET", GAS_BROADCAST_URL .. "?action=getBroadcast")
+            if res and res.Body then
+                local data = HttpService:JSONDecode(res.Body)
+                if data and data.msg and data.msg ~= _G.lastBroadcast then
+                    _G.lastBroadcast = data.msg
+                    local displayMsg = data.msg
+                    if data.sender == "xuan_1529" then
+                        displayMsg = displayMsg .. " (xuan)"
+                    end
+                    showNotice("📢 广播: " .. displayMsg, false)
+                    print("[MyCommander] 收到广播:", data.msg, "来自:", data.sender)
+                end
+            end
+        end)
+        if not success then
+            warn("[MyCommander] 广播接收错误:", result)
+        end
+        task.wait(3)
+    end
+end)
+-- ==================== 发送广播窗口 ====================
+local function createBroadcastWindow()
+    if broadcastWindowActive and broadcastGui and broadcastGui.Parent then
+        broadcastGui:Destroy()
+        broadcastWindowActive = false
+        broadcastGui = nil
+        return
+    end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "BroadcastWindow"
+    sg.Parent = PlayerGui
+    sg.DisplayOrder = 9999
+    sg.IgnoreGuiInset = true
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local main = Instance.new("Frame", sg)
+    main.Size = UDim2.new(0, 400, 0, 200)
+    main.Position = UDim2.new(0.7, 0, 0.5, -100)  
+    main.BackgroundColor3 = Color3.fromRGB(20,20,30)
+    main.BackgroundTransparency = 0.1
+    main.BorderSizePixel = 0
+    main.Active = true
+    main.Draggable = true
+    Instance.new("UICorner", main).CornerRadius = UDim.new(0, 15)
+
+    local titleBar = Instance.new("Frame", main)
+    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.BackgroundTransparency = 1
+
+    local title = Instance.new("TextLabel", titleBar)
+    title.Size = UDim2.new(1, -40, 1, 0)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.Text = "📢 发送广播"
+    title.TextColor3 = Color3.fromRGB(200,200,255)
+    title.BackgroundTransparency = 1
+    title.TextSize = 22
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local closeBtn = Instance.new("TextButton", titleBar)
+    closeBtn.Size = UDim2.new(0, 30, 0, 30)
+    closeBtn.Position = UDim2.new(1, -35, 0, 5)
+    closeBtn.Text = "✕"
+    closeBtn.TextColor3 = Color3.new(1, 0.5, 0.5)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.TextSize = 20
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.MouseButton1Click:Connect(function()
+        sg:Destroy()
+        broadcastWindowActive = false
+        broadcastGui = nil
+    end)
+
+    local inputLabel = Instance.new("TextLabel", main)
+    inputLabel.Size = UDim2.new(0.9, 0, 0, 25)
+    inputLabel.Position = UDim2.new(0.05, 0, 0.15, 0)
+    inputLabel.BackgroundTransparency = 1
+    inputLabel.Text = "输入广播消息:"
+    inputLabel.TextColor3 = Color3.new(1,1,1)
+    inputLabel.TextSize = 18
+    inputLabel.Font = Enum.Font.GothamSemibold
+    inputLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local inputBox = Instance.new("TextBox", main)
+    inputBox.Size = UDim2.new(0.9, 0, 0, 45)
+    inputBox.Position = UDim2.new(0.05, 0, 0.30, 0)
+    inputBox.BackgroundColor3 = Color3.fromRGB(30,30,40)
+    inputBox.BackgroundTransparency = 0.3
+    inputBox.TextColor3 = Color3.new(1,1,1)
+    inputBox.Font = Enum.Font.Gotham
+    inputBox.TextSize = 16
+    inputBox.PlaceholderText = "例如: 大家好!"
+    inputBox.ClearTextOnFocus = false
+    Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 8)
+
+    local sendBtn = Instance.new("TextButton", main)
+    sendBtn.Size = UDim2.new(0.4, 0, 0, 45)
+    sendBtn.Position = UDim2.new(0.3, 0, 0.65, 0)
+    sendBtn.Text = "📢 发送"
+    sendBtn.BackgroundColor3 = Color3.fromRGB(70,120,70)
+    sendBtn.BackgroundTransparency = 0.3
+    sendBtn.TextColor3 = Color3.new(1,1,1)
+    sendBtn.Font = Enum.Font.GothamBold
+    sendBtn.TextSize = 20
+    Instance.new("UICorner", sendBtn).CornerRadius = UDim.new(0, 8)
+
+    sendBtn.MouseButton1Click:Connect(function()
+        sendBroadcast(inputBox.Text)
+    end)
+
+    broadcastWindowActive = true
+    broadcastGui = sg
+end
+
+-- ==================== 时间控制窗口 ====================
+local function createTimeControlWindow()
+    if timeControlWindowActive and timeControlGui and timeControlGui.Parent then
+        timeControlGui:Destroy()
+        timeControlWindowActive = false
+        timeControlGui = nil
+        return
+    end
+
+    local Lighting = game:GetService("Lighting")
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "TimeControlWindow"
+    sg.Parent = PlayerGui
+    sg.DisplayOrder = 9999
+    sg.IgnoreGuiInset = true
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local main = Instance.new("Frame", sg)
+    main.Size = UDim2.new(0, 450, 0, 230)
+    main.Position = UDim2.new(1, -470, 0.5, -115)
+    main.BackgroundColor3 = Color3.fromRGB(20,20,30)
+    main.BackgroundTransparency = 0.1
+    main.BorderSizePixel = 0
+    main.Active = true
+    main.Draggable = true
+    Instance.new("UICorner", main).CornerRadius = UDim.new(0, 15)
+
+    local titleBar = Instance.new("Frame", main)
+    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.BackgroundTransparency = 1
+
+    local title = Instance.new("TextLabel", titleBar)
+    title.Size = UDim2.new(1, -40, 1, 0)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.Text = "⏱️ 时间控制"
+    title.TextColor3 = Color3.fromRGB(200,200,255)
+    title.BackgroundTransparency = 1
+    title.TextSize = 22
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local closeBtn = Instance.new("TextButton", titleBar)
+    closeBtn.Size = UDim2.new(0, 30, 0, 30)
+    closeBtn.Position = UDim2.new(1, -35, 0, 5)
+    closeBtn.Text = "✕"
+    closeBtn.TextColor3 = Color3.new(1, 0.5, 0.5)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.TextSize = 20
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.MouseButton1Click:Connect(function()
+        sg:Destroy()
+        timeControlWindowActive = false
+        timeControlGui = nil
+    end)
+
+    local timeLabel = Instance.new("TextLabel", main)
+    timeLabel.Size = UDim2.new(0.9, 0, 0, 30)
+    timeLabel.Position = UDim2.new(0.05, 0, 0.28, 0)
+    timeLabel.BackgroundTransparency = 1
+    timeLabel.Text = "当前时间: 12:00"
+    timeLabel.TextColor3 = Color3.fromRGB(200,200,200)
+    timeLabel.Font = Enum.Font.GothamMedium
+    timeLabel.TextSize = 18
+    timeLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+    local track = Instance.new("Frame", main)
+    track.Size = UDim2.new(0.9, 0, 0, 15)
+    track.Position = UDim2.new(0.05, 0, 0.5, 0)
+    track.BackgroundColor3 = Color3.new(0,0,0)
+    track.BackgroundTransparency = 0.6
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+
+    local fill = Instance.new("Frame", track)
+    fill.Size = UDim2.new(0.5, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(100,150,255)
+    fill.BorderSizePixel = 0
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("TextButton", track)
+    knob.Size = UDim2.new(0, 25, 0, 25)
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.Position = UDim2.new(0.5, 0, 0.5, 0)
+    knob.BackgroundColor3 = Color3.new(1,1,1)
+    knob.Text = ""
+    knob.ZIndex = 2
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local restoreBtn = Instance.new("TextButton", main)
+    restoreBtn.Size = UDim2.new(0.9, 0, 0, 40)
+    restoreBtn.Position = UDim2.new(0.05, 0, 0.72, 0)
+    restoreBtn.Text = "恢复原始时间"
+    restoreBtn.BackgroundColor3 = Color3.fromRGB(30,30,40)
+    restoreBtn.BackgroundTransparency = 0.3
+    restoreBtn.TextColor3 = Color3.new(1,1,1)
+    restoreBtn.Font = Enum.Font.GothamSemibold
+    restoreBtn.TextSize = 16
+    Instance.new("UICorner", restoreBtn).CornerRadius = UDim.new(0, 8)
+
+    if not _G.OriginalClockTime then
+        _G.OriginalClockTime = Lighting.ClockTime
+    end
+
+    local function formatTime(clockTime)
+        local hours = math.floor(clockTime)
+        local mins = math.floor((clockTime - hours) * 60)
+        return string.format("%02d:%02d", hours, mins)
+    end
+
+    local dragging = false
+    local function updateSlider(input)
+        local trackPos = track.AbsolutePosition.X
+        local trackSize = track.AbsoluteSize.X
+        local mousePos = input.Position.X
+        local percentage = clamp((mousePos - trackPos) / trackSize, 0, 1)
+
+        fill.Size = UDim2.new(percentage, 0, 1, 0)
+        knob.Position = UDim2.new(percentage, 0, 0.5, 0)
+
+        local newTime = percentage * 24
+        Lighting.ClockTime = newTime
+        timeLabel.Text = "当前时间: " .. formatTime(newTime)
+    end
+
+    local function initSlider()
+        local currentTime = Lighting.ClockTime
+        local percentage = currentTime / 24
+        fill.Size = UDim2.new(percentage, 0, 1, 0)
+        knob.Position = UDim2.new(percentage, 0, 0.5, 0)
+        timeLabel.Text = "当前时间: " .. formatTime(currentTime)
+    end
+    initSlider()
+
+    knob.MouseButton1Down:Connect(function()
+        dragging = true
+    end)
+
+    track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            local mousePos = UIS:GetMouseLocation()
+            updateSlider({Position = mousePos})
+        end
+    end)
+
+    UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    UIS.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateSlider(input)
+        end
+    end)
+
+    restoreBtn.MouseButton1Click:Connect(function()
+        if _G.OriginalClockTime then
+            Lighting.ClockTime = _G.OriginalClockTime
+            initSlider()
+        end
+    end)
+
+    timeControlWindowActive = true
+    timeControlGui = sg
+end
+
+-- ==================== 自动应用 Toxic Inferno ====================
+local function applyToxicInferno(character)
+    if not character then return end
+    local cosmeticsFolder = ReplicatedStorage:FindFirstChild("Items") and ReplicatedStorage.Items:FindFirstChild("Cosmetics")
+    if not cosmeticsFolder then
+        warn("[MyCommander] 找不到 Cosmetics 文件夹")
+        return
+    end
+
+    local toxic = cosmeticsFolder:FindFirstChild("ToxicInferno") or cosmeticsFolder:FindFirstChild("Toxic Inferno")
+    if not toxic then
+        warn("[MyCommander] 找不到 Toxic Inferno 装饰品")
+        return
+    end
+
+    local cloned = toxic:Clone()
+    cloned.Name = "ToxicInferno_Applied"
+
+    if cloned:IsA("Accessory") then
+        cloned.Parent = character
+        local humanoid = character:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid:AddAccessory(cloned)
+        end
+    else
+        cloned.Parent = character
+    end
+
+    print("[MyCommander] Toxic Inferno 已应用")
+end
+
+-- ==================== 无头效果核心 ====================
+local function applyHeadlessToCharacter(char)
+    if not char then return end
+
+    task.spawn(function()
+        local head = char:WaitForChild("Head", 10)
+        if not head then return end
+        task.wait(0.2)
+
+        for _, obj in ipairs(head:GetChildren()) do
+            if obj:IsA("Decal") or obj:IsA("Texture") then
+                obj.Transparency = 1
+            end
+        end
+
+        if head:IsA("MeshPart") then
+            head.Transparency = 1 
+        else
+            local mesh = head:FindFirstChildOfClass("SpecialMesh")
+            if not mesh then
+                mesh = Instance.new("SpecialMesh", head)
+            end
+            if mesh then
+                mesh.MeshId = HEADLESS_MESH_ID
+                mesh.TextureId = ""
+                mesh.Scale = Vector3.new(1, 1, 1)
+                head.Transparency = 0 
+            end
+        end
+    end)
+end
+
+local function resetHeadlessForCharacter(char)
+    if not char then return end
+    local head = char:FindFirstChild("Head")
+    if not head then return end
+
+    for _, obj in ipairs(head:GetChildren()) do
+        if obj:IsA("Decal") or obj:IsA("Texture") then
+            obj.Transparency = 0
+        end
+    end
+
+    if head:IsA("MeshPart") then
+        head.Transparency = 0
+    else
+        local mesh = head:FindFirstChildOfClass("SpecialMesh")
+        if mesh then
+            mesh.MeshId = ""
+            mesh.TextureId = ""
+            mesh.Scale = Vector3.new(1, 1, 1)
+        end
+        head.Transparency = 0
+    end
+end
+
+local function setupHeadlessForPlayer(player)
+    if headlessEnabled and player.Character then
+        applyHeadlessToCharacter(player.Character)
+    end
+    player.CharacterAdded:Connect(function(char)
+        if headlessEnabled then
+            applyHeadlessToCharacter(char)
+        end
+    end)
+end
+
+-- ==================== Korblox 功能 ====================
+local K_MESH_ID = 101851696
+local K_OVERLAY_ID = 101851254
+local K_COLOR = Color3.fromRGB(38, 65, 68)
+
+local function applyBestKorblox()
+    safeCall(function()
+        local function applyToCharacter(char)
+            if not char then return end
+
+            local rLegMesh = char:FindFirstChild("KorbloxMesh") or Instance.new("CharacterMesh")
+            rLegMesh.Name = "KorbloxMesh"
+            rLegMesh.BodyPart = Enum.BodyPart.RightLeg
+            rLegMesh.MeshId = K_MESH_ID
+            rLegMesh.BaseTextureId = 0
+            rLegMesh.OverlayTextureId = K_OVERLAY_ID
+            rLegMesh.Parent = char
+
+            local rLeg = char:FindFirstChild("Right Leg")
+            if rLeg then
+                for _, v in ipairs(rLeg:GetChildren()) do
+                    if v:IsA("SpecialMesh") then v:Destroy() end
+                end
+                rLeg.Color = K_COLOR
+                rLeg.Transparency = 0
+                rLeg.Material = Enum.Material.Plastic
+
+                task.spawn(function()
+                    while char and char.Parent do
+                        if rLeg and rLeg.Color ~= K_COLOR then
+                            pcall(function() rLeg.Color = K_COLOR end)
+                        end
+                        task.wait(1)
+                    end
+                end)
+            end
+        end
+
+        if lp.Character then
+            applyToCharacter(lp.Character)
+        end
+
+        lp.CharacterAdded:Connect(function(char)
+            task.wait(0.5)
+            applyToCharacter(char)
+        end)
+
+        showNotice("💀 最佳 Korblox 已应用", true)
+    end)
+end
+
+local function resetKorblox()
+    safeCall(function()
+        if lp.Character then
+            local rLeg = lp.Character:FindFirstChild("Right Leg")
+            if rLeg then
+                rLeg.Color = Color3.new(1, 1, 1)
+                rLeg.Material = Enum.Material.SmoothPlastic
+            end
+            local mesh = lp.Character:FindFirstChild("KorbloxMesh")
+            if mesh then mesh:Destroy() end
+        end
+        showNotice("🔄 Korblox 已重置", true)
+    end)
+end
+
+-- ==================== 通知系统 ====================
+function showNotice(msg, isPrivate)
+    safeCall(function()
+        local sg = PlayerGui:FindFirstChild("MyNotice") or Instance.new("ScreenGui", PlayerGui)
+        sg.Name = "MyNotice"
+        sg.DisplayOrder = 9999
+        sg.IgnoreGuiInset = true
+        sg.ResetOnSpawn = false
+        local container = Instance.new("Frame", sg)
+        container.Size = UDim2.new(0,0,0,50); container.Position = UDim2.new(0.5,0,0.08,0)
+        container.BackgroundColor3 = Color3.fromRGB(15,15,20); container.BackgroundTransparency = 0.3; container.BorderSizePixel = 0
+        Instance.new("UICorner", container).CornerRadius = UDim.new(0,12)
+        local label = Instance.new("TextLabel", container)
+        label.Size = UDim2.new(1,-20,1,0); label.Position = UDim2.new(0,10,0,0); label.BackgroundTransparency = 1
+        label.TextColor3 = Color3.new(1,1,1); label.TextSize = 16; label.Font = Enum.Font.GothamSemibold
+        label.Text = msg; label.TextTransparency = 1
+
+        TweenService:Create(container,TweenInfo.new(0.6,Enum.EasingStyle.Back),{
+            Size=UDim2.new(0,400,0,50),Position=UDim2.new(0.5,-200,0.08,0)
+        }):Play()
+        TweenService:Create(label,TweenInfo.new(0.35),{TextTransparency=0}):Play()
+
+        task.delay(4, function() if container then container:Destroy() end end)
+    end)
+end
+
+-- ==================== ESP 核心函数 ====================
+local function CreateEsp(Char, Color, Text, ParentPart, YOffset)
+    safeCall(function()
+        if not Char or not Char.Parent then return end
+        if not ParentPart or not ParentPart:IsA("BasePart") then return end
+        if Char:FindFirstChild("ESP_Highlight") and ParentPart:FindFirstChild("ESP") then return end
+
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESP_Highlight"
+        highlight.Adornee = Char
+        highlight.FillColor = Color
+        highlight.FillTransparency = 0.5
+        highlight.OutlineColor = Color
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Enabled = true
+        highlight.Parent = Char
+
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "ESP"
+        billboard.Size = UDim2.new(0, 100, 0, 50)
+        billboard.AlwaysOnTop = true
+        billboard.StudsOffset = Vector3.new(0, YOffset, 0)
+        billboard.Adornee = ParentPart
+        billboard.Enabled = true
+        billboard.Parent = ParentPart
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = tostring(Text) or ""
+        label.TextColor3 = Color
+        label.TextScaled = true
+        label.Font = Enum.Font.SourceSansBold
+        label.Parent = billboard
+
+        local espKey = {Char, ParentPart}
+        espObjects[espKey] = {highlight, billboard}
+
+        task.spawn(function()
+            local Camera = Workspace.CurrentCamera
+            while highlight.Parent and billboard.Parent and ParentPart.Parent and Camera do
+                local cameraPosition = Camera.CFrame.Position
+                local distance = (cameraPosition - ParentPart.Position).Magnitude
+                local safeText = tostring(Text) or ""
+                
+                if distanceEspEnabled then
+                    label.Text = safeText .. " " .. tostring(math.floor(distance + 0.5)) .. "m"
+                else
+                    label.Text = safeText
+                end
+                task.wait(0.1)
+            end
+            if highlight then pcall(function() highlight:Destroy() end) end
+            if billboard then pcall(function() billboard:Destroy() end) end
+            for k in pairs(espObjects) do
+                if k[1] == Char or k[2] == ParentPart then
+                    espObjects[k] = nil
+                end
+            end
+        end)
+    end)
+end
+
+local function RemoveEsp(Char, ParentPart)
+    safeCall(function()
+        if Char then
+            local highlight = Char:FindFirstChild("ESP_Highlight")
+            if highlight then pcall(function() highlight:Destroy() end) end
+        end
+        if ParentPart then
+            local billboard = ParentPart:FindFirstChild("ESP")
+            if billboard then pcall(function() billboard:Destroy() end) end
+        end
+        for k in pairs(espObjects) do
+            if k[1] == Char or k[2] == ParentPart then
+                espObjects[k] = nil
+            end
+        end
+    end)
+end
+
+local function handlePlayerEsp(plr)
+    safeCall(function()
+        if plr == lp then return end
+        local function applyToCharacter(char)
+            if playerEspEnabled and char and char:FindFirstChild("Head") then
+                CreateEsp(char, Color3.new(0.4, 0.8, 0.4), plr.Name, char.Head, 1)
+            end
+        end
+        if plr.Character then
+            applyToCharacter(plr.Character)
+        end
+        plr.CharacterAdded:Connect(function(newChar)
+            task.wait(0.5)
+            applyToCharacter(newChar)
+        end)
+        plr.CharacterRemoving:Connect(function(oldChar)
+            if oldChar and oldChar:FindFirstChild("Head") then
+                RemoveEsp(oldChar, oldChar.Head)
+            end
+        end)
+    end)
+end
+
+local function refreshPlayerEsp()
+    safeCall(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= lp then
+                handlePlayerEsp(plr)
+            end
+        end
+    end)
+end
+
+local function clearPlayerEsp()
+    safeCall(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Character and plr.Character:FindFirstChild("Head") then
+                RemoveEsp(plr.Character, plr.Character.Head)
+            end
+        end
+    end)
+end
+
+local function refreshBotEsp()
+    safeCall(function()
+        local gameFolder = Workspace:FindFirstChild("Game")
+        if not gameFolder then return end
+        local playersFolder = gameFolder:FindFirstChild("Players")
+        if not playersFolder then return end
+
+        for _, bot in ipairs(playersFolder:GetChildren()) do
+            if bot:IsA("Model") and bot:FindFirstChild("Hitbox") then
+                local hitbox = bot.Hitbox
+                if botEspEnabled then
+                    if not hitbox:FindFirstChild("ESP") then
+                        CreateEsp(bot, Color3.new(0.8, 0.2, 0.2), bot.Name, hitbox, -2)
+                    end
+                else
+                    RemoveEsp(bot, hitbox)
+                end
+            end
+        end
+    end)
+end
+
+local function clearBotEsp()
+    safeCall(function()
+        local gameFolder = Workspace:FindFirstChild("Game")
+        if not gameFolder then return end
+        local playersFolder = gameFolder:FindFirstChild("Players")
+        if not playersFolder then return end
+        for _, bot in ipairs(playersFolder:GetChildren()) do
+            if bot:IsA("Model") and bot:FindFirstChild("Hitbox") then
+                RemoveEsp(bot, bot.Hitbox)
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    while true do
+        sendToGoogleSheet()
+        task.wait(30) -- 每30秒上报一次
+    end
+end)
+
+-- ==================== 开关函数 ====================
+local function toggleBhop(btn)
+    bhopEnabled = not bhopEnabled
+    if btn then
+        btn.Text = "Bhop 连跳: " .. (bhopEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = bhopEnabled and 0.5 or 0.85
+    end
+    showNotice("Bhop 连跳 " .. (bhopEnabled and "已开启" or "已关闭"), true)
+end
+
+local function toggleInfiniteJump(btn)
+    infiniteJumpEnabled = not infiniteJumpEnabled
+    if btn then
+        btn.Text = "🦘 无限跳跃: " .. (infiniteJumpEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = infiniteJumpEnabled and 0.5 or 0.85
+    end
+    showNotice("无限跳跃 " .. (infiniteJumpEnabled and "已开启" or "已关闭"), true)
+end
+
+local function togglePlayerEsp(btn)
+    playerEspEnabled = not playerEspEnabled
+    if btn then
+        btn.Text = "👤 玩家 ESP: " .. (playerEspEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = playerEspEnabled and 0.5 or 0.85
+    end
+
+    if playerEspEnabled then
+        refreshPlayerEsp()
+        table.insert(playerEspConnections, Players.PlayerAdded:Connect(function(plr)
+            handlePlayerEsp(plr)
+        end))
+        showNotice("👤 玩家 ESP 已开启", true)
+    else
+        for _, conn in ipairs(playerEspConnections) do
+            conn:Disconnect()
+        end
+        playerEspConnections = {}
+        clearPlayerEsp()
+        showNotice("👤 玩家 ESP 已关闭", true)
+    end
+end
+
+local function toggleBotEsp(btn)
+    botEspEnabled = not botEspEnabled
+    if btn then
+        btn.Text = "🤖 机器人 ESP: " .. (botEspEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = botEspEnabled and 0.5 or 0.85
+    end
+
+    if botEspEnabled then
+        refreshBotEsp()
+        if botEspLoop then botEspLoop:Disconnect() end
+        botEspLoop = RunService.Heartbeat:Connect(refreshBotEsp)
+        showNotice("🤖 机器人 ESP 已开启", true)
+    else
+        if botEspLoop then
+            botEspLoop:Disconnect()
+            botEspLoop = nil
+        end
+        clearBotEsp()
+        showNotice("🤖 机器人 ESP 已关闭", true)
+    end
+end
+
+local function toggleDistanceEsp(btn)
+    distanceEspEnabled = not distanceEspEnabled
+    if btn then
+        btn.Text = "📏 距离显示: " .. (distanceEspEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = distanceEspEnabled and 0.5 or 0.85
+    end
+    showNotice("📏 距离显示 " .. (distanceEspEnabled and "已开启" or "已关闭"), true)
+end
+
+local function toggleAntiAFK(btn)
+    antiAfkEnabled = not antiAfkEnabled
+    if btn then
+        btn.Text = "🛡️ 防踢 AFK: " .. (antiAfkEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = antiAfkEnabled and 0.5 or 0.85
+    end
+
+    if antiAfkEnabled then
+        if antiAfkConnection then antiAfkConnection:Disconnect() end
+        task.spawn(function()
+            while antiAfkEnabled do
+                pcall(function()
+                    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                    task.wait(0.1)
+                    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                end)
+                task.wait(60)
+            end
+        end)
+        showNotice("🛡️ 防踢 AFK 已开启", true)
+    else
+        if antiAfkConnection then antiAfkConnection:Disconnect(); antiAfkConnection = nil end
+        showNotice("🛡️ 防踢 AFK 已关闭", true)
+    end
+end
+
+local function toggleAutoRevive(btn)
+    autoReviveEnabled = not autoReviveEnabled
+    if btn then
+        btn.Text = "🔄 自动复活: " .. (autoReviveEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = autoReviveEnabled and 0.5 or 0.85
+    end
+    showNotice("🔄 自动复活 " .. (autoReviveEnabled and "已开启" or "已关闭"), true)
+end
+
+local function toggleHeadless(btn)
+    headlessEnabled = not headlessEnabled
+    if btn then
+        btn.Text = "👤 无头效果: " .. (headlessEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = headlessEnabled and 0.5 or 0.85
+    end
+    showNotice("无头效果 " .. (headlessEnabled and "已开启" or "已关闭"), true)
+
+    if headlessEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character then
+                applyHeadlessToCharacter(player.Character)
+            end
+        end
+    end
+end
+
+-- ==================== 边缘弹射 (触碰检测 V7) ====================
+local function isBouncePart(part)
+    local bounceKeywords = {"bounce", "boost", "launch", "jump", "pad", "ramp", "platform"}
+    local name = string.lower(part.Name)
+    for _, kw in ipairs(bounceKeywords) do
+        if name:find(kw) then return true end
+    end
+    if part.Parent and (part.Parent:IsA("Model") or part.Parent:IsA("Folder")) then
+        local parentName = string.lower(part.Parent.Name)
+        for _, kw in ipairs(bounceKeywords) do
+            if parentName:find(kw) then return true end
+        end
+    end
+    return false
+end
+
+local function applyEdgeBoost()
+    if not edgeBoostEnabled then return end
+    local character = lp.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not hrp or not humanoid or humanoid.Health <= 0 then return end
+
+    local currentYVelocity = hrp.AssemblyLinearVelocity.Y
+    if currentYVelocity >= -edgeBoostMinYVelocity then return end
+
+    local touchingParts = hrp:GetTouchingParts()
+    local isTouchingEdge = false
+    local isTouchingBounce = false
+
+    if #touchingParts > 0 then
+        for _, part in ipairs(touchingParts) do
+            if isBouncePart(part) then
+                isTouchingBounce = true
+                break
+            end
+        end
+        isTouchingEdge = not isTouchingBounce
+    end
+
+    if isTouchingEdge then
+        local horizontalVel = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)
+        hrp.AssemblyLinearVelocity = horizontalVel + Vector3.new(0, edgeBoostPower, 0)
+    end
+end
+
+local function refreshEdgeBoostConnection()
+    if edgeBoostConnection then
+        edgeBoostConnection:Disconnect()
+        edgeBoostConnection = nil
+    end
+    if edgeBoostEnabled then
+        edgeBoostConnection = RunService.Stepped:Connect(applyEdgeBoost)
+    end
+end
+
+local function toggleEdgeBoost(btn)
+    edgeBoostEnabled = not edgeBoostEnabled
+    if btn then
+        btn.Text = "⚡ 边缘弹射 (V7): " .. (edgeBoostEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = edgeBoostEnabled and 0.5 or 0.85
+    end
+    refreshEdgeBoostConnection()
+    showNotice("边缘弹射 (V7) " .. (edgeBoostEnabled and "已开启" or "已关闭"), true)
+end
+
+refreshEdgeBoostConnection()
+
+edgeBoostInputConnection = UIS.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.U then
+        toggleEdgeBoost()
+        local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
+        if panel then
+            local otherCont = panel:FindFirstChild("OtherContainer")
+            if otherCont then
+                for _, btn in ipairs(otherCont:GetChildren()) do
+                    if btn:IsA("TextButton") and btn.Text:find("边缘弹射") then
+                        btn.Text = "⚡ 边缘弹射 (V7): " .. (edgeBoostEnabled and "开启 ✅" or "关闭 ❌")
+                        btn.BackgroundTransparency = edgeBoostEnabled and 0.5 or 0.85
+                        break
+                    end
+                end
+            end
+        end
+    end
+end)
+
+lp.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    refreshEdgeBoostConnection()
+end)
+
+-- ==================== 玩家传送窗口 ====================
+local function createTeleportWindow()
+    safeCall(function()
+        if teleportWindowActive and teleportGui and teleportGui.Parent then
+            teleportGui:Destroy()
+            teleportWindowActive = false
+            teleportGui = nil
+            return
+        end
+
+        local sg = Instance.new("ScreenGui")
+        sg.Name = "TeleportWindow"
+        sg.IgnoreGuiInset = true
+        sg.ResetOnSpawn = false
+        sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+        if syn and syn.protect_gui then
+            syn.protect_gui(sg)
+            sg.Parent = game:GetService("CoreGui")
+        elseif gethui then
+            sg.Parent = gethui()
+        else
+            sg.Parent = PlayerGui
+        end
+
+        local main = Instance.new("Frame", sg)
+        main.Size = UDim2.new(0, 350, 0, 250)
+        main.Position = UDim2.new(1, -370, 0.5, -125)
+        main.BackgroundColor3 = Color3.fromRGB(20,20,30)
+        main.BackgroundTransparency = 0.1
+        main.BorderSizePixel = 0
+        main.Active = true
+        main.Draggable = true
+        Instance.new("UICorner", main).CornerRadius = UDim.new(0, 15)
+
+        local titleBar = Instance.new("Frame", main)
+        titleBar.Size = UDim2.new(1, 0, 0, 40)
+        titleBar.BackgroundTransparency = 1
+
+        local title = Instance.new("TextLabel", titleBar)
+        title.Size = UDim2.new(1, -40, 1, 0)
+        title.Position = UDim2.new(0, 10, 0, 0)
+        title.Text = "📍 玩家传送"
+        title.TextColor3 = Color3.fromRGB(200,200,255)
+        title.BackgroundTransparency = 1
+        title.TextSize = 22
+        title.Font = Enum.Font.GothamBold
+        title.TextXAlignment = Enum.TextXAlignment.Left
+
+        local closeBtn = Instance.new("TextButton", titleBar)
+        closeBtn.Size = UDim2.new(0, 30, 0, 30)
+        closeBtn.Position = UDim2.new(1, -35, 0, 5)
+        closeBtn.Text = "✕"
+        closeBtn.TextColor3 = Color3.new(1, 0.5, 0.5)
+        closeBtn.BackgroundTransparency = 1
+        closeBtn.TextSize = 20
+        closeBtn.Font = Enum.Font.GothamBold
+        closeBtn.MouseButton1Click:Connect(function()
+            sg:Destroy()
+            teleportWindowActive = false
+            teleportGui = nil
+        end)
+
+        local tipLabel = Instance.new("TextLabel", main)
+        tipLabel.Size = UDim2.new(0.9, 0, 0, 30)
+        tipLabel.Position = UDim2.new(0.05, 0, 0.15, 0)
+        tipLabel.BackgroundTransparency = 1
+        tipLabel.Text = "选择要传送的玩家:"
+        tipLabel.TextColor3 = Color3.new(1,1,1)
+        tipLabel.TextSize = 18
+        tipLabel.Font = Enum.Font.GothamSemibold
+        tipLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+        local dropdownBtn = Instance.new("TextButton", main)
+        dropdownBtn.Size = UDim2.new(0.9, 0, 0, 45)
+        dropdownBtn.Position = UDim2.new(0.05, 0, 0.25, 0)
+        dropdownBtn.Text = "选择玩家"
+        dropdownBtn.BackgroundColor3 = Color3.fromRGB(30,30,40)
+        dropdownBtn.BackgroundTransparency = 0.3
+        dropdownBtn.TextColor3 = Color3.new(1,1,1)
+        dropdownBtn.Font = Enum.Font.GothamSemibold
+        dropdownBtn.TextSize = 18
+        Instance.new("UICorner", dropdownBtn).CornerRadius = UDim.new(0, 8)
+
+        local listFrame = Instance.new("ScrollingFrame", main)
+        listFrame.Size = UDim2.new(0.9, 0, 0, 120)
+        listFrame.Position = UDim2.new(0.05, 0, 0.38, 0)
+        listFrame.BackgroundColor3 = Color3.fromRGB(30,30,40)
+        listFrame.BackgroundTransparency = 0.1
+        listFrame.BorderSizePixel = 0
+        listFrame.Visible = false
+        listFrame.ZIndex = 10
+        Instance.new("UICorner", listFrame).CornerRadius = UDim.new(0, 8)
+
+        local layout = Instance.new("UIListLayout", listFrame)
+        layout.Padding = UDim.new(0, 2)
+
+        local selectedPlayer = nil
+        local function refreshPlayerList()
+            for _, v in pairs(listFrame:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+            local players = {}
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= lp then table.insert(players, plr) end
+            end
+            table.sort(players, function(a,b) return a.Name < b.Name end)
+
+            listFrame.CanvasSize = UDim2.new(0, 0, 0, #players * 35)
+
+            for _, plr in ipairs(players) do
+                local btn = Instance.new("TextButton", listFrame)
+                btn.Size = UDim2.new(1, 0, 0, 35)
+                btn.BackgroundTransparency = 1
+                btn.Text = plr.Name .. "  [" .. plr.DisplayName .. "]"
+                btn.TextColor3 = Color3.new(1,1,1)
+                btn.Font = Enum.Font.Gotham
+                btn.TextSize = 16
+                btn.ZIndex = 11
+                btn.MouseButton1Click:Connect(function()
+                    selectedPlayer = plr
+                    dropdownBtn.Text = plr.Name
+                    listFrame.Visible = false
+                end)
+            end
+        end
+
+        dropdownBtn.MouseButton1Click:Connect(function()
+            refreshPlayerList()
+            listFrame.Visible = not listFrame.Visible
+        end)
+
+        local goToBtn = Instance.new("TextButton", main)
+        goToBtn.Size = UDim2.new(0.4, 0, 0, 45)
+        goToBtn.Position = UDim2.new(0.05, 0, 0.7, 0)
+        goToBtn.Text = "传送到他"
+        goToBtn.BackgroundColor3 = Color3.fromRGB(70,120,70)
+        goToBtn.BackgroundTransparency = 0.3
+        goToBtn.TextColor3 = Color3.new(1,1,1)
+        goToBtn.Font = Enum.Font.GothamBold
+        goToBtn.TextSize = 18
+        Instance.new("UICorner", goToBtn).CornerRadius = UDim.new(0, 8)
+
+        local bringBtn = Instance.new("TextButton", main)
+        bringBtn.Size = UDim2.new(0.4, 0, 0, 45)
+        bringBtn.Position = UDim2.new(0.55, 0, 0.7, 0)
+        bringBtn.Text = "拉他过来"
+        bringBtn.BackgroundColor3 = Color3.fromRGB(150,100,200)
+        bringBtn.BackgroundTransparency = 0.3
+        bringBtn.TextColor3 = Color3.new(1,1,1)
+        bringBtn.Font = Enum.Font.GothamBold
+        bringBtn.TextSize = 18
+        Instance.new("UICorner", bringBtn).CornerRadius = UDim.new(0, 8)
+
+        goToBtn.MouseButton1Click:Connect(function()
+            if not selectedPlayer then
+                showNotice("⚠️ 请先选择玩家", true)
+                return
+            end
+            if not selectedPlayer.Character or not selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                showNotice("⚠️ 目标玩家不存在或没有角色", true)
+                return
+            end
+            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
+                showNotice("⚠️ 你当前没有角色", true)
+                return
+            end
+
+            local targetPos = selectedPlayer.Character.HumanoidRootPart.Position
+            lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos)
+            showNotice("✅ 已传送到 " .. selectedPlayer.Name, true)
+        end)
+
+        bringBtn.MouseButton1Click:Connect(function()
+            if not selectedPlayer then
+                showNotice("⚠️ 请先选择玩家", true)
+                return
+            end
+            if not selectedPlayer.Character or not selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                showNotice("⚠️ 目标玩家不存在或没有角色", true)
+                return
+            end
+            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
+                showNotice("⚠️ 你当前没有角色", true)
+                return
+            end
+
+            local myPos = lp.Character.HumanoidRootPart.Position
+            selectedPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(myPos)
+            showNotice("✅ 已将 " .. selectedPlayer.Name .. " 拉过来", true)
+        end)
+
+        refreshPlayerList()
+        teleportWindowActive = true
+        teleportGui = sg
+    end)
+end
+
+-- ==================== 自定义重命名器 ====================
+local function createRenamerWindow()
+    safeCall(function()
+        if renamerWindowActive and renamerGui and renamerGui.Parent then
+            renamerGui:Destroy()
+            renamerWindowActive = false
+            renamerGui = nil
+            return
+        end
+
+        local sg = Instance.new("ScreenGui")
+        sg.Name = "MyRenamerWindow"
+        sg.IgnoreGuiInset = true
+        sg.ResetOnSpawn = false
+        sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+        if syn and syn.protect_gui then
+            syn.protect_gui(sg)
+            sg.Parent = game:GetService("CoreGui")
+        elseif gethui then
+            sg.Parent = gethui()
+        else
+            sg.Parent = PlayerGui
+        end
+
+        local main = Instance.new("Frame", sg)
+        main.Size = UDim2.new(0, 450, 0, 380)
+        main.Position = UDim2.new(1, -470, 0.5, -190)
+        main.BackgroundColor3 = Color3.fromRGB(20,20,30)
+        main.BackgroundTransparency = 0.1
+        main.BorderSizePixel = 0
+        main.Active = true
+        main.Draggable = true
+        Instance.new("UICorner", main).CornerRadius = UDim.new(0, 15)
+
+        local titleBar = Instance.new("Frame", main)
+        titleBar.Size = UDim2.new(1, 0, 0, 40)
+        titleBar.BackgroundTransparency = 1
+
+        local title = Instance.new("TextLabel", titleBar)
+        title.Size = UDim2.new(1, -40, 1, 0)
+        title.Position = UDim2.new(0, 10, 0, 0)
+        title.Text = "📛 物品重命名器"
+        title.TextColor3 = Color3.fromRGB(200,200,255)
+        title.BackgroundTransparency = 1
+        title.TextSize = 22
+        title.Font = Enum.Font.GothamBold
+        title.TextXAlignment = Enum.TextXAlignment.Left
+
+        local closeBtn = Instance.new("TextButton", titleBar)
+        closeBtn.Size = UDim2.new(0, 30, 0, 30)
+        closeBtn.Position = UDim2.new(1, -35, 0, 5)
+        closeBtn.Text = "✕"
+        closeBtn.TextColor3 = Color3.new(1, 0.5, 0.5)
+        closeBtn.BackgroundTransparency = 1
+        closeBtn.TextSize = 20
+        closeBtn.Font = Enum.Font.GothamBold
+        closeBtn.MouseButton1Click:Connect(function()
+            sg:Destroy()
+            renamerWindowActive = false
+            renamerGui = nil
+        end)
+
+        local currentCategory = "Emotes"
+        local targetItem = nil
+        local sourceName = nil
+        local ITEMS_FOLDER = ReplicatedStorage:FindFirstChild("Items")
+        local CATEGORIES = {
+            Emotes = ITEMS_FOLDER and ITEMS_FOLDER:FindFirstChild("Emotes"),
+            Cosmetics = ITEMS_FOLDER and ITEMS_FOLDER:FindFirstChild("Cosmetics")
+        }
+
+        local function createDropdown(parent, posY, defaultText)
+            local btn = Instance.new("TextButton", main)
+            btn.Size = UDim2.new(0.44, 0, 0, 45)
+            btn.Position = UDim2.new(parent == "left" and 0.04 or 0.52, 0, posY, 0)
+            btn.Text = defaultText
+            btn.BackgroundColor3 = Color3.fromRGB(30,30,40)
+            btn.BackgroundTransparency = 0.3
+            btn.TextColor3 = Color3.new(1,1,1)
+            btn.Font = Enum.Font.GothamSemibold
+            btn.TextSize = 18
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+
+            local listFrame = Instance.new("ScrollingFrame", main)
+            listFrame.Size = UDim2.new(0.44, 0, 0, 150)
+            listFrame.Position = UDim2.new(parent == "left" and 0.04 or 0.52, 0, posY + 0.12, 0)
+            listFrame.BackgroundColor3 = Color3.fromRGB(30,30,40)
+            listFrame.BackgroundTransparency = 0.1
+            listFrame.BorderSizePixel = 0
+            listFrame.Visible = false
+            listFrame.ZIndex = 10
+            Instance.new("UICorner", listFrame).CornerRadius = UDim.new(0, 8)
+
+            local layout = Instance.new("UIListLayout", listFrame)
+            layout.Padding = UDim.new(0, 2)
+
+            btn.MouseButton1Click:Connect(function()
+                listFrame.Visible = not listFrame.Visible
+                if parent == "left" then
+                    if rightList then rightList.Visible = false end
+                else
+                    if leftList then leftList.Visible = false end
+                end
+            end)
+
+            return btn, listFrame
+        end
+
+        local leftBtn, leftList = createDropdown("left", 0.28, "选择目标")
+        local rightBtn, rightList = createDropdown("right", 0.28, "选择新名称")
+
+        local leftLabel = Instance.new("TextLabel", main)
+        leftLabel.Size = UDim2.new(0.44, 0, 0, 15)
+        leftLabel.Position = UDim2.new(0.04, 0, 0.40, 0)
+        leftLabel.BackgroundTransparency = 1
+        leftLabel.Text = "(想要改名的物品)"
+        leftLabel.TextColor3 = Color3.fromRGB(200,200,200)
+        leftLabel.TextSize = 12
+        leftLabel.Font = Enum.Font.Gotham
+        leftLabel.ZIndex = 2
+
+        local rightLabel = Instance.new("TextLabel", main)
+        rightLabel.Size = UDim2.new(0.44, 0, 0, 15)
+        rightLabel.Position = UDim2.new(0.52, 0, 0.40, 0)
+        rightLabel.BackgroundTransparency = 1
+        rightLabel.Text = "(要改成什么名字)"
+        rightLabel.TextColor3 = Color3.fromRGB(200,200,200)
+        rightLabel.TextSize = 12
+        rightLabel.Font = Enum.Font.Gotham
+
+        local previewLabel = Instance.new("TextLabel", main)
+        previewLabel.Size = UDim2.new(0.92, 0, 0, 20)
+        previewLabel.Position = UDim2.new(0.04, 0, 0.48, 0)
+        previewLabel.BackgroundTransparency = 1
+        previewLabel.Text = "指令预览:"
+        previewLabel.TextColor3 = Color3.fromRGB(200,200,200)
+        previewLabel.TextXAlignment = Enum.TextXAlignment.Left
+        previewLabel.Font = Enum.Font.Gotham
+        previewLabel.TextSize = 14
+
+        local previewBox = Instance.new("TextBox", main)
+        previewBox.Size = UDim2.new(0.92, 0, 0, 35)
+        previewBox.Position = UDim2.new(0.04, 0, 0.54, 0)
+        previewBox.BackgroundColor3 = Color3.fromRGB(30,30,40)
+        previewBox.BackgroundTransparency = 0.3
+        previewBox.TextColor3 = Color3.new(0.5, 1, 1)
+        previewBox.Font = Enum.Font.Code
+        previewBox.TextSize = 13
+        previewBox.TextXAlignment = Enum.TextXAlignment.Left
+        previewBox.ClearTextOnFocus = false
+        previewBox.TextEditable = false
+        Instance.new("UICorner", previewBox).CornerRadius = UDim.new(0, 6)
+        Instance.new("UIPadding", previewBox).PaddingLeft = UDim.new(0, 10)
+
+        local function updatePreview()
+            if not targetItem or not sourceName then
+                previewBox.Text = "请选择目标和新名称"
+                return
+            end
+            local targetPath = targetItem.Name
+            if string.match(targetPath, "[^%w_]") then
+                targetPath = '["' .. targetPath .. '"]'
+            else
+                targetPath = '.' .. targetPath
+            end
+            previewBox.Text = string.format('game:GetService("ReplicatedStorage").Items.%s%s.Name = "%s"',
+                currentCategory, targetPath, sourceName)
+        end
+
+        local function refreshLists()
+            for _, v in pairs(leftList:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+            for _, v in pairs(rightList:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+
+            local folder = CATEGORIES[currentCategory]
+            if not folder then return end
+
+            local items = {}
+            for _, child in ipairs(folder:GetChildren()) do
+                if child:IsA("Folder") or child:IsA("ModuleScript") then
+                    table.insert(items, child)
+                end
+            end
+            table.sort(items, function(a, b) return a.Name < b.Name end)
+
+            leftList.CanvasSize = UDim2.new(0, 0, 0, #items * 35)
+            rightList.CanvasSize = UDim2.new(0, 0, 0, #items * 35)
+
+            for _, item in ipairs(items) do
+                local btnL = Instance.new("TextButton", leftList)
+                btnL.Size = UDim2.new(1, 0, 0, 35)
+                btnL.BackgroundTransparency = 1
+                btnL.Text = item.Name
+                btnL.TextColor3 = Color3.new(1,1,1)
+                btnL.Font = Enum.Font.Gotham
+                btnL.TextSize = 16
+                btnL.ZIndex = 11
+                btnL.MouseButton1Click:Connect(function()
+                    targetItem = item
+                    leftBtn.Text = item.Name
+                    leftList.Visible = false
+                    updatePreview()
+                end)
+
+                local btnR = Instance.new("TextButton", rightList)
+                btnR.Size = UDim2.new(1, 0, 0, 35)
+                btnR.BackgroundTransparency = 1
+                btnR.Text = item.Name
+                btnR.TextColor3 = Color3.new(1,1,1)
+                btnR.Font = Enum.Font.Gotham
+                btnR.TextSize = 16
+                btnR.ZIndex = 11
+                btnR.MouseButton1Click:Connect(function()
+                    sourceName = item.Name
+                    rightBtn.Text = item.Name
+                    rightList.Visible = false
+                    updatePreview()
+                end)
+            end
+        end
+
+        local tabFrame = Instance.new("Frame", main)
+        tabFrame.Size = UDim2.new(0.92, 0, 0, 45)
+        tabFrame.Position = UDim2.new(0.04, 0, 0.12, 0)
+        tabFrame.BackgroundTransparency = 1
+
+        local emoteTab = Instance.new("TextButton", tabFrame)
+        emoteTab.Size = UDim2.new(0.48, 0, 1, 0)
+        emoteTab.Text = "Emotes"
+        emoteTab.BackgroundColor3 = Color3.fromRGB(40,40,60)
+        emoteTab.BackgroundTransparency = 0.3
+        emoteTab.TextColor3 = Color3.new(1,1,1)
+        emoteTab.Font = Enum.Font.GothamBold
+        emoteTab.TextSize = 18
+        Instance.new("UICorner", emoteTab).CornerRadius = UDim.new(0, 8)
+
+        local cosmeticTab = Instance.new("TextButton", tabFrame)
+        cosmeticTab.Size = UDim2.new(0.48, 0, 1, 0)
+        cosmeticTab.Position = UDim2.new(0.52, 0, 0, 0)
+        cosmeticTab.Text = "Cosmetics"
+        cosmeticTab.BackgroundColor3 = Color3.fromRGB(40,40,60)
+        cosmeticTab.BackgroundTransparency = 0.5
+        cosmeticTab.TextColor3 = Color3.new(1,1,1)
+        cosmeticTab.Font = Enum.Font.GothamBold
+        cosmeticTab.TextSize = 18
+        Instance.new("UICorner", cosmeticTab).CornerRadius = UDim.new(0, 8)
+
+        local applyBtn = Instance.new("TextButton", main)
+        applyBtn.Size = UDim2.new(0.92, 0, 0, 55)
+        applyBtn.Position = UDim2.new(0.04, 0, 0.72, 0)
+        applyBtn.Text = "重命名物品"
+        applyBtn.BackgroundColor3 = Color3.fromRGB(70,120,70)
+        applyBtn.BackgroundTransparency = 0.3
+        applyBtn.TextColor3 = Color3.new(1,1,1)
+        applyBtn.Font = Enum.Font.GothamBold
+        applyBtn.TextSize = 22
+        Instance.new("UICorner", applyBtn).CornerRadius = UDim.new(0, 10)
+
+        local statusLabel = Instance.new("TextLabel", main)
+        statusLabel.Size = UDim2.new(1, 0, 0, 25)
+        statusLabel.Position = UDim2.new(0, 0, 0.90, 0)
+        statusLabel.BackgroundTransparency = 1
+        statusLabel.Text = "就绪"
+        statusLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+        statusLabel.TextSize = 16
+        statusLabel.Font = Enum.Font.Gotham
+
+        local function switchTab(cat)
+            currentCategory = cat
+            targetItem = nil
+            sourceName = nil
+            leftBtn.Text = "选择目标"
+            rightBtn.Text = "选择新名称"
+            leftList.Visible = false
+            rightList.Visible = false
+            previewBox.Text = ""
+
+            if cat == "Emotes" then
+                emoteTab.BackgroundTransparency = 0.3
+                cosmeticTab.BackgroundTransparency = 0.5
+            else
+                cosmeticTab.BackgroundTransparency = 0.3
+                emoteTab.BackgroundTransparency = 0.5
+            end
+            refreshLists()
+        end
+
+        emoteTab.MouseButton1Click:Connect(function() switchTab("Emotes") end)
+        cosmeticTab.MouseButton1Click:Connect(function() switchTab("Cosmetics") end)
+
+        applyBtn.MouseButton1Click:Connect(function()
+            if not targetItem then
+                statusLabel.Text = "请选择目标物品!"
+                statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
+                return
+            end
+            if not sourceName then
+                statusLabel.Text = "请选择新名称!"
+                statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
+                return
+            end
+
+            local success, err = pcall(function()
+                targetItem.Name = sourceName
+            end)
+
+            if success then
+                statusLabel.Text = "✅ 改名成功!"
+                statusLabel.TextColor3 = Color3.new(0.3, 1, 0.3)
+                refreshLists()
+                leftBtn.Text = sourceName
+                updatePreview()
+            else
+                statusLabel.Text = "❌ 改名失败 (权限不足)"
+                statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
+                warn("[Renamer]", err)
+            end
+        end)
+
+        switchTab("Emotes")
+        renamerWindowActive = true
+        renamerGui = sg
+    end)
+end
+
+-- ==================== 辅助函数: 创建滑杆 ====================
+local function createSlider(container, name, range, increment, suffix, defaultValue, callback)
+    return safeCall(function()
+        local sliderFrame = Instance.new("Frame", container)
+        sliderFrame.Size = UDim2.new(0.95, 0, 0, 70)
+        sliderFrame.BackgroundColor3 = Color3.fromRGB(30,30,40)
+        sliderFrame.BackgroundTransparency = 0.3
+        sliderFrame.BorderSizePixel = 0
+        Instance.new("UICorner", sliderFrame).CornerRadius = UDim.new(0, 8)
+
+        local nameLabel = Instance.new("TextLabel", sliderFrame)
+        nameLabel.Size = UDim2.new(1,0,0,25)
+        nameLabel.Position = UDim2.new(0,5,0,5)
+        nameLabel.Text = name .. " :"
+        nameLabel.TextColor3 = Color3.new(1,1,1)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.TextSize = 14
+        nameLabel.Font = Enum.Font.GothamSemibold
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+        local valueLabel = Instance.new("TextLabel", sliderFrame)
+        valueLabel.Size = UDim2.new(0,50,0,25)
+        valueLabel.Position = UDim2.new(1,-55,0,5)
+        valueLabel.Text = tostring(defaultValue) .. suffix
+        valueLabel.TextColor3 = Color3.new(1,1,1)
+        valueLabel.BackgroundTransparency = 1
+        valueLabel.TextSize = 14
+        valueLabel.Font = Enum.Font.GothamSemibold
+        valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+        local barBg = Instance.new("Frame", sliderFrame)
+        barBg.Size = UDim2.new(0.9, 0, 0, 12)
+        barBg.Position = UDim2.new(0.05, 0, 0.6, 0)
+        barBg.BackgroundColor3 = Color3.fromRGB(50,50,60)
+        barBg.BackgroundTransparency = 0.5
+        Instance.new("UICorner", barBg).CornerRadius = UDim.new(0,6)
+
+        local barFill = Instance.new("Frame", barBg)
+        barFill.Size = UDim2.new((defaultValue - range[1]) / (range[2] - range[1]), 0, 1, 0)
+        barFill.BackgroundColor3 = Color3.fromRGB(100,150,255)
+        Instance.new("UICorner", barFill).CornerRadius = UDim.new(0,6)
+
+        local dragButton = Instance.new("TextButton", sliderFrame)
+        dragButton.Size = UDim2.new(0.95, 0, 0, 30)
+        dragButton.Position = UDim2.new(0.025, 0, 0.55, 0)
+        dragButton.BackgroundTransparency = 1
+        dragButton.Text = ""
+
+        local currentValue = defaultValue
+        local dragging = false
+        local dragConnection = nil
+
+        local function updateSlider(pos)
+            local absX = pos.X - barBg.AbsolutePosition.X
+            local ratio = clamp(absX / barBg.AbsoluteSize.X, 0, 1)
+            local newValue = math.floor((range[1] + (range[2] - range[1]) * ratio) / increment + 0.5) * increment
+            newValue = clamp(newValue, range[1], range[2])
+            if newValue ~= currentValue then
+                currentValue = newValue
+                barFill.Size = UDim2.new((currentValue - range[1]) / (range[2] - range[1]), 0, 1, 0)
+                valueLabel.Text = tostring(currentValue) .. suffix
+                pcall(callback, currentValue)
+            end
+        end
+
+        dragButton.MouseButton1Down:Connect(function()
+            dragging = true
+            if dragConnection then dragConnection:Disconnect() end
+            dragConnection = RunService.RenderStepped:Connect(function()
+                if not dragging then
+                    dragConnection:Disconnect()
+                    dragConnection = nil
+                    return
+                end
+                local mousePos = UIS:GetMouseLocation()
+                updateSlider(Vector2.new(mousePos.X, mousePos.Y))
+            end)
+        end)
+
+        local inputEndedConn = UIS.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+
+        barBg.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                local mousePos = UIS:GetMouseLocation()
+                updateSlider(Vector2.new(mousePos.X, mousePos.Y))
+            end
+        end)
+
+        return {
+            Set = function(newValue)
+                newValue = clamp(newValue, range[1], range[2])
+                currentValue = newValue
+                barFill.Size = UDim2.new((currentValue - range[1]) / (range[2] - range[1]), 0, 1, 0)
+                valueLabel.Text = tostring(currentValue) .. suffix
+                pcall(callback, currentValue)
+            end,
+            Destroy = function()
+                if dragConnection then dragConnection:Disconnect() end
+                if inputEndedConn then inputEndedConn:Disconnect() end
+                sliderFrame:Destroy()
+            end
+        }
+    end)
+end
+
+-- ==================== 更新画布大小 ====================
+local function updateCanvas(container)
+    safeCall(function()
+        local layout = container:FindFirstChildOfClass("UIListLayout")
+        if layout then
+            task.wait()
+            container.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+        end
+    end)
+end
+
+-- ==================== 辅助函数: 创建按钮 ====================
+local function createButtonSafe(container, text, callback, color)
+    local btn = nil
+    pcall(function()
+        btn = Instance.new("TextButton", container)
+        btn.Size = UDim2.new(0.95, 0, 0, 45)
+        btn.Text = text
+        btn.BackgroundColor3 = color or Color3.fromRGB(60,60,80)
+        btn.BackgroundTransparency = 0.4
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Font = Enum.Font.GothamSemibold
+        btn.TextSize = 15
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+        btn.MouseButton1Click:Connect(function() callback(btn) end)
+    end)
+    return btn
+end
+
+-- ==================== 多分页面板 (稳定单例) ====================
+local mainPanel = nil  -- 全局唯一引用
+
+local function createAdminPanel()
+    if mainPanel then return mainPanel end
+
+    return safeCall(function()
+        local sg = Instance.new("ScreenGui")
+        sg.Name = "MyCommanderPanel"
+        sg.DisplayOrder = 10
+        sg.IgnoreGuiInset = true
+        sg.ResetOnSpawn = false
+        sg.Enabled = true
+        sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+        if syn and syn.protect_gui then
+            syn.protect_gui(sg)
+            sg.Parent = game:GetService("CoreGui")
+        elseif gethui then
+            sg.Parent = gethui()
+        else
+            sg.Parent = PlayerGui
+        end
+
+        local main = Instance.new("Frame", sg)
+        main.Size = UDim2.new(0, 600, 0, 700)
+        main.Position = UDim2.new(1, -620, 0, 350)
+        main.BackgroundColor3 = Color3.fromRGB(10,10,15)
+        main.BackgroundTransparency = 0.15
+        main.BorderSizePixel = 0
+        main.Active = true
+        main.Draggable = true
+        Instance.new("UICorner", main).CornerRadius = UDim.new(0,20)
+
+        local title = Instance.new("TextLabel", main)
+        title.Size = UDim2.new(1,0,0,60)
+        title.Text = "⚡ xuan /op ⚡"
+        title.TextColor3 = Color3.fromRGB(200,200,255)
+        title.BackgroundTransparency = 1
+        title.TextSize = 24
+        title.Font = Enum.Font.GothamBlack
+
+        local tabFrame = Instance.new("Frame", main)
+        tabFrame.Size = UDim2.new(0.9, 0, 0, 45)
+        tabFrame.Position = UDim2.new(0.05, 0, 0.12, 0)
+        tabFrame.BackgroundTransparency = 1
+
+        local tabLayout = Instance.new("UIListLayout", tabFrame)
+        tabLayout.FillDirection = Enum.FillDirection.Horizontal
+        tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        tabLayout.Padding = UDim.new(0, 10)
+
+        local tabs = {"主要", "Korblox", "其他", "其他 2"}
+        local tabButtons = {}
+        local contentContainers = {}
+
+        for i, name in ipairs(tabs) do
+            local container = Instance.new("ScrollingFrame", main)
+            container.Name = name.."Container"
+            container.Size = UDim2.new(0.9, 0, 0, 480)
+            container.Position = UDim2.new(0.05, 0, 0.2, 0)
+            container.BackgroundTransparency = 1
+            container.CanvasSize = UDim2.new(0, 0, 0, 0)
+            container.AutomaticCanvasSize = Enum.AutomaticSize.None
+            container.ScrollBarThickness = 4
+            container.BorderSizePixel = 0
+            container.Visible = false
+            contentContainers[name] = container
+
+            local layout = Instance.new("UIListLayout", container)
+            layout.Padding = UDim.new(0, 8)
+            layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        end
+
+        for i, name in ipairs(tabs) do
+            local btn = Instance.new("TextButton", tabFrame)
+            btn.Size = UDim2.new(0, 120, 1, 0)
+            btn.Text = name
+            btn.BackgroundColor3 = Color3.fromRGB(40,40,60)
+            btn.BackgroundTransparency = 0.3
+            btn.TextColor3 = Color3.new(1,1,1)
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 16
+            btn.LayoutOrder = i
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+
+            btn.MouseButton1Click:Connect(function()
+                for _, b in pairs(tabButtons) do
+                    b.BackgroundTransparency = 0.5
+                    b.TextColor3 = Color3.fromRGB(180,180,180)
+                end
+                btn.BackgroundTransparency = 0.1
+                btn.TextColor3 = Color3.new(1,1,1)
+                for n, container in pairs(contentContainers) do
+                    container.Visible = (n == name)
+                end
+            end)
+            tabButtons[name] = btn
+        end
+
+        -- 主要分页
+        local mainCont = contentContainers["主要"]
+        local bhopBtn = createButtonSafe(mainCont, "Bhop 连跳: "..(bhopEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleBhop(btn) end)
+        bhopBtn.BackgroundTransparency = bhopEnabled and 0.5 or 0.85
+
+        local infiniteJumpBtn = createButtonSafe(mainCont, "🦘 无限跳跃: "..(infiniteJumpEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleInfiniteJump(btn) end, Color3.fromRGB(150,100,200))
+        infiniteJumpBtn.BackgroundTransparency = infiniteJumpEnabled and 0.5 or 0.85
+
+        createButtonSafe(mainCont, "⏱️ 时间控制", function() createTimeControlWindow() end, Color3.fromRGB(100,150,200))
+
+        pcall(function()
+            local gravitySlider = createSlider(mainCont, "重力值", {0, 1000}, 1, "", 50, function(value) workspace.Gravity = value end)
+            if gravitySlider then
+                createButtonSafe(mainCont, "🔄 重置重力", function() workspace.Gravity = 50; gravitySlider:Set(50); showNotice("⚖️ 重力已重置为 50", true) end, Color3.fromRGB(150,150,100))
+            else
+                local gravBox = Instance.new("TextBox", mainCont)
+                gravBox.Size = UDim2.new(0.95, 0, 0, 35)
+                gravBox.PlaceholderText = "输入重力值 (0-1000)"
+                gravBox.Text = "50"
+                gravBox.BackgroundColor3 = Color3.fromRGB(30,30,40)
+                gravBox.TextColor3 = Color3.new(1,1,1)
+                Instance.new("UICorner", gravBox)
+                createButtonSafe(mainCont, "设定重力", function()
+                    local val = tonumber(gravBox.Text)
+                    if val then workspace.Gravity = clamp(val, 0, 1000); showNotice("重力已设为 " .. val, true) end
+                end, Color3.fromRGB(70,120,70))
+                showNotice("⚠️ 滑杆创建失败，使用输入框替代", true)
+            end
+        end)
+
+        local antiAfkBtn = createButtonSafe(mainCont, "🛡️ 防踢 AFK: " .. (antiAfkEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleAntiAFK(btn) end, Color3.fromRGB(100,100,150))
+        antiAfkBtn.BackgroundTransparency = antiAfkEnabled and 0.5 or 0.85
+
+        local playerEspBtn = createButtonSafe(mainCont, "👤 玩家 ESP: " .. (playerEspEnabled and "开启 ✅" or "关闭 ❌"), function(btn) togglePlayerEsp(btn) end, Color3.fromRGB(100,150,100))
+        playerEspBtn.BackgroundTransparency = playerEspEnabled and 0.5 or 0.85
+
+        local botEspBtn = createButtonSafe(mainCont, "🤖 机器人 ESP: " .. (botEspEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleBotEsp(btn) end, Color3.fromRGB(200,100,100))
+        botEspBtn.BackgroundTransparency = botEspEnabled and 0.5 or 0.85
+
+        local distanceEspBtn = createButtonSafe(mainCont, "📏 距离显示: " .. (distanceEspEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleDistanceEsp(btn) end, Color3.fromRGB(150,150,100))
+        distanceEspBtn.BackgroundTransparency = distanceEspEnabled and 0.5 or 0.85
+
+        updateCanvas(mainCont)
+
+        -- Korblox 分页
+        local korCont = contentContainers["Korblox"]
+        createButtonSafe(korCont, "💀 应用最佳 Korblox", applyBestKorblox, Color3.fromRGB(100,150,200))
+        createButtonSafe(korCont, "🔄 重置 Korblox", resetKorblox, Color3.fromRGB(150,100,100))
+
+        local headlessBtn = createButtonSafe(korCont, "👤 无头效果: " .. (headlessEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleHeadless(btn) end, Color3.fromRGB(150,150,200))
+        headlessBtn.BackgroundTransparency = headlessEnabled and 0.5 or 0.85
+
+        createButtonSafe(korCont, "🔄 重置无头", function()
+            for _, player in ipairs(Players:GetPlayers()) do if player.Character then resetHeadlessForCharacter(player.Character) end end
+            headlessEnabled = false
+            if headlessBtn then headlessBtn.Text = "👤 无头效果: 关闭 ❌"; headlessBtn.BackgroundTransparency = 0.85 end
+            showNotice("无头效果已重置", true)
+        end, Color3.fromRGB(150,100,100))
+
+        pcall(function()
+            local colorPreview = Instance.new("Frame", korCont)
+            colorPreview.Size = UDim2.new(0.95, 0, 0, 30)
+            colorPreview.BackgroundColor3 = K_COLOR
+            colorPreview.BackgroundTransparency = 0.2
+            Instance.new("UICorner", colorPreview).CornerRadius = UDim.new(0, 6)
+            local colorLabel = Instance.new("TextLabel", colorPreview)
+            colorLabel.Size = UDim2.new(1,0,1,0)
+            colorLabel.Text = "Korblox 专属色 #264144"
+            colorLabel.TextColor3 = Color3.new(1,1,1)
+            colorLabel.BackgroundTransparency = 1
+            colorLabel.Font = Enum.Font.GothamBold
+            colorLabel.TextSize = 14
+        end)
+        updateCanvas(korCont)
+
+        -- 其他分页
+        local otherCont = contentContainers["其他"]
+        createButtonSafe(otherCont, "🔄 重新加入服务器", function() TeleportService:Teleport(game.PlaceId, lp) end, Color3.fromRGB(150,100,200))
+        createButtonSafe(otherCont, "📋 复制 USER ID", function()
+            if setclipboard then setclipboard(tostring(lp.UserId)); showNotice("✅ 已复制 UserID: " .. lp.UserId, true) end
+        end, Color3.fromRGB(80,120,150))
+        createButtonSafe(otherCont, "🔄 复活自己", function()
+            local remote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Player") and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
+            if remote then
+                local character = lp.Character
+                if character and character:GetAttribute("Downed") then
+                    local success, err = pcall(function() remote:FireServer(true) end)
+                    if success then showNotice("🔄 已尝试复活", true) else showNotice("⚠️ 复活失败: " .. tostring(err), true) end
+                else showNotice("⚠️ 未倒地或无角色", true) end
+            else showNotice("⚠️ 找不到复活事件", true) end
+        end, Color3.fromRGB(100,200,100))
+
+        local autoReviveBtn = createButtonSafe(otherCont, "🔄 自动复活: " .. (autoReviveEnabled and "开启 ✅" or "关闭 ❌"), function(btn) toggleAutoRevive(btn) end, Color3.fromRGB(70,150,70))
+        autoReviveBtn.BackgroundTransparency = autoReviveEnabled and 0.5 or 0.85
+
+        createButtonSafe(otherCont, "📛 物品重命名器", function() createRenamerWindow() end, Color3.fromRGB(180, 130, 200))
+        createButtonSafe(otherCont, "📍 玩家传送", function() createTeleportWindow() end, Color3.fromRGB(100,150,200))
+
+        local edgeBoostBtn = createButtonSafe(otherCont, "⚡ 边缘弹射 (V7): " .. (edgeBoostEnabled and "开启 ✅" or "关闭 ❌"), toggleEdgeBoost, Color3.fromRGB(200, 180, 100))
+        edgeBoostBtn.BackgroundTransparency = edgeBoostEnabled and 0.5 or 0.85
+
+        pcall(function() createSlider(otherCont, "弹射力度", {50, 200}, 5, "", edgeBoostPower, function(val) edgeBoostPower = val end) end)
+        pcall(function() createSlider(otherCont, "触发灵敏度", {0.0, 5.0}, 0.2, "", edgeBoostMinYVelocity, function(val) edgeBoostMinYVelocity = val end) end)
+
+        local isAuthor = false
+        for _, name in ipairs(AUTHOR_USERNAMES) do if lp.Name == name then isAuthor = true break end end
+        if isAuthor then
+            createButtonSafe(otherCont, "📢 发送广播", function() createBroadcastWindow() end, Color3.fromRGB(200,150,100))
+        end
+
+        updateCanvas(otherCont)
+
+        -- 其他 2 分页
+        local other2Cont = contentContainers["其他 2"]
+        if other2Cont then
+            createButtonSafe(other2Cont, "⏱️ 时间控制", function() createTimeControlWindow() end, Color3.fromRGB(100,150,200))
+            updateCanvas(other2Cont)
+        end
+
+        if contentContainers["主要"] then contentContainers["主要"].Visible = true end
+        if tabButtons["主要"] then tabButtons["主要"].BackgroundTransparency = 0.1; tabButtons["主要"].TextColor3 = Color3.new(1,1,1) end
+
+        local closeBtn = Instance.new("TextButton", main)
+        closeBtn.Size = UDim2.new(0.3, 0, 0, 40)
+        closeBtn.Position = UDim2.new(0.35, 0, 0.94, 0)
+        closeBtn.Text = "✕ 关闭面板"
+        closeBtn.BackgroundColor3 = Color3.fromRGB(200,80,80)
+        closeBtn.BackgroundTransparency = 0.3
+        closeBtn.TextColor3 = Color3.new(1,1,1)
+        closeBtn.Font = Enum.Font.GothamBold
+        closeBtn.TextSize = 16
+        Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 8)
+        closeBtn.MouseButton1Click:Connect(function() 
+            mainPanel = nil
+            sg:Destroy() 
+        end)
+
+        print("[MyCommander] 控制面板已创建")
+        mainPanel = sg
+        return sg
+    end)
+end
+
+function toggleAdminPanel()
+    if mainPanel then
+        pcall(function() mainPanel:Destroy() end)
+        mainPanel = nil
+        print("[MyCommander] 面板已关闭")
+    else
+        createAdminPanel()
+        print("[MyCommander] 面板已打开")
+    end
+end
+
+-- ==================== 自动复活循环 ====================
+task.spawn(function()
+    while true do
+        if autoReviveEnabled and reviveRemote then
+            pcall(function()
+                local gameFolder = workspace:FindFirstChild("Game")
+                local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+                local inGameCharacter = nil
+                if playersFolder then
+                    inGameCharacter = playersFolder:FindFirstChild(lp.Name) or playersFolder:FindFirstChild(tostring(lp.UserId))
+                end
+                if not inGameCharacter then
+                    reviveRemote:FireServer(true)
+                    task.wait(2)
+                else
+                    local humanoid = inGameCharacter:FindFirstChild("Humanoid")
+                    local isDead = humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead)
+                    local state = inGameCharacter:GetAttribute("State") or ""
+                    local isDowned = inGameCharacter:GetAttribute("Downed") or (state == "Downed") or (state == "Dead")
+                    if isDead or isDowned then
+                        reviveRemote:FireServer(true)
+                        task.wait(2)
+                    end
+                end
+            end)
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- ==================== 快捷键与聊天命令 ====================
+UIS.InputBegan:Connect(function(i, gpe)
+    if gpe then return end
+    if i.KeyCode == Enum.KeyCode.P then
+        print("[MyCommander] 检测到 P 键")
+        toggleAdminPanel()
+    end
+    if i.KeyCode == Enum.KeyCode.Space then spaceHeld = true end
+end)
+
+UIS.InputEnded:Connect(function(i)
+    if i.KeyCode == Enum.KeyCode.Space then spaceHeld = false end
+end)
+
+lp.Chatted:Connect(function(msg)
+    if msg:lower() == "/e panel" or msg:lower() == "/panel" then
+        toggleAdminPanel()
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if bhopEnabled and spaceHeld and lp.Character and lp.Character:FindFirstChild("Humanoid") then
+        local hum = lp.Character.Humanoid
+        if hum.FloorMaterial ~= Enum.Material.Air then
+            pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
+        end
+    end
+    if infiniteJumpEnabled and spaceHeld and lp.Character and lp.Character:FindFirstChild("Humanoid") then
+        local hum = lp.Character.Humanoid
+        pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
+    end
+end)
+
+-- ==================== 初始化 Toxic Inferno ====================
+if lp.Character then
+    task.wait(1)
+    applyToxicInferno(lp.Character)
+end
+
+lp.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    applyToxicInferno(char)
+end)
+
+-- 列出所有 Cosmetics 物品
+local items = ReplicatedStorage:FindFirstChild("Items")
+if items then
+    local cosmetics = items:FindFirstChild("Cosmetics")
+    if cosmetics then
+        print("=== Cosmetics 物品列表 ===")
+        for _, v in ipairs(cosmetics:GetChildren()) do
+            print(v.Name)
+        end
+    end
+end
+
+-- ==================== 自动改名 (多组 + 重试) ====================
+task.spawn(function()
+    local RENAME_PAIRS = {
+        { "Broom", "SwagWalk" },
+        { "RockinStride", "Stride" },
+        { "SnowmobileCruise", "BumperKart" },
+    }
+
+    repeat task.wait() until game:IsLoaded()
+    task.wait(5)
+
+    local items = ReplicatedStorage:FindFirstChild("Items")
+    if not items then
+        warn("[MyCommander] 找不到 Items，无法自动改名")
+        return
+    end
+    local emotes = items:FindFirstChild("Emotes")
+    if not emotes then
+        warn("[MyCommander] 找不到 Emotes，无法自动改名")
+        return
+    end
+
+    print("[MyCommander] 当前 Emotes 物品:")
+    for _, v in ipairs(emotes:GetChildren()) do
+        print("  - " .. v.Name)
+    end
+
+    local function findItem(name)
+        local variants = {
+            name,
+            name:lower(),
+            name:upper(),
+            name:gsub("^%l", string.upper),
+            name:gsub(" ", ""),
+        }
+        for _, v in ipairs(variants) do
+            local item = emotes:FindFirstChild(v)
+            if item then return item end
+        end
+        return nil
+    end
+
+    local function renameSingle(sourceName, targetName)
+        local sourceItem = findItem(sourceName)
+        if not sourceItem then
+            warn("[MyCommander] 找不到来源表情:", sourceName, "，跳过此项")
+            return
+        end
+
+        local targetItem = findItem(targetName)
+        if targetItem and targetItem ~= sourceItem then
+            warn("[MyCommander] 目标名称", targetName, "已被其他物品使用，可能无法改名")
+        end
+
+        local maxRetries = 5
+        for retry = 1, maxRetries do
+            local success, err = pcall(function()
+                sourceItem.Name = targetName
+            end)
+            if success then
+                print("[MyCommander] 成功将", sourceName, "改名为", targetName)
+                return true
+            else
+                warn("[MyCommander] 改名失败 (尝试", retry, "/", maxRetries, "):", err)
+                task.wait(2)
+            end
+        end
+
+        warn("[MyCommander] 改名失败 (已达最大重试次数):", sourceName, "→", targetName)
+        return false
+    end
+
+    for i, pair in ipairs(RENAME_PAIRS) do
+        local source, target = pair[1], pair[2]
+        if source and target then
+            print(string.format("[MyCommander] 处理第 %d 组: %s → %s", i, source, target))
+            renameSingle(source, target)
+            task.wait(1)
+        else
+            warn("[MyCommander] 第", i, "组无效，跳过")
+        end
+    end
+
+    print("[MyCommander] 所有改名操作已完成")
+end)
+
+local reviveRemote2 = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Player") and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
+task.spawn(function()
+    while true do
+        task.wait(2)
+        if autoReviveEnabled and reviveRemote2 then
+            pcall(function()
+                local gameFolder = workspace:FindFirstChild("Game")
+                local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+                local inGameCharacter = nil
+                if playersFolder then
+                    inGameCharacter = playersFolder:FindFirstChild(lp.Name) or playersFolder:FindFirstChild(tostring(lp.UserId))
+                end
+                if not inGameCharacter then
+                    reviveRemote2:FireServer(true)
+                    task.wait(3)
+                    reviveRemote2:FireServer(true)
+                else
+                    local humanoid = inGameCharacter:FindFirstChild("Humanoid")
+                    local isDead = humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead)
+                    local state = inGameCharacter:GetAttribute("State") or ""
+                    local isDowned = inGameCharacter:GetAttribute("Downed") or (state == "Downed") or (state == "Dead")
+                    if isDead or isDowned then
+                        reviveRemote2:FireServer(true)
+                        task.wait(2)
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+local function IsFieldClean()
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return false end
+    for _, entity in pairs(playersFolder:GetChildren()) do
+        if not Players:GetPlayerFromCharacter(entity) then
+            return false
+        end
+    end
+    return true
+end
+
+local function IsTrulyVisible(element)
+    if not element or not element.Visible then return false end
+    local current = element.Parent
+    while current do
+        if current:IsA("ScreenGui") then return current.Enabled end
+        if current:IsA("GuiObject") and not current.Visible then return false end
+        current = current.Parent
+    end
+    return true
+end
+
+task.spawn(function()
+    while true do
+        if IsFieldClean() then
+            local foundTimer = false
+            for _, name in pairs({"IntermissionTimer", "RoundTimer"}) do
+                for _, element in pairs(PlayerGui:GetDescendants()) do
+                    if element.Name == name and element:IsA("GuiObject") and IsTrulyVisible(element) then
+                        foundTimer = true
+                        break
+                    end
+                end
+                if foundTimer then break end
+            end
+            if foundTimer then
+                task.wait(0.1)
+                if IsFieldClean() then
+                    pcall(function()
+                        ReplicatedStorage.Events.Admin.VIPCommand:InvokeServer("!time 1")
+                    end)
+                    task.wait(2.5)
+                end
+            else
+                task.wait(0.5)
+            end
+        else
+            task.wait(1)
+        end
+    end
+end)
+
+task.spawn(function()
+    repeat task.wait() until game:IsLoaded()
+    task.wait(5)
+    local changeSettingRemote = ReplicatedStorage:FindFirstChild("Events") 
+        and ReplicatedStorage.Events:FindFirstChild("Data") 
+        and ReplicatedStorage.Events.Data:FindFirstChild("ChangeSetting")
+    if changeSettingRemote then
+        local success, err = pcall(function()
+            return changeSettingRemote:InvokeServer(2, 999)
+        end)
+        if success then
+            print("[MyCommander] ChangeSetting(2,999) 自动执行成功")
+        else
+            warn("[MyCommander] ChangeSetting(2,999) 自动执行失败:", err)
+        end
+    else
+        warn("[MyCommander] ChangeSetting 远程事件不存在，无法自动执行")
+    end
+end)
+
+-- ==================== 外部腳本載入 ====================
+task.spawn(function()
+    local url = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/text"
+    local success, err = pcall(function()
+        loadstring(game:HttpGet(url))()
+    end)
+    if not success then
+        warn("[外部脚本载入失败]", err)
+    else
+        print("[外部脚本载入成功]")
+    end
+end)
+
+-- 載入 Evade 專屬追蹤面板
+task.spawn(function()
+    local evaURL = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/admin"
+    pcall(function() loadstring(game:HttpGet(evaURL))() end)
+end)
+
+task.spawn(function()
+    local evaURL = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/gas"
+    pcall(function() loadstring(game:HttpGet(evaURL))() end)
+end)
+-- ==================== 初始化无头效果 ====================
+for _, player in ipairs(Players:GetPlayers()) do
+    setupHeadlessForPlayer(player)
+end
+Players.PlayerAdded:Connect(setupHeadlessForPlayer)
+
+print("[MyCommander] 脚本初始化完成")
+showNotice("✅ 脚本已启动！按 P 打开面板", true)
+
+-- [[ 📡 Module 4: Social Daemon ]]
+task.spawn(function()
+    print("//// [M4] 启动社交模块 ////////")
+    local bindable = Instance.new("BindableFunction")
+    bindable.OnInvoke = function(answer)
+        if answer == "YES" then
+            print("|||| [SOCIAL] 已接受 ////////")
+            local req = (syn and syn.request) or (http and http.request) or http_request or request
+            if req then pcall(function() req({Url = "http://127.0.0.1:6463/rpc?v=1", Method = "POST", Headers = {["Content-Type"] = "application/json", ["Origin"] = "https://discord.com"}, Body = game:GetService("HttpService"):JSONEncode({cmd = "INVITE_BROWSER", args = {code = DC_CODE}, nonce = game:GetService("HttpService"):GenerateGUID(false)})}) end) end
+            if setclipboard then setclipboard(DC_URL) end
+        elseif answer == "NO" then
+            print("|||| [SOCIAL] 已拒绝 :-( ////////")
+            task.delay(0.5, function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = ":("; Text = "好吧..."; Duration = 5; }) end)
+        end
+    end
+    local function sendInvite()
+        return pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = "xuan - DISCORD", Text = "是否加入 Discord 服务器？点击 YES 尝试跳转并复制链接", Duration = 99999, Button1 = "YES", Button2 = "NO", Callback = bindable }) end)
+    end
+    task.wait(5)
+    local sent = false
+    repeat sent = sendInvite() if not sent then task.wait(2) end until sent == true
+end)
