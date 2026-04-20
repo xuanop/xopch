@@ -144,43 +144,27 @@ local teleportGui = nil
 local broadcastWindowActive = false
 local broadcastGui = nil
 
--- ==================== GAS 广播系统（完全自包含，无需外部 httpRequest） ====================
+-- ==================== GAS 广播系统（增强调试版） ====================
 print("[广播] 开始初始化...")
 
 -- 依赖检查
-if not HttpService then
-    warn("[广播] ❌ HttpService 未定义")
-    return
-end
-if not lp then
-    warn("[广播] ❌ lp 未定义")
-    return
-end
-if not showNotice then
-    warn("[广播] ⚠️ showNotice 未定义")
-end
+if not HttpService then warn("[广播] ❌ HttpService 未定义"); return end
+if not lp then warn("[广播] ❌ lp 未定义"); return end
+if not showNotice then warn("[广播] ⚠️ showNotice 未定义") end
 
--- 内置 HTTP 请求函数（独立版）
+-- 内置 HTTP 请求
 local function broadcastHttpRequest(method, url, body)
     local req = syn and syn.request or http_request or request or (http and http.request)
-    if not req then
-        warn("[广播] 找不到 HTTP 请求函数")
-        return nil
-    end
+    if not req then warn("[广播] 找不到 HTTP 请求函数"); return nil end
     local jsonBody = nil
     if body then
         local parts = {}
         for k, v in pairs(body) do
             local valueStr
-            if type(v) == "string" then
-                valueStr = '"' .. v:gsub('"', '\\"') .. '"'
-            elseif type(v) == "number" then
-                valueStr = tostring(v)
-            elseif type(v) == "boolean" then
-                valueStr = v and "true" or "false"
-            else
-                valueStr = '""'
-            end
+            if type(v) == "string" then valueStr = '"' .. v:gsub('"', '\\"') .. '"'
+            elseif type(v) == "number" then valueStr = tostring(v)
+            elseif type(v) == "boolean" then valueStr = v and "true" or "false"
+            else valueStr = '""' end
             table.insert(parts, '"' .. k .. '":' .. valueStr)
         end
         jsonBody = "{" .. table.concat(parts, ",") .. "}"
@@ -194,20 +178,13 @@ local function broadcastHttpRequest(method, url, body)
             Timeout = 10
         })
     end)
-    if success and result then
-        return result
-    else
-        warn("[广播] HTTP 请求失败:", result)
-        return nil
-    end
+    if success and result then return result
+    else warn("[广播] HTTP 请求失败:", result); return nil end
 end
 
--- 复用玩家追踪的 GAS_URL（或可独立指定）
-local GAS_BROADCAST_URL = GAS_URL  -- 共用同一个 GAS
--- 若要独立广播 GAS，取消下行注释并填写：
--- GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"
+-- 请在此处填写您的独立广播 GAS URL
+local GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"
 
--- 内置 URL 编码
 local function urlEncode(s)
     local result = ""
     for i = 1, #s do
@@ -224,26 +201,35 @@ end
 
 _G.lastBroadcast = _G.lastBroadcast or ""
 
--- 发送广播
 function sendBroadcast(message)
     if message == "" then
         if showNotice then showNotice("⚠️ 消息不能为空", true) end
         return
     end
     local url = GAS_BROADCAST_URL .. "?action=sendBroadcast&msg=" .. urlEncode(message) .. "&sender=" .. urlEncode(lp.Name)
-    print("[广播] 发送请求...")
+    print("[广播] 发送 URL:", url)
     local res = broadcastHttpRequest("GET", url, nil)
-    if res and res.Body then
-        local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-        if success and data and data.result == "success" then
-            if showNotice then showNotice("✅ 广播已发送", true) end
-            if broadcastGui then
-                broadcastGui:Destroy()
-                broadcastWindowActive = false
-                broadcastGui = nil
+    if res then
+        print("[广播] 响应码:", res.StatusCode)
+        print("[广播] 响应体:", res.Body)
+        if res.StatusCode == 200 and res.Body then
+            local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
+            if success then
+                if data.result == "success" then
+                    if showNotice then showNotice("✅ 广播已发送", true) end
+                    if broadcastGui then
+                        broadcastGui:Destroy()
+                        broadcastWindowActive = false
+                        broadcastGui = nil
+                    end
+                else
+                    if showNotice then showNotice("❌ 广播发送失败: " .. (data.message or "未知错误"), true) end
+                end
+            else
+                if showNotice then showNotice("❌ 响应解析失败", true) end
             end
         else
-            if showNotice then showNotice("❌ 广播发送失败: " .. (data and data.message or "未知错误"), true) end
+            if showNotice then showNotice("❌ 广播发送失败（HTTP " .. (res.StatusCode or "无响应") .. "）", true) end
         end
     else
         if showNotice then showNotice("❌ 广播发送失败（网络错误）", true) end
@@ -278,14 +264,12 @@ task.spawn(function()
                 end
             end
         end)
-        if not success then
-            warn("[广播] 接收轮询出错:", result)
-        end
+        if not success then warn("[广播] 接收轮询出错:", result) end
         task.wait(3)
     end
 end)
 
-print("[广播] 初始化完成")
+print("[广播] 初始化完成（调试模式）")
 
 
 -- ==================== 发送广播窗口 ====================
