@@ -144,11 +144,37 @@ local teleportGui = nil
 local broadcastWindowActive = false
 local broadcastGui = nil
 
--- ==================== GAS 广播系统（纯 GET 版，自包含 urlEncode） ====================
-local GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"  -- 替换为新 URL
-_G.lastBroadcast = _G.lastBroadcast or ""
+-- ==================== GAS 广播系统（自检版） ====================
+print("[广播] 开始初始化...")
 
--- 内置 URL 编码函数
+-- 依赖检查
+if not GAS_URL then
+    warn("[广播] ❌ GAS_URL 未定义，请确保在配置区定义了 GAS_URL")
+    return
+end
+local GAS_BROADCAST_URL = GAS_URL  -- 复用主脚本的 GAS_URL，或您可手动指定新 URL
+-- 若需要独立 URL，请取消下行注释并填写
+-- GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"
+
+if not httpRequest then
+    warn("[广播] ❌ httpRequest 函数未定义，广播系统无法工作")
+    return
+end
+if not HttpService then
+    warn("[广播] ❌ HttpService 未定义")
+    return
+end
+if not lp then
+    warn("[广播] ❌ lp (本地玩家) 未定义")
+    return
+end
+if not showNotice then
+    warn("[广播] ⚠️ showNotice 未定义，广播通知将无法显示")
+end
+
+print("[广播] 依赖检查通过")
+
+-- 内置 URL 编码
 local function urlEncode(s)
     local result = ""
     for i = 1, #s do
@@ -163,40 +189,43 @@ local function urlEncode(s)
     return result
 end
 
--- 发送广播（GET 方式）
+_G.lastBroadcast = _G.lastBroadcast or ""
+
+-- 发送广播
 local function sendBroadcast(message)
     if message == "" then
-        showNotice("⚠️ 消息不能为空", true)
+        if showNotice then showNotice("⚠️ 消息不能为空", true) end
         return
     end
     local url = GAS_BROADCAST_URL .. "?action=sendBroadcast&msg=" .. urlEncode(message) .. "&sender=" .. urlEncode(lp.Name)
+    print("[广播] 发送请求 URL:", url:sub(1, 100) .. "...")
     local res = httpRequest("GET", url, nil)
     if res and res.Body then
-        local data = HttpService:JSONDecode(res.Body)
-        if data and data.result == "success" then
-            showNotice("✅ 广播已发送", true)
+        local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
+        if success and data and data.result == "success" then
+            if showNotice then showNotice("✅ 广播已发送", true) end
             if broadcastGui then
                 broadcastGui:Destroy()
                 broadcastWindowActive = false
                 broadcastGui = nil
             end
         else
-            showNotice("❌ 广播发送失败: " .. (data.message or "未知错误"), true)
+            if showNotice then showNotice("❌ 广播发送失败: " .. (data and data.message or "未知错误"), true) end
         end
     else
-        showNotice("❌ 广播发送失败（网络错误）", true)
+        if showNotice then showNotice("❌ 广播发送失败（网络错误）", true) end
     end
 end
 
--- 接收广播（GET 轮询）
+-- 接收广播轮询
 task.spawn(function()
     task.wait(2)
     local res = httpRequest("GET", GAS_BROADCAST_URL .. "?action=getBroadcast")
     if res and res.Body then
-        local data = HttpService:JSONDecode(res.Body)
-        if data and data.msg then
+        local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
+        if success and data and data.msg then
             _G.lastBroadcast = data.msg
-            print("[MyCommander] 广播记录已初始化:", _G.lastBroadcast)
+            print("[广播] 初始化记录:", _G.lastBroadcast)
         end
     end
     task.wait(1)
@@ -211,17 +240,19 @@ task.spawn(function()
                     if data.sender == "xuan_1529" then
                         displayMsg = displayMsg .. " (xuan)"
                     end
-                    showNotice("📢 广播: " .. displayMsg, false)
-                    print("[MyCommander] 收到广播:", data.msg, "来自:", data.sender)
+                    if showNotice then showNotice("📢 广播: " .. displayMsg, false) end
+                    print("[广播] 收到广播:", data.msg, "来自:", data.sender)
                 end
             end
         end)
         if not success then
-            warn("[MyCommander] 广播接收错误:", result)
+            warn("[广播] 接收轮询出错:", result)
         end
         task.wait(3)
     end
 end)
+
+print("[广播] 初始化完成")
 
 -- ==================== 发送广播窗口 ====================
 local function createBroadcastWindow()
