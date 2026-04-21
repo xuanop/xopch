@@ -254,7 +254,7 @@ task.spawn(function()
             end
         end)
         if not success then warn("[广播] 接收轮询出错:", result) end
-        task.wait(1)
+        task.wait(0.5)
     end
 end)
 
