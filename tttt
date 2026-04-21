@@ -2014,7 +2014,7 @@ local function createAdminPanel()
 
         updateCanvas(otherCont)
 
--- 其他 2 分页
+        -- 其他 2 分页
         local other2Cont = contentContainers["其他 2"]
         if other2Cont then
             -- 高空挂机开关
@@ -2024,18 +2024,18 @@ local function createAdminPanel()
                     btn.Text = "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌")
                     btn.BackgroundTransparency = autoFarmEnabled and 0.5 or 0.85
                 end, Color3.fromRGB(100, 150, 200))
-    
-    -- 自动救助队友开关
-    createButtonSafe(other2Cont, "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌"), 
-        function(btn) 
-            toggleAutoRescue()
-            btn.Text = "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌")
-            btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
-        end, Color3.fromRGB(200, 100, 100))
-    
-    updateCanvas(other2Cont)
-end
-    end, Color3.fromRGB(200, 100, 100))
+            
+            -- 自动救助队友开关
+            createButtonSafe(other2Cont, "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌"), 
+                function(btn) 
+                    toggleAutoRescue()
+                    btn.Text = "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌")
+                    btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
+                end, Color3.fromRGB(200, 100, 100))
+
+            updateCanvas(other2Cont)
+        end
+
         if contentContainers["主要"] then contentContainers["主要"].Visible = true end
         if tabButtons["主要"] then tabButtons["主要"].BackgroundTransparency = 0.1; tabButtons["主要"].TextColor3 = Color3.new(1,1,1) end
 
