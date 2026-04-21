@@ -2223,44 +2223,95 @@ function toggleAutoRescue()
     end
 end
 
--- ==================== 高空挂机刷经验（安全版） ====================
+-- ==================== 高空挂机优化版 ====================
+-- 特性：Tween 平滑移动、动态安全高度、防 AFK 协同、随机轨迹
 local autoFarmEnabled = false
 local farmConnection = nil
+local farmTween = nil
 
+-- 动态获取地图最高点 + 随机偏移
 local function findSafeSkyPosition()
-    local highestY = 500
-    pcall(function()
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and obj.Position.Y > highestY then
-                highestY = obj.Position.Y
-            end
+    local highestY = 100  -- 默认最低安全高度
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Position.Y > highestY then
+            highestY = obj.Position.Y
         end
-    end)
-    return Vector3.new(0, highestY + 50, 0)
+    end
+    -- 在地图最高点上方 80~120 格范围内随机，避免所有挂机者堆在同一位置
+    local offsetY = math.random(80, 120)
+    local offsetX = math.random(-30, 30)
+    local offsetZ = math.random(-30, 30)
+    return Vector3.new(offsetX, highestY + offsetY, offsetZ)
 end
 
-local function startAutoFarm()
-    if farmConnection then
-        pcall(function() farmConnection:Disconnect() end)
-        farmConnection = nil
+-- 使用 Tween 平滑传送到目标位置，避免瞬移被检测
+local function smoothTeleport(targetPos)
+    if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = lp.Character.HumanoidRootPart
+    -- 如果距离太远，直接传送；否则使用 Tween
+    local distance = (hrp.Position - targetPos).Magnitude
+    if distance > 200 then
+        hrp.CFrame = CFrame.new(targetPos)
+        return
     end
+    -- 取消之前的 Tween
+    if farmTween then farmTween:Cancel() end
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local goal = { CFrame = CFrame.new(targetPos) }
+    farmTween = TweenService:Create(hrp, tweenInfo, goal)
+    farmTween:Play()
+end
+
+-- 模拟自然的微小移动（防完全静止）
+local function naturalWobble()
+    if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = lp.Character.HumanoidRootPart
+    -- 随机微小速度，模拟玩家微调
+    hrp.Velocity = Vector3.new(
+        math.random(-5, 5),
+        math.random(-2, 2),
+        math.random(-5, 5)
+    )
+    -- 偶尔按下跳跃键，更像真人
+    if math.random(1, 10) == 1 then
+        pcall(function() VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame); task.wait(0.1); VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame) end)
+    end
+end
+
+-- 高空挂机主逻辑
+local function startAutoFarm()
+    if farmConnection then farmConnection:Disconnect() end
     farmConnection = RunService.Heartbeat:Connect(function()
         if not autoFarmEnabled then return end
         if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+
         local hrp = lp.Character.HumanoidRootPart
         local skyPos = findSafeSkyPosition()
-        if hrp.Position.Y < skyPos.Y - 10 then
-            hrp.CFrame = CFrame.new(skyPos) * CFrame.new(math.random(-20,20), 0, math.random(-20,20))
+
+        -- 如果高度过低，传送到安全高空
+        if hrp.Position.Y < skyPos.Y - 20 then
+            smoothTeleport(skyPos)
         else
-            hrp.Velocity = Vector3.new(math.random(-10,10), 5, math.random(-10,10))
+            -- 已在高空，进行随机微小移动和摆动
+            if math.random(1, 50) == 1 then
+                -- 偶尔小范围随机传送，模拟走动
+                local newPos = skyPos + Vector3.new(math.random(-15,15), math.random(-5,5), math.random(-15,15))
+                smoothTeleport(newPos)
+            else
+                naturalWobble()
+            end
         end
     end)
 end
 
 local function stopAutoFarm()
     if farmConnection then
-        pcall(function() farmConnection:Disconnect() end)
+        farmConnection:Disconnect()
         farmConnection = nil
+    end
+    if farmTween then
+        farmTween:Cancel()
+        farmTween = nil
     end
 end
 
@@ -2268,12 +2319,11 @@ local function toggleAutoFarm()
     autoFarmEnabled = not autoFarmEnabled
     if autoFarmEnabled then
         startAutoFarm()
-        showNotice("☁️ 高空挂机已开启", true)
+        showNotice("☁️ 高空挂机已开启（优化版）", true)
     else
         stopAutoFarm()
         showNotice("💤 高空挂机已关闭", true)
     end
-    -- 更新按钮文字（如果需要动态更新面板按钮，可以留空，按钮回调里已经做了）
 end
 
 -- ==================== 快捷键与聊天命令 ====================
