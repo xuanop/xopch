@@ -1,7 +1,8 @@
 --[[
-   🔑 Evade 玩家追蹤系統（精簡版 - 無公告/私信）
-   - 普通用戶：每10秒後台上報
-   - 開發者：按 Tab 打開管理面板（雙擊傳送 / 單擊複製ID）
+   🔑 Evade 玩家追蹤面板 (終極穩定版)
+   - 直接使用 GAS 返回數據，無客戶端去重
+   - 120 秒在線寬容，避免誤判 OFFLINE
+   - 復活立即上報，狀態實時更新
 --]]
 
 -- ==================== 配置區 ====================
@@ -63,7 +64,7 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- ==================== 簡易通知（僅用於傳送提示） ====================
+-- ==================== 簡易通知 ====================
 local function showNotice(msg)
     local container = isDeveloper and (syn and syn.protect_gui and game:GetService("CoreGui") or gethui and gethui() or lp:WaitForChild("PlayerGui")) or lp:WaitForChild("PlayerGui")
     local sg = container:FindFirstChild("EvadeNotice") or Instance.new("ScreenGui", container)
@@ -111,7 +112,7 @@ local function reportStatus()
         status = status,
         jobId = game.JobId,
         joinTime = SCRIPT_START,
-        lastUpdate = os.time(),   -- ✅ 新增：最後活動時間
+        lastUpdate = os.time(),
         sheetIndex = lp.UserId % 10
     }
 
@@ -129,67 +130,45 @@ task.spawn(function()
     end
 end)
 
--- 角色生成時立即上報 ALIVE
+-- 角色生成及復活時立即上報
 lp.CharacterAdded:Connect(function(character)
     task.wait(0.5)
     reportStatus()
-end)
-
--- 角色死亡時立即上報 DEAD
-lp.CharacterAdded:Connect(function(character)
     local humanoid = character:WaitForChild("Humanoid")
+    local lastHealth = humanoid.Health
+    humanoid.HealthChanged:Connect(function(newHealth)
+        if lastHealth <= 0 and newHealth > 0 then
+            task.wait(0.2)
+            reportStatus()
+        end
+        lastHealth = newHealth
+    end)
     humanoid.Died:Connect(function()
         reportStatus()
     end)
 end)
 
--- 角色复活检测
-lp.CharacterAdded:Connect(function(character)
-    local humanoid = character:WaitForChild("Humanoid")
-    local lastHealth = humanoid.Health
-    humanoid.HealthChanged:Connect(function(newHealth)
-        if lastHealth <= 0 and newHealth > 0 then
-            task.wait(0.2)  -- 稍等一瞬确保状态稳定
-            reportStatus()
-        end
-        lastHealth = newHealth
-    end)
-end)
-
 -- ==================== 增強版傳送 ====================
 local function safeTeleport(targetUserId, targetJobId)
-    print("[傳送] 目標 UserId:", targetUserId)
-    print("[傳送] 目標 JobId:", targetJobId)
-    print("[傳送] 當前 JobId:", game.JobId)
-
     if not targetJobId or targetJobId == "" then
         showNotice("❌ 目標伺服器資訊無效")
         return false
     end
-
     if targetJobId == game.JobId then
         showNotice("⚠️ 您已在該伺服器中")
         return false
     end
-
     showNotice("🚀 正在傳送到玩家所在伺服器...")
-    
     local success, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, lp)
     end)
-
-    if success then
-        return true
-    end
-
+    if success then return true end
     warn("[傳送] 傳送失敗:", err)
     showNotice("❌ 傳送失敗，玩家可能已離線或伺服器已滿")
-    
     if setclipboard then
         setclipboard(tostring(targetUserId))
         showNotice("📋 玩家 ID 已複製，可手動搜尋加入")
     end
-    
     return false
 end
 
@@ -258,28 +237,16 @@ local function fetchOnlinePlayers()
     local rawPlayers = data.players or {}
     
     print("[診斷] GAS 返回玩家總數:", #rawPlayers)
-    local unique = {}
-    for _, p in ipairs(rawPlayers) do
-        local uid = tostring(p.userId)
-        if uid and uid ~= "" then
-            local pTime = p.lastUpdate or 0
-            local eTime = unique[uid] and unique[uid].lastUpdate or 0
-            if not unique[uid] or pTime > eTime then unique[uid] = p end
-        end
-    end
-    local final = {}
-    for _, p in pairs(unique) do table.insert(final, p) end
-    
-    print("[診斷] 去重後玩家數量:", #final)
-    for i, p in ipairs(final) do
+    -- 不再手動去重，完全信任 GAS 已去重
+    for i, p in ipairs(rawPlayers) do
         local lastUp = tonumber(p.lastUpdate) or 0
         local diff = os.time() - lastUp
         print(string.format("  [%d] %s (ID:%s) lastUpdate:%s diff:%d秒",
             i, tostring(p.username), tostring(p.userId), tostring(lastUp), diff))
     end
     
-    table.sort(final, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
-    return final
+    table.sort(rawPlayers, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
+    return rawPlayers
 end
 
 local function updateCache()
@@ -298,19 +265,13 @@ local function renderPlayerList()
     local now = os.time()
     local visibleCount = 0
 
-    print("[在线调试] ========== 开始渲染，当前时间戳:", now)
-
     for _, info in ipairs(cachedPlayers) do
         local success = pcall(function()
             local userId = tonumber(info.userId)
             local isSelf = (userId == lp.UserId)
-            local lastUpdate = tonumber(info.lastUpdate)
-            if not lastUpdate then
-                lastUpdate = tonumber(info.joinTime) or now
-            end
+            local lastUpdate = tonumber(info.lastUpdate) or now
             local diff = now - lastUpdate
-            -- 超过 20 秒未更新则视为离线，直接不显示（自己除外）
-            local isOnline = (diff <= 20)
+            local isOnline = (diff <= 120)  -- 120 秒寬容
 
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
@@ -370,7 +331,6 @@ local function renderPlayerList()
         emptyBtn.ZIndex = 10
         Instance.new("UICorner", emptyBtn).CornerRadius = UDim.new(0, 6)
     end
-    print("[在线调试] ========== 渲染完成，显示玩家数:", visibleCount)
 end
 
 -- 背景刷新緩存
@@ -391,7 +351,7 @@ local function startUIRefresh()
         while screenGui and screenGui.Enabled do
             updateCache()
             renderPlayerList()
-            task.wait(1)   -- 每 1 秒刷新畫面
+            task.wait(1)
         end
         uiRefreshLoop = nil
     end)
@@ -415,4 +375,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("✅ 開發者面板已載入，按 Tab 鍵開啟")
+print("✅ 終極穩定版面板已載入，按 Tab 開啟")
