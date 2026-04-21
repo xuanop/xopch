@@ -1482,9 +1482,22 @@ function startAutoRescue()
     rescueConnection = RunService.Heartbeat:Connect(function()
         if not autoRescueEnabled then return end
         if isRescuing then return end
+
+        -- 🔥 检查自身状态：无角色、已死亡、已倒地时不执行救助
+        if not lp.Character then return end
+        local myHumanoid = lp.Character:FindFirstChild("Humanoid")
+        if not myHumanoid then return end
+        if myHumanoid.Health <= 0 then return end
+        local myState = lp.Character:GetAttribute("State") or ""
+        local myDowned = lp.Character:GetAttribute("Downed")
+        if myDowned or myState == "Downed" or myState == "Dead" then
+            return
+        end
+
         local downedPlayer = findNearestDowned()
         if downedPlayer then print("[自动救助] 发现倒地玩家:", downedPlayer.Name) end
         if not downedPlayer then return end
+
         isRescuing = true
         task.spawn(function()
             local targetCharacter = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Players") and (workspace.Game.Players:FindFirstChild(downedPlayer.Name) or workspace.Game.Players:FindFirstChild(tostring(downedPlayer.UserId)))
@@ -1494,13 +1507,13 @@ function startAutoRescue()
                     if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                         print("[自动救助] 传送到", downedPlayer.Name, "身边")
                         lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
-                        task.wait(0.1)   -- 稳定传送位置
+                        task.wait(0.1)
                         lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
-                        task.wait(0.05)  -- 面向目标
+                        task.wait(0.05)
                         print("[自动救助] 按下 E 键救助")
                         pressE()
                         showNotice("🚑 正在救助 " .. downedPlayer.Name, true)
-                        task.wait(0.05)  -- 🔥 极短冷却，救助下一人
+                        task.wait(0.05)
                     end
                 end
             end
