@@ -2017,10 +2017,9 @@ local function createAdminPanel()
         -- 其他 2 分页
         local other2Cont = contentContainers["其他 2"]
         if other2Cont then
-            createButtonSafe(other2Cont, "⏱️ 时间控制", function() createTimeControlWindow() end, Color3.fromRGB(100,150,200))
-            updateCanvas(other2Cont)
-        end
 
+        btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
+    end, Color3.fromRGB(200, 100, 100))
         if contentContainers["主要"] then contentContainers["主要"].Visible = true end
         if tabButtons["主要"] then tabButtons["主要"].BackgroundTransparency = 0.1; tabButtons["主要"].TextColor3 = Color3.new(1,1,1) end
 
@@ -2085,6 +2084,179 @@ task.spawn(function()
         task.wait(0.5)
     end
 end)
+
+-- ==================== 自动救助倒地队友 ====================
+local autoRescueEnabled = false
+local isRescuing = false
+local rescueConnection = nil
+
+local function getDownedPlayers()
+    local downedList = {}
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return downedList end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == lp then continue end
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            local isDowned = character:GetAttribute("Downed")
+            local state = character:GetAttribute("State")
+            local health = humanoid and humanoid.Health or 100
+            -- 判断倒地：血量<=0 或 Downed 属性为 true 或 State 为 Downed
+            if health <= 0 or isDowned or state == "Downed" then
+                table.insert(downedList, player)
+            end
+        end
+    end
+    return downedList
+end
+
+local function findNearestDowned()
+    local nearest = nil
+    local minDist = math.huge
+    local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
+    if not myPos then return nil end
+
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return nil end
+
+    for _, player in ipairs(getDownedPlayers()) do
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist = (myPos - hrp.Position).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    nearest = player
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+local function pressE()
+    -- 模拟按下 E 键（交互键）
+    pcall(function()
+        local VirtualInputManager = game:GetService("VirtualInputManager")
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
+    end)
+end
+
+local function startAutoRescue()
+    if rescueConnection then rescueConnection:Disconnect() end
+    rescueConnection = RunService.Heartbeat:Connect(function()
+        if not autoRescueEnabled then return end
+        if isRescuing then return end
+        
+        local downedPlayer = findNearestDowned()
+        if not downedPlayer then return end
+        
+        isRescuing = true
+        task.spawn(function()
+            -- 传送到倒地玩家身边
+            local targetCharacter = workspace:FindFirstChild("Game"):FindFirstChild("Players"):FindFirstChild(downedPlayer.Name) or workspace.Game.Players:FindFirstChild(tostring(downedPlayer.UserId))
+            if targetCharacter then
+                local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
+                if targetHRP then
+                    -- 使用脚本自带的传送功能（同服务器内直接设置 CFrame）
+                    if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                        lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3) -- 传送到目标旁边
+                        task.wait(0.3)
+                        -- 面向目标
+                        lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
+                        task.wait(0.2)
+                        -- 按下 E 救人
+                        pressE()
+                        showNotice("🚑 正在救助 " .. downedPlayer.Name, true)
+                        task.wait(2) -- 等待救人动画完成
+                    end
+                end
+            end
+            isRescuing = false
+        end)
+    end)
+end
+
+local function stopAutoRescue()
+    if rescueConnection then
+        rescueConnection:Disconnect()
+        rescueConnection = nil
+    end
+    isRescuing = false
+end
+
+local function toggleAutoRescue()
+    autoRescueEnabled = not autoRescueEnabled
+    if autoRescueEnabled then
+        startAutoRescue()
+        showNotice("✅ 自动救助已开启", true)
+    else
+        stopAutoRescue()
+        showNotice("❌ 自动救助已关闭", true)
+    end
+end
+
+-- ==================== 高空挂机刷经验 ====================
+local autoFarmEnabled = false
+local farmConnection = nil
+
+-- 寻找地图最高点（安全挂机位置）
+local function findSafeSkyPosition()
+    -- 方法1：直接使用一个极高的固定坐标（大多数地图适用）
+    -- 方法2：动态检测地图最高部件 + 偏移
+    local highestY = 500 -- 默认高度
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Position.Y > highestY then
+            highestY = obj.Position.Y
+        end
+    end
+    -- 返回地图最高点上方 50 格的位置，避免碰到天花板
+    return Vector3.new(0, highestY + 50, 0)
+end
+
+local function startAutoFarm()
+    if farmConnection then farmConnection:Disconnect() end
+    farmConnection = RunService.Heartbeat:Connect(function()
+        if not autoFarmEnabled then return end
+        if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+        
+        local hrp = lp.Character.HumanoidRootPart
+        local skyPos = findSafeSkyPosition()
+        
+        -- 如果当前高度低于目标高度，直接传送到天上
+        if hrp.Position.Y < skyPos.Y - 10 then
+            hrp.CFrame = CFrame.new(skyPos) * CFrame.new(math.random(-20,20), 0, math.random(-20,20))
+        else
+            -- 已经在高空，随机小范围移动避免完全静止
+            hrp.Velocity = Vector3.new(math.random(-10,10), 5, math.random(-10,10))
+        end
+    end)
+end
+
+local function stopAutoFarm()
+    if farmConnection then
+        farmConnection:Disconnect()
+        farmConnection = nil
+    end
+end
+
+local function toggleAutoFarm()
+    autoFarmEnabled = not autoFarmEnabled
+    if autoFarmEnabled then
+        startAutoFarm()
+        showNotice("☁️ 高空挂机已开启", true)
+    else
+        stopAutoFarm()
+        showNotice("💤 高空挂机已关闭", true)
+    end
+end
 
 -- ==================== 快捷键与聊天命令 ====================
 UIS.InputBegan:Connect(function(i, gpe)
