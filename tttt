@@ -1350,9 +1350,9 @@ local function findSafeSkyPosition()
             highestY = obj.Position.Y
         end
     end
-    local offsetY = math.random(15, 30)
-    local offsetX = math.random(-20, 20)
-    local offsetZ = math.random(-20, 20)
+    local offsetY = 20   -- 固定在地图最高点上方 20 格
+    local offsetX = 0    -- 水平 X 方向不偏移
+    local offsetZ = 0    -- 水平 Z 方向不偏移
     return Vector3.new(offsetX, highestY + offsetY, offsetZ)
 end
 
@@ -2427,9 +2427,9 @@ local function findSafeSkyPosition()
         end
     end
     -- 在地图最高点上方 80~120 格范围内随机，避免所有挂机者堆在同一位置
-    local offsetY = math.random(15, 30)
-    local offsetX = math.random(-20, 20)
-    local offsetZ = math.random(-20, 20)
+    local offsetY = 20   -- 固定在地图最高点上方 20 格
+    local offsetX = 0    -- 水平 X 方向不偏移
+    local offsetZ = 0    -- 水平 Z 方向不偏移
     return Vector3.new(offsetX, highestY + offsetY, offsetZ)
 end
 
