@@ -143,6 +143,19 @@ lp.CharacterAdded:Connect(function(character)
     end)
 end)
 
+-- 角色复活检测
+lp.CharacterAdded:Connect(function(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    local lastHealth = humanoid.Health
+    humanoid.HealthChanged:Connect(function(newHealth)
+        if lastHealth <= 0 and newHealth > 0 then
+            task.wait(0.2)  -- 稍等一瞬确保状态稳定
+            reportStatus()
+        end
+        lastHealth = newHealth
+    end)
+end)
+
 -- ==================== 增強版傳送 ====================
 local function safeTeleport(targetUserId, targetJobId)
     print("[傳送] 目標 UserId:", targetUserId)
