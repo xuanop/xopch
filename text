@@ -249,11 +249,25 @@ local function fetchOnlinePlayers()
     return rawPlayers
 end
 
+local emptyCacheCount = 0
 local function updateCache()
     if cacheLock then return false end
     cacheLock = true
     local success, newData = pcall(fetchOnlinePlayers)
-    cachedPlayers = success and newData or {}
+    if success then
+        if #newData == 0 then
+            emptyCacheCount = emptyCacheCount + 1
+            if emptyCacheCount >= 2 then
+                cachedPlayers = {}  -- 连续两次为空才清空
+            end
+        else
+            emptyCacheCount = 0
+            cachedPlayers = newData
+        end
+    else
+        warn("fetchOnlinePlayers 出错:", newData)
+        -- 请求失败时不清空缓存，保留旧数据
+    end
     cacheLock = false
     return success
 end
@@ -271,7 +285,7 @@ local function renderPlayerList()
             local isSelf = (userId == lp.UserId)
             local lastUpdate = tonumber(info.lastUpdate) or now
             local diff = now - lastUpdate
-            local isOnline = (diff <= 120)  -- 120 秒寬容
+            local isOnline = (diff <= 60)  -- 120 秒寬容
 
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
