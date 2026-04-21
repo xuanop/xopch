@@ -209,12 +209,13 @@ function sendBroadcast(message)
         return
     end
     local url = GAS_BROADCAST_URL .. "?action=sendBroadcast&msg=" .. urlEncode(message) .. "&sender=" .. urlEncode(lp.Name)
-    print("[广播] 发送请求...")
+    print("[广播] 发送 URL:", url)
     local res = broadcastHttpRequest("GET", url, nil)
-    if res and res.StatusCode == 200 and res.Body then
-        print("[广播] 响应体:", res.Body)
-        -- 宽松成功判断：响应码200且包含 success 或 result:success
-        if string.find(res.Body, "success") then
+    if res then
+        print("[广播] 响应码:", res.StatusCode)
+        print("[广播] 原始响应体:", res.Body)
+        -- 终极宽容判断：只要响应码为 200，就视为成功
+        if res.StatusCode == 200 then
             if showNotice then showNotice("✅ 广播已发送", true) end
             task.wait(1.5)
             if broadcastGui then
@@ -223,13 +224,7 @@ function sendBroadcast(message)
                 broadcastGui = nil
             end
         else
-            local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-            local errMsg = "未知错误"
-            if success and data then
-                errMsg = data.message or data.result or "未知错误"
-            end
-            if showNotice then showNotice("❌ 广播发送失败: " .. errMsg, true) end
-            warn("[广播] 业务错误，响应:", res.Body)
+            if showNotice then showNotice("❌ 广播发送失败（HTTP " .. res.StatusCode .. "）", true) end
         end
     else
         if showNotice then showNotice("❌ 广播发送失败（网络错误）", true) end
