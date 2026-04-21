@@ -2031,7 +2031,6 @@ local function createAdminPanel()
                     toggleAutoRescue()
                     btn.Text = "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌")
                     btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
-                end, Color3.fromRGB(200, 100, 100))
 
             updateCanvas(other2Cont)
         end
