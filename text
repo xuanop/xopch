@@ -291,19 +291,13 @@ local function renderPlayerList()
         local success = pcall(function()
             local userId = tonumber(info.userId)
             local isSelf = (userId == lp.UserId)
-            -- 关键：确保 lastUpdate 被正确读取并转为数字
             local lastUpdate = tonumber(info.lastUpdate)
             if not lastUpdate then
-                -- 如果缺失，使用 joinTime 作为后备，并输出警告
                 lastUpdate = tonumber(info.joinTime) or now
-                print("[在线调试] ⚠️ 玩家", info.username, "缺少 lastUpdate，使用 joinTime:", lastUpdate)
             end
             local diff = now - lastUpdate
-            -- 与 GAS 端完全一致：600 秒内视为在线
-            local isOnline = (diff <= 600)
-
-            print(string.format("[在线调试] 玩家:%s, isSelf:%s, lastUpdate:%s, now:%s, diff:%s秒, isOnline:%s",
-                tostring(info.username), tostring(isSelf), tostring(lastUpdate), now, diff, tostring(isOnline)))
+            -- 超过 20 秒未更新则视为离线，直接不显示（自己除外）
+            local isOnline = (diff <= 20)
 
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
@@ -314,21 +308,20 @@ local function renderPlayerList()
                 btn.ZIndex = 10
                 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
-                local baseTime = isOnline and tonumber(info.joinTime) or lastUpdate
-                baseTime = baseTime or now
+                local baseTime = tonumber(info.joinTime) or now
                 local diffTime = math.max(0, now - baseTime)
                 local d = math.floor(diffTime / 86400)
                 local h = math.floor((diffTime % 86400) / 3600)
                 local m = math.floor((diffTime % 3600) / 60)
                 local s = math.floor(diffTime % 60)
 
-                local statusText = isOnline and (info.status ~= "" and info.status or "ALIVE") or "OFFLINE"
-                local timerText = isOnline and string.format("⏱️ %dd %dh %dm %ds", d, h, m, s)
-                                            or string.format("💤 離線 %dd %dh %dm %ds", d, h, m, s)
+                local statusText = info.status or "ALIVE"
+                local timerText = string.format("⏱️ %dd %dh %dm %ds", d, h, m, s)
 
                 btn.Text = string.format("👤 %s\n(@%s)\nID: %s\nStatus: %s\n%s",
-                    tostring(info.displayName), tostring(info.username), tostring(userId), tostring(statusText), timerText)
-                btn.TextColor3 = isOnline and Color3.new(1, 1, 1) or Color3.fromRGB(180, 180, 180)
+                    tostring(info.displayName), tostring(info.username), tostring(userId),
+                    tostring(statusText), timerText)
+                btn.TextColor3 = Color3.new(1, 1, 1)
                 btn.TextSize = 15
                 btn.Font = Enum.Font.GothamBold
                 btn.TextWrapped = true
@@ -340,7 +333,7 @@ local function renderPlayerList()
                         if isOnline and info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
                             showNotice("正在追蹤玩家...")
                             safeTeleport(userId, info.jobId)
-                        elseif not isOnline then
+                        else
                             showNotice("❌ 玩家已離線，無法追蹤")
                         end
                     else
