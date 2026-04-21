@@ -1494,13 +1494,13 @@ function startAutoRescue()
                     if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                         print("[自动救助] 传送到", downedPlayer.Name, "身边")
                         lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
-                        task.wait(0.3)
+                        task.wait(0.1)   -- 稳定传送位置
                         lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
-                        task.wait(0.2)
+                        task.wait(0.05)  -- 面向目标
                         print("[自动救助] 按下 E 键救助")
                         pressE()
                         showNotice("🚑 正在救助 " .. downedPlayer.Name, true)
-                        task.wait(2)
+                        task.wait(0.05)  -- 🔥 极短冷却，救助下一人
                     end
                 end
             end
