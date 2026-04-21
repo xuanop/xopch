@@ -2019,11 +2019,11 @@ local function createAdminPanel()
         if other2Cont then
             -- 高空挂机开关
             createButtonSafe(other2Cont, "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌"), 
-                function(btn) 
-                    toggleAutoFarm()
-                    btn.Text = "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌")
-                    btn.BackgroundTransparency = autoFarmEnabled and 0.5 or 0.85
-                end, Color3.fromRGB(100, 150, 200))
+    function(btn) 
+        pcall(toggleAutoFarm)
+        btn.Text = "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = autoFarmEnabled and 0.5 or 0.85
+    end, Color3.fromRGB(100, 150, 200))
             
             -- 自动救助队友开关
             createButtonSafe(other2Cont, "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌"), 
@@ -2223,51 +2223,49 @@ function toggleAutoRescue()
     end
 end
 
--- ==================== 高空挂机刷经验（调试增强版） ====================
+-- ==================== 高空挂机刷经验（安全版） ====================
 local autoFarmEnabled = false
 local farmConnection = nil
 
 local function findSafeSkyPosition()
     local highestY = 500
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and obj.Position.Y > highestY then
-            highestY = obj.Position.Y
+    pcall(function()
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.Position.Y > highestY then
+                highestY = obj.Position.Y
+            end
         end
-    end
+    end)
     return Vector3.new(0, highestY + 50, 0)
 end
 
 local function startAutoFarm()
-    if farmConnection then farmConnection:Disconnect() end
-    print("[高空挂机] 启动挂机循环...")
+    if farmConnection then
+        pcall(function() farmConnection:Disconnect() end)
+        farmConnection = nil
+    end
     farmConnection = RunService.Heartbeat:Connect(function()
         if not autoFarmEnabled then return end
         if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
-        
         local hrp = lp.Character.HumanoidRootPart
         local skyPos = findSafeSkyPosition()
-        
         if hrp.Position.Y < skyPos.Y - 10 then
             hrp.CFrame = CFrame.new(skyPos) * CFrame.new(math.random(-20,20), 0, math.random(-20,20))
-            print("[高空挂机] 传送到高空:", skyPos)
         else
             hrp.Velocity = Vector3.new(math.random(-10,10), 5, math.random(-10,10))
         end
     end)
-    print("[高空挂机] 循环已启动")
 end
 
 local function stopAutoFarm()
     if farmConnection then
-        farmConnection:Disconnect()
+        pcall(function() farmConnection:Disconnect() end)
         farmConnection = nil
-        print("[高空挂机] 循环已停止")
     end
 end
 
-function toggleAutoFarm()
+local function toggleAutoFarm()
     autoFarmEnabled = not autoFarmEnabled
-    print("[高空挂机] 状态切换为:", autoFarmEnabled and "开启" or "关闭")
     if autoFarmEnabled then
         startAutoFarm()
         showNotice("☁️ 高空挂机已开启", true)
@@ -2275,6 +2273,7 @@ function toggleAutoFarm()
         stopAutoFarm()
         showNotice("💤 高空挂机已关闭", true)
     end
+    -- 更新按钮文字（如果需要动态更新面板按钮，可以留空，按钮回调里已经做了）
 end
 
 -- ==================== 快捷键与聊天命令 ====================
