@@ -2101,7 +2101,7 @@ task.spawn(function()
     end
 end)
 
--- ==================== 自动救助倒地队友 ====================
+-- ==================== 自动救助倒地队友（调试增强版） ====================
 local autoRescueEnabled = false
 local isRescuing = false
 local rescueConnection = nil
@@ -2120,7 +2120,6 @@ local function getDownedPlayers()
             local isDowned = character:GetAttribute("Downed")
             local state = character:GetAttribute("State")
             local health = humanoid and humanoid.Health or 100
-            -- 判断倒地：血量<=0 或 Downed 属性为 true 或 State 为 Downed
             if health <= 0 or isDowned or state == "Downed" then
                 table.insert(downedList, player)
             end
@@ -2156,7 +2155,6 @@ local function findNearestDowned()
 end
 
 local function pressE()
-    -- 模拟按下 E 键（交互键）
     pcall(function()
         local VirtualInputManager = game:GetService("VirtualInputManager")
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
@@ -2167,49 +2165,55 @@ end
 
 local function startAutoRescue()
     if rescueConnection then rescueConnection:Disconnect() end
+    print("[自动救助] 启动救助监控...")
     rescueConnection = RunService.Heartbeat:Connect(function()
         if not autoRescueEnabled then return end
         if isRescuing then return end
         
         local downedPlayer = findNearestDowned()
+        if downedPlayer then
+            print("[自动救助] 发现倒地玩家:", downedPlayer.Name)
+        end
+        
         if not downedPlayer then return end
         
         isRescuing = true
         task.spawn(function()
-            -- 传送到倒地玩家身边
-            local targetCharacter = workspace:FindFirstChild("Game"):FindFirstChild("Players"):FindFirstChild(downedPlayer.Name) or workspace.Game.Players:FindFirstChild(tostring(downedPlayer.UserId))
+            local targetCharacter = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Players") and (workspace.Game.Players:FindFirstChild(downedPlayer.Name) or workspace.Game.Players:FindFirstChild(tostring(downedPlayer.UserId)))
             if targetCharacter then
                 local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
                 if targetHRP then
-                    -- 使用脚本自带的传送功能（同服务器内直接设置 CFrame）
                     if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                        lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3) -- 传送到目标旁边
+                        print("[自动救助] 传送到", downedPlayer.Name, "身边")
+                        lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
                         task.wait(0.3)
-                        -- 面向目标
                         lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
                         task.wait(0.2)
-                        -- 按下 E 救人
+                        print("[自动救助] 按下 E 键救助")
                         pressE()
                         showNotice("🚑 正在救助 " .. downedPlayer.Name, true)
-                        task.wait(2) -- 等待救人动画完成
+                        task.wait(2)
                     end
                 end
             end
             isRescuing = false
         end)
     end)
+    print("[自动救助] 监控已启动")
 end
 
 local function stopAutoRescue()
     if rescueConnection then
         rescueConnection:Disconnect()
         rescueConnection = nil
+        print("[自动救助] 监控已停止")
     end
     isRescuing = false
 end
 
-local function toggleAutoRescue()
+function toggleAutoRescue()
     autoRescueEnabled = not autoRescueEnabled
+    print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
     if autoRescueEnabled then
         startAutoRescue()
         showNotice("✅ 自动救助已开启", true)
@@ -2219,26 +2223,23 @@ local function toggleAutoRescue()
     end
 end
 
--- ==================== 高空挂机刷经验 ====================
+-- ==================== 高空挂机刷经验（调试增强版） ====================
 local autoFarmEnabled = false
 local farmConnection = nil
 
--- 寻找地图最高点（安全挂机位置）
 local function findSafeSkyPosition()
-    -- 方法1：直接使用一个极高的固定坐标（大多数地图适用）
-    -- 方法2：动态检测地图最高部件 + 偏移
-    local highestY = 500 -- 默认高度
+    local highestY = 500
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") and obj.Position.Y > highestY then
             highestY = obj.Position.Y
         end
     end
-    -- 返回地图最高点上方 50 格的位置，避免碰到天花板
     return Vector3.new(0, highestY + 50, 0)
 end
 
 local function startAutoFarm()
     if farmConnection then farmConnection:Disconnect() end
+    print("[高空挂机] 启动挂机循环...")
     farmConnection = RunService.Heartbeat:Connect(function()
         if not autoFarmEnabled then return end
         if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
@@ -2246,25 +2247,27 @@ local function startAutoFarm()
         local hrp = lp.Character.HumanoidRootPart
         local skyPos = findSafeSkyPosition()
         
-        -- 如果当前高度低于目标高度，直接传送到天上
         if hrp.Position.Y < skyPos.Y - 10 then
             hrp.CFrame = CFrame.new(skyPos) * CFrame.new(math.random(-20,20), 0, math.random(-20,20))
+            print("[高空挂机] 传送到高空:", skyPos)
         else
-            -- 已经在高空，随机小范围移动避免完全静止
             hrp.Velocity = Vector3.new(math.random(-10,10), 5, math.random(-10,10))
         end
     end)
+    print("[高空挂机] 循环已启动")
 end
 
 local function stopAutoFarm()
     if farmConnection then
         farmConnection:Disconnect()
         farmConnection = nil
+        print("[高空挂机] 循环已停止")
     end
 end
 
-local function toggleAutoFarm()
+function toggleAutoFarm()
     autoFarmEnabled = not autoFarmEnabled
+    print("[高空挂机] 状态切换为:", autoFarmEnabled and "开启" or "关闭")
     if autoFarmEnabled then
         startAutoFarm()
         showNotice("☁️ 高空挂机已开启", true)
