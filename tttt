@@ -217,11 +217,6 @@ function sendBroadcast(message)
         -- 终极宽容判断：只要响应码为 200，就视为成功
         if res.StatusCode == 200 then
             if showNotice then showNotice("✅ 广播已发送", true) end
-            task.wait(1.5)
-            if broadcastGui then
-                broadcastGui:Destroy()
-                broadcastWindowActive = false
-                broadcastGui = nil
             end
         else
             if showNotice then showNotice("❌ 广播发送失败（HTTP " .. res.StatusCode .. "）", true) end
