@@ -242,19 +242,29 @@ local function fetchOnlinePlayers()
     if not res or res.StatusCode ~= 200 or not res.Body then return {} end
     local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
     if not success then return {} end
-    local raw = data.players or {}
+    local rawPlayers = data.players or {}
     
+    print("[診斷] GAS 返回玩家總數:", #rawPlayers)
     local unique = {}
-    for _, p in ipairs(raw) do
+    for _, p in ipairs(rawPlayers) do
         local uid = tostring(p.userId)
         if uid and uid ~= "" then
-            if not unique[uid] or (p.lastUpdate or 0) > (unique[uid].lastUpdate or 0) then
-                unique[uid] = p
-            end
+            local pTime = p.lastUpdate or 0
+            local eTime = unique[uid] and unique[uid].lastUpdate or 0
+            if not unique[uid] or pTime > eTime then unique[uid] = p end
         end
     end
     local final = {}
     for _, p in pairs(unique) do table.insert(final, p) end
+    
+    print("[診斷] 去重後玩家數量:", #final)
+    for i, p in ipairs(final) do
+        local lastUp = tonumber(p.lastUpdate) or 0
+        local diff = os.time() - lastUp
+        print(string.format("  [%d] %s (ID:%s) lastUpdate:%s diff:%d秒",
+            i, tostring(p.username), tostring(p.userId), tostring(lastUp), diff))
+    end
+    
     table.sort(final, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
     return final
 end
@@ -274,13 +284,26 @@ local function renderPlayerList()
     end
     local now = os.time()
     local visibleCount = 0
+
+    print("[在线调试] ========== 开始渲染，当前时间戳:", now)
+
     for _, info in ipairs(cachedPlayers) do
         local success = pcall(function()
             local userId = tonumber(info.userId)
             local isSelf = (userId == lp.UserId)
-            local lastUpdate = tonumber(info.lastUpdate) or now
+            -- 关键：确保 lastUpdate 被正确读取并转为数字
+            local lastUpdate = tonumber(info.lastUpdate)
+            if not lastUpdate then
+                -- 如果缺失，使用 joinTime 作为后备，并输出警告
+                lastUpdate = tonumber(info.joinTime) or now
+                print("[在线调试] ⚠️ 玩家", info.username, "缺少 lastUpdate，使用 joinTime:", lastUpdate)
+            end
             local diff = now - lastUpdate
-            local isOnline = (diff <= 300)   -- ✅ 放寬至 5 分鐘（原 180 秒）
+            -- 与 GAS 端完全一致：600 秒内视为在线
+            local isOnline = (diff <= 600)
+
+            print(string.format("[在线调试] 玩家:%s, isSelf:%s, lastUpdate:%s, now:%s, diff:%s秒, isOnline:%s",
+                tostring(info.username), tostring(isSelf), tostring(lastUpdate), now, diff, tostring(isOnline)))
 
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
@@ -315,15 +338,13 @@ local function renderPlayerList()
                     local t = tick()
                     if t - lastClick < 0.35 then
                         if isOnline and info.jobId and info.jobId ~= "" and info.jobId ~= game.JobId then
+                            showNotice("正在追蹤玩家...")
                             safeTeleport(userId, info.jobId)
                         elseif not isOnline then
                             showNotice("❌ 玩家已離線，無法追蹤")
                         end
                     else
-                        if setclipboard then
-                            setclipboard(tostring(userId))
-                            showNotice("📋 已複製 ID: " .. userId)
-                        end
+                        if setclipboard then setclipboard(tostring(userId)); showNotice("已複製 ID: " .. userId) end
                     end
                     lastClick = t
                 end)
@@ -331,6 +352,7 @@ local function renderPlayerList()
         end)
         if not success then warn("渲染玩家失敗") end
     end
+
     if visibleCount == 0 then
         local emptyBtn = Instance.new("TextButton", playerList)
         emptyBtn.Size = UDim2.new(1, 0, 0, 50)
@@ -342,6 +364,7 @@ local function renderPlayerList()
         emptyBtn.ZIndex = 10
         Instance.new("UICorner", emptyBtn).CornerRadius = UDim.new(0, 6)
     end
+    print("[在线调试] ========== 渲染完成，显示玩家数:", visibleCount)
 end
 
 -- 背景刷新緩存
