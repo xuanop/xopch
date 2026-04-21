@@ -1338,6 +1338,195 @@ local function createTeleportWindow()
     end)
 end
 
+-- ==================== 高空挂机优化版（前置定义） ====================
+local autoFarmEnabled = false
+local farmConnection = nil
+local farmTween = nil
+
+local function findSafeSkyPosition()
+    local highestY = 100
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Position.Y > highestY then
+            highestY = obj.Position.Y
+        end
+    end
+    local offsetY = math.random(80, 120)
+    local offsetX = math.random(-30, 30)
+    local offsetZ = math.random(-30, 30)
+    return Vector3.new(offsetX, highestY + offsetY, offsetZ)
+end
+
+local function smoothTeleport(targetPos)
+    if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = lp.Character.HumanoidRootPart
+    local distance = (hrp.Position - targetPos).Magnitude
+    if distance > 200 then
+        hrp.CFrame = CFrame.new(targetPos)
+        return
+    end
+    if farmTween then farmTween:Cancel() end
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local goal = { CFrame = CFrame.new(targetPos) }
+    farmTween = TweenService:Create(hrp, tweenInfo, goal)
+    farmTween:Play()
+end
+
+local function naturalWobble()
+    if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = lp.Character.HumanoidRootPart
+    hrp.Velocity = Vector3.new(
+        math.random(-5, 5),
+        math.random(-2, 2),
+        math.random(-5, 5)
+    )
+    if math.random(1, 10) == 1 then
+        pcall(function() VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame); task.wait(0.1); VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame) end)
+    end
+end
+
+function startAutoFarm()
+    if farmConnection then farmConnection:Disconnect() end
+    farmConnection = RunService.Heartbeat:Connect(function()
+        if not autoFarmEnabled then return end
+        if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+        local hrp = lp.Character.HumanoidRootPart
+        local skyPos = findSafeSkyPosition()
+        if hrp.Position.Y < skyPos.Y - 20 then
+            smoothTeleport(skyPos)
+        else
+            if math.random(1, 50) == 1 then
+                local newPos = skyPos + Vector3.new(math.random(-15,15), math.random(-5,5), math.random(-15,15))
+                smoothTeleport(newPos)
+            else
+                naturalWobble()
+            end
+        end
+    end)
+end
+
+function stopAutoFarm()
+    if farmConnection then farmConnection:Disconnect(); farmConnection = nil end
+    if farmTween then farmTween:Cancel(); farmTween = nil end
+end
+
+function toggleAutoFarm()
+    autoFarmEnabled = not autoFarmEnabled
+    if autoFarmEnabled then
+        startAutoFarm()
+        showNotice("☁️ 高空挂机已开启（优化版）", true)
+    else
+        stopAutoFarm()
+        showNotice("💤 高空挂机已关闭", true)
+    end
+end
+
+-- ==================== 自动救助倒地队友（前置定义） ====================
+local autoRescueEnabled = false
+local isRescuing = false
+local rescueConnection = nil
+
+function getDownedPlayers()
+    local downedList = {}
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return downedList end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == lp then continue end
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            local isDowned = character:GetAttribute("Downed")
+            local state = character:GetAttribute("State")
+            local health = humanoid and humanoid.Health or 100
+            if health <= 0 or isDowned or state == "Downed" then
+                table.insert(downedList, player)
+            end
+        end
+    end
+    return downedList
+end
+
+function findNearestDowned()
+    local nearest = nil
+    local minDist = math.huge
+    local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
+    if not myPos then return nil end
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return nil end
+    for _, player in ipairs(getDownedPlayers()) do
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist = (myPos - hrp.Position).Magnitude
+                if dist < minDist then minDist = dist; nearest = player end
+            end
+        end
+    end
+    return nearest
+end
+
+function pressE()
+    pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
+        task.wait(0.1)
+        vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
+    end)
+end
+
+function startAutoRescue()
+    if rescueConnection then rescueConnection:Disconnect() end
+    print("[自动救助] 启动救助监控...")
+    rescueConnection = RunService.Heartbeat:Connect(function()
+        if not autoRescueEnabled then return end
+        if isRescuing then return end
+        local downedPlayer = findNearestDowned()
+        if downedPlayer then print("[自动救助] 发现倒地玩家:", downedPlayer.Name) end
+        if not downedPlayer then return end
+        isRescuing = true
+        task.spawn(function()
+            local targetCharacter = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Players") and (workspace.Game.Players:FindFirstChild(downedPlayer.Name) or workspace.Game.Players:FindFirstChild(tostring(downedPlayer.UserId)))
+            if targetCharacter then
+                local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
+                if targetHRP then
+                    if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                        print("[自动救助] 传送到", downedPlayer.Name, "身边")
+                        lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+                        task.wait(0.3)
+                        lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
+                        task.wait(0.2)
+                        print("[自动救助] 按下 E 键救助")
+                        pressE()
+                        showNotice("🚑 正在救助 " .. downedPlayer.Name, true)
+                        task.wait(2)
+                    end
+                end
+            end
+            isRescuing = false
+        end)
+    end)
+    print("[自动救助] 监控已启动")
+end
+
+function stopAutoRescue()
+    if rescueConnection then rescueConnection:Disconnect(); rescueConnection = nil; print("[自动救助] 监控已停止") end
+    isRescuing = false
+end
+
+function toggleAutoRescue()
+    autoRescueEnabled = not autoRescueEnabled
+    print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
+    if autoRescueEnabled then
+        startAutoRescue()
+        showNotice("✅ 自动救助已开启", true)
+    else
+        stopAutoRescue()
+        showNotice("❌ 自动救助已关闭", true)
+    end
+end
+
 -- ==================== 自定义重命名器 ====================
 local function createRenamerWindow()
     safeCall(function()
@@ -2020,7 +2209,7 @@ local function createAdminPanel()
             -- 高空挂机开关
             createButtonSafe(other2Cont, "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌"), 
     function(btn) 
-        pcall(toggleAutoFarm)
+        toggleAutoFarm()
         btn.Text = "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌")
         btn.BackgroundTransparency = autoFarmEnabled and 0.5 or 0.85
     end, Color3.fromRGB(100, 150, 200))
