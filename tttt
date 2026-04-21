@@ -144,15 +144,18 @@ local teleportGui = nil
 local broadcastWindowActive = false
 local broadcastGui = nil
 
--- ==================== GAS 广播系统（增强调试版） ====================
-print("[广播] 开始初始化...")
+-- ==================== 独立广播系统（最终稳定版） ====================
+print("[广播] 初始化...")
+
+-- 🔧 配置：请替换为您的独立广播 GAS URL
+local GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"
 
 -- 依赖检查
 if not HttpService then warn("[广播] ❌ HttpService 未定义"); return end
 if not lp then warn("[广播] ❌ lp 未定义"); return end
-if not showNotice then warn("[广播] ⚠️ showNotice 未定义") end
+if not showNotice then warn("[广播] ⚠️ showNotice 未定义，通知将无法显示") end
 
--- 内置 HTTP 请求
+-- 内置 HTTP 请求函数
 local function broadcastHttpRequest(method, url, body)
     local req = syn and syn.request or http_request or request or (http and http.request)
     if not req then warn("[广播] 找不到 HTTP 请求函数"); return nil end
@@ -182,9 +185,7 @@ local function broadcastHttpRequest(method, url, body)
     else warn("[广播] HTTP 请求失败:", result); return nil end
 end
 
--- 请在此处填写您的独立广播 GAS URL
-local GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"
-
+-- 内置 URL 编码
 local function urlEncode(s)
     local result = ""
     for i = 1, #s do
@@ -201,30 +202,34 @@ end
 
 _G.lastBroadcast = _G.lastBroadcast or ""
 
+-- 发送广播（全局函数，供面板调用）
 function sendBroadcast(message)
     if message == "" then
         if showNotice then showNotice("⚠️ 消息不能为空", true) end
         return
     end
     local url = GAS_BROADCAST_URL .. "?action=sendBroadcast&msg=" .. urlEncode(message) .. "&sender=" .. urlEncode(lp.Name)
-    print("[广播] 发送 URL:", url)
+    print("[广播] 发送请求...")
     local res = broadcastHttpRequest("GET", url, nil)
-    if res then
-        print("[广播] 响应码:", res.StatusCode)
+    if res and res.StatusCode == 200 and res.Body then
         print("[广播] 响应体:", res.Body)
-        if res.StatusCode == 200 and res.Body then
-            local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-            if success then
-                if data.result == "success" then
-                    if showNotice then showNotice("✅ 广播已发送", true) end
-
-                    if showNotice then showNotice("❌ 广播发送失败: " .. (data.message or "未知错误"), true) end
-                end
-            else
-                if showNotice then showNotice("❌ 响应解析失败", true) end
+        -- 宽松成功判断：响应码200且包含 success 或 result:success
+        if string.find(res.Body, "success") then
+            if showNotice then showNotice("✅ 广播已发送", true) end
+            task.wait(1.5)
+            if broadcastGui then
+                broadcastGui:Destroy()
+                broadcastWindowActive = false
+                broadcastGui = nil
             end
         else
-            if showNotice then showNotice("❌ 广播发送失败（HTTP " .. (res.StatusCode or "无响应") .. "）", true) end
+            local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
+            local errMsg = "未知错误"
+            if success and data then
+                errMsg = data.message or data.result or "未知错误"
+            end
+            if showNotice then showNotice("❌ 广播发送失败: " .. errMsg, true) end
+            warn("[广播] 业务错误，响应:", res.Body)
         end
     else
         if showNotice then showNotice("❌ 广播发送失败（网络错误）", true) end
@@ -264,8 +269,7 @@ task.spawn(function()
     end
 end)
 
-print("[广播] 初始化完成（调试模式）")
-
+print("[广播] 初始化完成")
 
 -- ==================== 发送广播窗口 ====================
 local function createBroadcastWindow()
