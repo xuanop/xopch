@@ -43,12 +43,45 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local HttpService = game:GetService("HttpService")
 
--- ==================== Google 試算表分流上报 ====================
+-- ==================== Google 試算表分流上报（精簡版相容） ====================
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
 local SCRIPT_START_TIME = os.time()
 
 local function getSheetIndex(userId)
     return userId % 10
+end
+
+local function buildJson(t)
+    local parts = {}
+    for k, v in pairs(t) do
+        local vStr
+        if type(v) == "string" then vStr = '"' .. v:gsub('"', '\\"') .. '"'
+        elseif type(v) == "number" then vStr = tostring(v)
+        else vStr = '""' end
+        table.insert(parts, '"' .. k .. '":' .. vStr)
+    end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+
+local function urlEncode(s)
+    local result = ""
+    for i = 1, #s do
+        local c = s:sub(i, i)
+        local b = string.byte(c)
+        if (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or c == '-' or c == '_' or c == '.' or c == '~' then
+            result = result .. c
+        else
+            result = result .. string.format("%%%02X", b)
+        end
+    end
+    return result
+end
+
+local function httpGet(url)
+    local req = syn and syn.request or http_request or request or (http and http.request)
+    if not req then return nil end
+    local success, result = pcall(function() return req({ Url = url, Method = "GET" }) end)
+    return success and result or nil
 end
 
 local function sendToGoogleSheet()
@@ -58,6 +91,8 @@ local function sendToGoogleSheet()
         if humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
             status = "DEAD"
         end
+    else
+        status = "DEAD"
     end
 
     local data = {
@@ -67,24 +102,29 @@ local function sendToGoogleSheet()
         status = status,
         jobId = game.JobId,
         joinTime = SCRIPT_START_TIME,
-        lastSeen = os.time(),
+        lastUpdate = os.time(),
         sheetIndex = getSheetIndex(lp.UserId)
     }
 
-    local success, err = pcall(function()
-        httpRequest("POST", GAS_URL, data)
-    end)
-    if not success then
-        warn("[GAS 上报失败]", err)
-    end
+    local json = buildJson(data)
+    local url = GAS_URL .. "?data=" .. urlEncode(json)
+    httpGet(url)
+    print("📤 上報狀態：", status)
 end
 
--- 启动定时上报（每 30 秒一次）
+-- 启动定时上报（每 10 秒一次）
 task.spawn(function()
+    sendToGoogleSheet()
     while true do
+        task.wait(10)
         sendToGoogleSheet()
-        task.wait(30)
     end
+end)
+
+-- 角色生成时立即上报
+lp.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    sendToGoogleSheet()
 end)
 
 -- 无限等待 PlayerGui
