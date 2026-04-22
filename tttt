@@ -84,15 +84,18 @@ local function httpGet(url)
     return success and result or nil
 end
 
--- 从 GAS 获取当前在线玩家列表等信息（需要 GAS 后端支持 action=getPlayers）
 local function fetchGasData(callback)
     local url = GAS_URL .. "?action=getPlayers"
     local res = httpGet(url)
     if res and res.Body then
         local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-        if success and data then
-            local count = data.count or (data.players and #data.players) or 0
+        if success and data and data.players then
+            local count = #data.players
             print("[GAS] 返回玩家数:", count)
+            for i, p in ipairs(data.players) do
+                local diff = os.time() - (p.recordTime or p.lastUpdate or 0)
+                print(string.format("[%d] %s (%s) lastUpdate: %d diff:%d秒", i, p.username, p.userId, p.recordTime or p.lastUpdate, diff))
+            end
             if callback then callback(data) end
             return data
         end
@@ -139,14 +142,13 @@ end
 task.spawn(function()
     while true do
         -- 先从 GAS 获取在线玩家列表
-        fetchGasData(function(data)
-            -- 可以在此处理返回的玩家列表，例如显示或记录
-        end)
+        fetchGasData()
         -- 然后上报自身状态
         sendToGoogleSheet()
         task.wait(10)
     end
 end)
+
 
 -- TASS 調適
 task.spawn(function()
@@ -976,13 +978,6 @@ local function clearBotEsp()
         end
     end)
 end
-
-task.spawn(function()
-    while true do
-        sendToGoogleSheet()
-        task.wait(30) -- 每30秒上报一次
-    end
-end)
 
 -- ==================== 开关函数 ====================
 local function toggleBhop(btn)
