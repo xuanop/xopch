@@ -135,14 +135,19 @@ local function sendToGoogleSheet()
     print("📤 上報狀態：", status, " | 時間:", os.time())
 end
 
--- 启动定时上报（每 10 秒一次）
+-- 启动定时上报（每 10 秒先获取 GAS 玩家列表，再上报自身状态）
 task.spawn(function()
-    sendToGoogleSheet()
     while true do
-        task.wait(10)
+        -- 先从 GAS 获取在线玩家列表
+        fetchGasData(function(data)
+            -- 可以在此处理返回的玩家列表，例如显示或记录
+        end)
+        -- 然后上报自身状态
         sendToGoogleSheet()
+        task.wait(10)
     end
 end)
+
 -- TASS 調適
 task.spawn(function()
     task.wait(3)
