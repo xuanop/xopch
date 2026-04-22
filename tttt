@@ -1581,10 +1581,12 @@ function toggleAutoRescue()
     autoRescueEnabled = not autoRescueEnabled
     print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
     if autoRescueEnabled then
-        startAutoRescue()
-        showNotice("✅ 自动救助已开启", true)
+        -- startAutoRescue()  -- 注释掉原有复杂逻辑
+        startSimpleRescue()   -- 改用新的简易秒救循环
+        showNotice("✅ 自动救助已开启（秒救模式）", true)
     else
-        stopAutoRescue()
+        stopAutoRescue()      -- 这个保留，用于停止旧循环（如果有）
+        stopSimpleRescue()    -- 停止新循环
         showNotice("❌ 自动救助已关闭", true)
     end
 end
@@ -2621,38 +2623,56 @@ task.spawn(function()
     pcall(function() loadstring(game:HttpGet(evaURL))() end)
 end)
 
--- ==================== 🌟 独立全员秒救循环 (Auto Revive All) ====================
-task.spawn(function()
+-- ==================== 🌟 独立全员秒救循环 (Revive Everyone Instantly) ====================
+local simpleRescueEnabled = false
+local simpleRescueConnection = nil
+
+function startSimpleRescue()
+    if simpleRescueConnection then simpleRescueConnection:Disconnect() end
+    simpleRescueEnabled = true
     print("[秒救循环] 启动独立全员秒救监控...")
+
+    -- 获取 Interact 远程事件（已验证路径）
     local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
     if not interactRemote then
-        warn("[秒救循环] 找不到 Interact 远程事件，秒救功能无法使用！")
+        warn("[秒救循环] ❌ 找不到 Interact 远程事件，秒救功能不可用！")
         return
     end
 
-    while true do
-        -- 只有开启了自动救助开关才执行（使用您已有的 autoRescueEnabled 变量）
-        if autoRescueEnabled then
-            for _, player in ipairs(Players:GetPlayers()) do
-                -- 跳过自己
-                if player ~= lp then
-                    local character = player.Character
-                    if character then
-                        -- 检查是否倒地
-                        if character:GetAttribute("Downed") then
-                            -- 执行秒救
-                            pcall(function()
-                                interactRemote:FireServer("Revive", true, player)
-                            end)
-                            print("[秒救循环] ✨ 秒救玩家:", player.Name)
-                        end
-                    end
+    simpleRescueConnection = RunService.Heartbeat:Connect(function()
+        if not simpleRescueEnabled then return end
+        if not autoRescueEnabled then return end  -- 与面板开关绑定
+
+        -- 遍历所有玩家
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player == lp then continue end  -- 跳过自己
+            local character = player.Character
+            if character then
+                -- 检查是否倒地
+                if character:GetAttribute("Downed") then
+                    -- 尝试秒救（使用已验证的参数组合）
+                    pcall(function()
+                        interactRemote:FireServer("Revive", true, player)  -- 组合1：玩家对象
+                        -- 如果组合1无效，请依次尝试以下组合（每次只取消注释一行测试）：
+                        -- interactRemote:FireServer("Revive", true, player.UserId)
+                        -- interactRemote:FireServer("Revive", true, character)
+                        -- interactRemote:FireServer("Revive", player)
+                    end)
+                    print("[秒救循环] ✨ 秒救玩家:", player.Name)
                 end
             end
         end
-        task.wait(0.1) -- 每 0.1 秒扫描一次，足够快
+    end)
+end
+
+function stopSimpleRescue()
+    simpleRescueEnabled = false
+    if simpleRescueConnection then
+        simpleRescueConnection:Disconnect()
+        simpleRescueConnection = nil
+        print("[秒救循环] 监控已停止")
     end
-end)
+end
 
 -- ==================== 初始化无头效果 ====================
 for _, player in ipairs(Players:GetPlayers()) do
