@@ -1597,10 +1597,10 @@ function toggleAutoRescue()
     autoRescueEnabled = not autoRescueEnabled
     print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
     if autoRescueEnabled then
-        startSimpleRescue()   -- 改用新的简易秒救循环
-        showNotice("✅ 自动救助已开启（秒救模式）", true)
+        startSimpleRescue()   -- 调用新测试函数
+        showNotice("✅ 自动救助已开启（测试模式）", true)
     else
-        stopSimpleRescue()    -- 停止新循环
+        stopSimpleRescue()    -- 停止测试
         showNotice("❌ 自动救助已关闭", true)
     end
 end
