@@ -84,15 +84,38 @@ local function httpGet(url)
     return success and result or nil
 end
 
+-- 从 GAS 获取当前在线玩家列表等信息（需要 GAS 后端支持 action=getPlayers）
+local function fetchGasData(callback)
+    local url = GAS_URL .. "?action=getPlayers"
+    local res = httpGet(url)
+    if res and res.Body then
+        local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
+        if success and data then
+            local count = data.count or (data.players and #data.players) or 0
+            print("[GAS] 返回玩家数:", count)
+            if callback then callback(data) end
+            return data
+        end
+    end
+    warn("[GAS] 获取玩家列表失败")
+    return nil
+end
+
 local function sendToGoogleSheet()
     local status = "ALIVE"
     if lp.Character then
         local humanoid = lp.Character:FindFirstChild("Humanoid")
-        if humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
+        -- 检查是否倒地（Evade 游戏机制）
+        local isDowned = lp.Character:GetAttribute("Downed")
+        local state = lp.Character:GetAttribute("State") or ""
+        
+        if isDowned or state == "Downed" then
+            status = "DOWNED"   -- 新增倒地状态，区别于真正死亡
+        elseif humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
             status = "DEAD"
         end
     else
-        status = "DEAD"
+        status = "DEAD"   -- 无角色视为死亡
     end
 
     local data = {
@@ -109,7 +132,7 @@ local function sendToGoogleSheet()
     local json = buildJson(data)
     local url = GAS_URL .. "?data=" .. urlEncode(json)
     httpGet(url)
-    print("📤 上報狀態：", status)
+    print("📤 上報狀態：", status, " | 時間:", os.time())
 end
 
 -- 启动定时上报（每 10 秒一次）
