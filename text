@@ -237,12 +237,12 @@ local function fetchOnlinePlayers()
     local rawPlayers = data.players or {}
     
     print("[診斷] GAS 返回玩家總數:", #rawPlayers)
-    -- 不再手動去重，完全信任 GAS 已去重
     for i, p in ipairs(rawPlayers) do
         local lastUp = tonumber(p.lastUpdate) or 0
         local diff = os.time() - lastUp
-        print(string.format("  [%d] %s (ID:%s) lastUpdate:%s diff:%d秒",
-            i, tostring(p.username), tostring(p.userId), tostring(lastUp), diff))
+        -- 🔥 关键调试行：打印每个玩家的原始状态
+        print(string.format("  [%d] %s (ID:%s) status:%s lastUpdate:%s diff:%d秒",
+            i, tostring(p.username), tostring(p.userId), tostring(p.status), tostring(lastUp), diff))
     end
     
     table.sort(rawPlayers, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
