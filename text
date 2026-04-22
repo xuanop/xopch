@@ -98,7 +98,11 @@ local function reportStatus()
     local status = "ALIVE"
     if lp.Character then
         local humanoid = lp.Character:FindFirstChild("Humanoid")
-        if humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
+        local isDowned = lp.Character:GetAttribute("Downed")
+        local state = lp.Character:GetAttribute("State") or ""
+        if isDowned or state == "Downed" then
+            status = "DOWNED"
+        elseif humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
             status = "DEAD"
         end
     else
@@ -121,14 +125,6 @@ local function reportStatus()
     httpGet(url)
     print("📤 上報狀態：", status, "｜ 時間：", os.time())
 end
-
-task.spawn(function()
-    reportStatus()
-    while true do
-        task.wait(REPORT_INTERVAL)
-        reportStatus()
-    end
-end)
 
 -- 角色生成及復活時立即上報
 lp.CharacterAdded:Connect(function(character)
