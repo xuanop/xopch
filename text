@@ -271,7 +271,7 @@ local function renderPlayerList()
             local isSelf = (userId == lp.UserId)
             local lastUpdate = tonumber(info.lastUpdate) or now
             local diff = now - lastUpdate
-            local isOnline = (diff <= 60)  -- 120 秒寬容
+            local isOnline = (diff <= 30)
 
             if isSelf or isOnline then
                 visibleCount = visibleCount + 1
