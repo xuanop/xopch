@@ -120,6 +120,22 @@ task.spawn(function()
         sendToGoogleSheet()
     end
 end)
+-- TASS 調適
+task.spawn(function()
+    task.wait(3)
+    local charEvents = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character")
+    if charEvents then
+        print("=== Character 远程事件列表 ===")
+        for _, ev in ipairs(charEvents:GetChildren()) do
+            if ev:IsA("RemoteEvent") then
+                print("  - " .. ev.Name)
+            end
+        end
+        print("==============================")
+    else
+        warn("找不到 Events.Character")
+    end
+end)
 
 -- 角色生成时立即上报
 lp.CharacterAdded:Connect(function()
