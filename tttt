@@ -1581,11 +1581,9 @@ function toggleAutoRescue()
     autoRescueEnabled = not autoRescueEnabled
     print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
     if autoRescueEnabled then
-        -- startAutoRescue()  -- 注释掉原有复杂逻辑
         startSimpleRescue()   -- 改用新的简易秒救循环
         showNotice("✅ 自动救助已开启（秒救模式）", true)
     else
-        stopAutoRescue()      -- 这个保留，用于停止旧循环（如果有）
         stopSimpleRescue()    -- 停止新循环
         showNotice("❌ 自动救助已关闭", true)
     end
@@ -2626,13 +2624,13 @@ end)
 -- ==================== 🌟 独立全员秒救循环 (Revive Everyone Instantly) ====================
 local simpleRescueEnabled = false
 local simpleRescueConnection = nil
+local lastRescueTime = {}  -- 防止重复救助同一玩家
 
 function startSimpleRescue()
     if simpleRescueConnection then simpleRescueConnection:Disconnect() end
     simpleRescueEnabled = true
     print("[秒救循环] 启动独立全员秒救监控...")
 
-    -- 获取 Interact 远程事件（已验证路径）
     local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
     if not interactRemote then
         warn("[秒救循环] ❌ 找不到 Interact 远程事件，秒救功能不可用！")
@@ -2641,24 +2639,27 @@ function startSimpleRescue()
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
         if not simpleRescueEnabled then return end
-        if not autoRescueEnabled then return end  -- 与面板开关绑定
+        if not autoRescueEnabled then return end
 
-        -- 遍历所有玩家
         for _, player in ipairs(Players:GetPlayers()) do
-            if player == lp then continue end  -- 跳过自己
+            if player == lp then continue end
             local character = player.Character
-            if character then
-                -- 检查是否倒地
-                if character:GetAttribute("Downed") then
-                    -- 尝试秒救（使用已验证的参数组合）
-                    pcall(function()
-                        interactRemote:FireServer("Revive", true, player)  -- 组合1：玩家对象
-                        -- 如果组合1无效，请依次尝试以下组合（每次只取消注释一行测试）：
-                        -- interactRemote:FireServer("Revive", true, player.UserId)
-                        -- interactRemote:FireServer("Revive", true, character)
-                        -- interactRemote:FireServer("Revive", player)
-                    end)
+            if character and character:GetAttribute("Downed") then
+                local now = os.clock()
+                local last = lastRescueTime[player.UserId] or 0
+                if now - last < 1.5 then  -- 1.5秒内不对同一玩家重复救助
+                    continue
+                end
+                lastRescueTime[player.UserId] = now
+
+                -- 🔥 正确参数：第二个参数是角色对象（character）
+                local success, err = pcall(function()
+                    interactRemote:FireServer("Revive", character)
+                end)
+                if success then
                     print("[秒救循环] ✨ 秒救玩家:", player.Name)
+                else
+                    warn("[秒救循环] ❌ 秒救失败:", player.Name, err)
                 end
             end
         end
@@ -2670,6 +2671,7 @@ function stopSimpleRescue()
     if simpleRescueConnection then
         simpleRescueConnection:Disconnect()
         simpleRescueConnection = nil
+        lastRescueTime = {}
         print("[秒救循环] 监控已停止")
     end
 end
