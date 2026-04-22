@@ -57,9 +57,8 @@ local function sendToGoogleSheet()
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         local isDowned = lp.Character:GetAttribute("Downed")
         local state = lp.Character:GetAttribute("State") or ""
-        
         if isDowned or state == "Downed" then
-            status = "DOWNED"   -- 倒地状态，区别于死亡
+            status = "DOWNED"
         elseif humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
             status = "DEAD"
         end
@@ -80,8 +79,12 @@ local function sendToGoogleSheet()
 
     local json = buildJson(data)
     local url = GAS_URL .. "?data=" .. urlEncode(json)
-    httpGet(url)
-    print("📤 上報狀態：", status, " | 時間:", os.time())
+    local res = httpGet(url)
+    if res and res.StatusCode == 200 then
+        print("📤 上報狀態：", status, " | 時間:", os.time(), " | GAS回應: 成功")
+    else
+        warn("📤 上報失敗！狀態:", status, " | HTTP狀態:", res and res.StatusCode or "無回應")
+    end
 end
 
 -- 启动定时上报（每 30 秒一次）
