@@ -1548,10 +1548,11 @@ function startAutoRescue()
                         -- 🚀 使用已验证的远程事件瞬间救助
                         if interactRemote then
                             pcall(function()
-                                interactRemote:FireServer("Revive", true, downedPlayer)           -- 组合1
-                            -- interactRemote:FireServer("Revive", true, downedPlayer.UserId) -- 组合2
-                            -- interactRemote:FireServer("Revive", true, targetCharacter)     -- 组合3
-                            -- interactRemote:FireServer("Revive", downedPlayer)              -- 组合4
+                               interactRemote:FireServer("Revive", true, player.UserId)   -- 使用 UserId
+                               -- 或 
+                               interactRemote:FireServer("Revive", player)                -- 无需 true
+                               -- 或
+                               interactRemote:FireServer("Revive", true, character)       -- 使用角色对象
                             end)
                             showNotice("✨ 瞬间救助 " .. downedPlayer.Name, true)
                         else
@@ -2619,6 +2620,40 @@ task.spawn(function()
     local evaURL = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/gas"
     pcall(function() loadstring(game:HttpGet(evaURL))() end)
 end)
+
+-- ==================== 🌟 独立全员秒救循环 (Auto Revive All) ====================
+task.spawn(function()
+    print("[秒救循环] 启动独立全员秒救监控...")
+    local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
+    if not interactRemote then
+        warn("[秒救循环] 找不到 Interact 远程事件，秒救功能无法使用！")
+        return
+    end
+
+    while true do
+        -- 只有开启了自动救助开关才执行（使用您已有的 autoRescueEnabled 变量）
+        if autoRescueEnabled then
+            for _, player in ipairs(Players:GetPlayers()) do
+                -- 跳过自己
+                if player ~= lp then
+                    local character = player.Character
+                    if character then
+                        -- 检查是否倒地
+                        if character:GetAttribute("Downed") then
+                            -- 执行秒救
+                            pcall(function()
+                                interactRemote:FireServer("Revive", true, player)
+                            end)
+                            print("[秒救循环] ✨ 秒救玩家:", player.Name)
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(0.1) -- 每 0.1 秒扫描一次，足够快
+    end
+end)
+
 -- ==================== 初始化无头效果 ====================
 for _, player in ipairs(Players:GetPlayers()) do
     setupHeadlessForPlayer(player)
