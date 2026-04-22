@@ -1496,6 +1496,10 @@ end
 function startAutoRescue()
     if rescueConnection then rescueConnection:Disconnect() end
     print("[自动救助] 启动救助监控...")
+    
+    -- 预先获取交互远程事件
+    local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
+    
     rescueConnection = RunService.Heartbeat:Connect(function()
         if not autoRescueEnabled then return end
         if isRescuing then return end
@@ -1524,25 +1528,15 @@ function startAutoRescue()
                         lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
                         lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
 
-                        -- 🔥 尝试使用远程事件瞬间复活（如果存在）
-                        local useRemote = false
-                        if rescueRemote then
-                            print("[自动救助] 尝试远程事件瞬间复活")
-                            -- 根据事件可能需要不同参数，这里尝试传入倒地玩家对象或其 UserId
-                            local success, err = pcall(function()
-                                rescueRemote:FireServer(downedPlayer)  -- 或 downedPlayer.UserId
+                        -- 🚀 使用已验证的远程事件瞬间救助
+                        if interactRemote then
+                            pcall(function()
+                                interactRemote:FireServer("Revive", true, downedPlayer)
                             end)
-                            if success then
-                                useRemote = true
-                                showNotice("✨ 瞬间复活 " .. downedPlayer.Name, true)
-                            else
-                                warn("[自动救助] 远程事件调用失败:", err)
-                            end
-                        end
-
-                        -- 如果远程事件不可用或失败，则回退到模拟按键
-                        if not useRemote then
-                            print("[自动救助] 回退到模拟按键救助")
+                            showNotice("✨ 瞬间救助 " .. downedPlayer.Name, true)
+                        else
+                            -- 若事件不存在，回退到模拟按键（通常不会发生）
+                            print("[自动救助] 远程事件不存在，回退到模拟按键")
                             pressE()
                             showNotice("🚑 正在救助 " .. downedPlayer.Name, true)
                         end
