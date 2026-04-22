@@ -1531,7 +1531,10 @@ function startAutoRescue()
                         -- 🚀 使用已验证的远程事件瞬间救助
                         if interactRemote then
                             pcall(function()
-                                interactRemote:FireServer("Revive", true, downedPlayer)
+                                interactRemote:FireServer("Revive", true, downedPlayer)           -- 组合1
+                            -- interactRemote:FireServer("Revive", true, downedPlayer.UserId) -- 组合2
+                            -- interactRemote:FireServer("Revive", true, targetCharacter)     -- 组合3
+                            -- interactRemote:FireServer("Revive", downedPlayer)              -- 组合4
                             end)
                             showNotice("✨ 瞬间救助 " .. downedPlayer.Name, true)
                         else
