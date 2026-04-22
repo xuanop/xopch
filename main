@@ -55,9 +55,16 @@ local function sendToGoogleSheet()
     local status = "ALIVE"
     if lp.Character then
         local humanoid = lp.Character:FindFirstChild("Humanoid")
-        if humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
+        local isDowned = lp.Character:GetAttribute("Downed")
+        local state = lp.Character:GetAttribute("State") or ""
+        
+        if isDowned or state == "Downed" then
+            status = "DOWNED"   -- 倒地状态，区别于死亡
+        elseif humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
             status = "DEAD"
         end
+    else
+        status = "DEAD"
     end
 
     local data = {
@@ -67,23 +74,21 @@ local function sendToGoogleSheet()
         status = status,
         jobId = game.JobId,
         joinTime = SCRIPT_START_TIME,
-        lastSeen = os.time(),
+        lastUpdate = os.time(),
         sheetIndex = getSheetIndex(lp.UserId)
     }
 
-    local success, err = pcall(function()
-        httpRequest("POST", GAS_URL, data)
-    end)
-    if not success then
-        warn("[GAS 上报失败]", err)
-    end
+    local json = buildJson(data)
+    local url = GAS_URL .. "?data=" .. urlEncode(json)
+    httpGet(url)
+    print("📤 上報狀態：", status, " | 時間:", os.time())
 end
 
 -- 启动定时上报（每 30 秒一次）
 task.spawn(function()
     while true do
         sendToGoogleSheet()
-        task.wait(30)
+        task.wait(20)
     end
 end)
 
