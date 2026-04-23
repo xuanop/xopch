@@ -225,23 +225,22 @@ local cachedPlayers = {}
 local cacheLock = false
 
 local function fetchOnlinePlayers()
-    local url = GAS_URL .. "?action=getPlayers"
+    local url = GAS_URL .. "?action=getPlayers&_=" .. os.time()
     local res = httpGet(url)
-    if not res or res.StatusCode ~= 200 or not res.Body then return {} end
+    if not res then warn("httpGet 返回 nil"); return {} end
+    if res.StatusCode ~= 200 then warn("状态码: " .. res.StatusCode); return {} end
+    if not res.Body then warn("Body 为空"); return {} end
+
+    -- 🔥 打印原始响应用于调试
+    print("[fetchOnlinePlayers] 原始响应: " .. string.sub(res.Body, 1, 500))
+
     local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-    if not success then return {} end
+    if not success then warn("JSON解析失败"); return {} end
     local rawPlayers = data.players or {}
-    
-    print("[診斷] GAS 返回玩家總數:", #rawPlayers)
+    print("[診斷] GAS 返回玩家數:", #rawPlayers)
     for i, p in ipairs(rawPlayers) do
-        local lastUp = tonumber(p.lastUpdate) or 0
-        local diff = os.time() - lastUp
-        -- 🔥 关键调试行：打印每个玩家的原始状态
-        print(string.format("  [%d] %s (ID:%s) status:%s lastUpdate:%s diff:%d秒",
-            i, tostring(p.username), tostring(p.userId), tostring(p.status), tostring(lastUp), diff))
+        print(string.format("  [%d] %s status:%s lastUpdate:%s", i, p.username, p.status, p.lastUpdate))
     end
-    
-    table.sort(rawPlayers, function(a, b) return (a.joinTime or 0) > (b.joinTime or 0) end)
     return rawPlayers
 end
 
