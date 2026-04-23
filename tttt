@@ -2451,7 +2451,7 @@ task.spawn(function()
     local RENAME_PAIRS = {
         { "Broom", "SwagWalk" },
         { "RockinStride", "Stride" },
-        { "SnowmobileCruise", "BumperKart" },
+        { "SnowmobileCruise", "BumperKart" }, 
     }
 
     repeat task.wait() until game:IsLoaded()
@@ -2466,11 +2466,6 @@ task.spawn(function()
     if not emotes then
         warn("[MyCommander] 找不到 Emotes，无法自动改名")
         return
-    end
-
-    print("[MyCommander] 当前 Emotes 物品:")
-    for _, v in ipairs(emotes:GetChildren()) do
-        print("  - " .. v.Name)
     end
 
     local function findItem(name)
@@ -2491,13 +2486,12 @@ task.spawn(function()
     local function renameSingle(sourceName, targetName)
         local sourceItem = findItem(sourceName)
         if not sourceItem then
-            warn("[MyCommander] 找不到来源表情:", sourceName, "，跳过此项")
             return
         end
 
         local targetItem = findItem(targetName)
         if targetItem and targetItem ~= sourceItem then
-            warn("[MyCommander] 目标名称", targetName, "已被其他物品使用，可能无法改名")
+            -- 目标名已被占用，仍尝试改名
         end
 
         local maxRetries = 5
@@ -2506,30 +2500,25 @@ task.spawn(function()
                 sourceItem.Name = targetName
             end)
             if success then
-                print("[MyCommander] 成功将", sourceName, "改名为", targetName)
+                print("[MyCommander] ✅ 改名成功: " .. sourceName .. " → " .. targetName)
                 return true
             else
-                warn("[MyCommander] 改名失败 (尝试", retry, "/", maxRetries, "):", err)
                 task.wait(2)
             end
         end
-
-        warn("[MyCommander] 改名失败 (已达最大重试次数):", sourceName, "→", targetName)
+        warn("[MyCommander] ❌ 改名失败: " .. sourceName .. " → " .. targetName)
         return false
     end
 
-    for i, pair in ipairs(RENAME_PAIRS) do
+    for _, pair in ipairs(RENAME_PAIRS) do
         local source, target = pair[1], pair[2]
         if source and target then
-            print(string.format("[MyCommander] 处理第 %d 组: %s → %s", i, source, target))
             renameSingle(source, target)
             task.wait(1)
-        else
-            warn("[MyCommander] 第", i, "组无效，跳过")
         end
     end
 
-    print("[MyCommander] 所有改名操作已完成")
+    print("[MyCommander] 自动改名流程结束")
 end)
 
 local reviveRemote2 = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Player") and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
