@@ -2434,7 +2434,8 @@ lp.CharacterAdded:Connect(function(char)
     applyToxicInferno(char)
 end)
 
--- 列出所有 Cosmetics 物品
+-- 已禁用 Cosmetics 列表打印
+--[[
 local items = ReplicatedStorage:FindFirstChild("Items")
 if items then
     local cosmetics = items:FindFirstChild("Cosmetics")
@@ -2445,6 +2446,7 @@ if items then
         end
     end
 end
+--]]
 
 -- ==================== 自动改名 (多组 + 重试) ====================
 task.spawn(function()
