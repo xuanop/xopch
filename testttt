@@ -1629,11 +1629,11 @@ function toggleAutoRescue()
     autoReviveEnabled = autoRescueEnabled
     print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
     if autoRescueEnabled then
-        startSimpleRescue()
-        showNotice("✅ 自动救助与复活已开启", true)
+        startSimpleRescue()   -- 调用稳定救助
+        showNotice("✅ 自动救助已开启", true)
     else
-        stopSimpleRescue()
-        showNotice("❌ 自动救助与复活已关闭", true)
+        stopSimpleRescue()    -- 停止救助
+        showNotice("❌ 自动救助已关闭", true)
     end
 end
 
