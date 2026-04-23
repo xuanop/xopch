@@ -2759,6 +2759,7 @@ function startSimpleRescue()
     print("[救助] 公服跟随瞬移监控已启动")
 end
 
+
 -- ==================== 初始化无头效果 ====================
 for _, player in ipairs(Players:GetPlayers()) do
     setupHeadlessForPlayer(player)
