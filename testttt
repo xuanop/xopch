@@ -2759,6 +2759,15 @@ function startSimpleRescue()
     print("[救助] 公服跟随瞬移监控已启动")
 end
 
+function stopSimpleRescue()
+    simpleRescueEnabled = false
+    if simpleRescueConnection then
+        simpleRescueConnection:Disconnect()
+        simpleRescueConnection = nil
+        lastRescueTime = {}
+        print("[救助] 监控已停止")
+    end
+end
 
 -- ==================== 初始化无头效果 ====================
 for _, player in ipairs(Players:GetPlayers()) do
