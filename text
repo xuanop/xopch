@@ -382,7 +382,7 @@ end
 task.spawn(function()
     updateCache()
     while true do
-        task.wait(10)
+        task.wait(5)
         updateCache()
         if screenGui.Enabled then renderPlayerList() end
     end
