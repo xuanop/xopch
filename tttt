@@ -2666,7 +2666,10 @@ local lastRescueTime = {}
 function startSimpleRescue()
     if simpleRescueConnection then simpleRescueConnection:Disconnect() end
     simpleRescueEnabled = true
-    print("[自动救助] 启动稳定救助模式...")
+    print("[秒救 Farm] 启动...")
+
+    -- 预先获取远程事件（备用）
+    local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
         if not simpleRescueEnabled then return end
@@ -2681,11 +2684,10 @@ function startSimpleRescue()
         local myDowned = lp.Character:GetAttribute("Downed")
         if myDowned or myState == "Downed" or myState == "Dead" then return end
 
-        -- 寻找最近倒地的队友
+        -- 寻找最近倒地队友
         local nearestPlayer = nil
         local nearestDist = math.huge
         local myPos = lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
-
         if not myPos then return end
 
         local gameFolder = workspace:FindFirstChild("Game")
@@ -2708,28 +2710,37 @@ function startSimpleRescue()
 
         if not nearestPlayer then return end
 
-        -- 防重复救助
+        -- 防重复（3 秒内同一玩家只秒一次）
         local now = os.clock()
         local last = lastRescueTime[nearestPlayer.UserId] or 0
-        if now - last < 3.0 then return end  -- 3秒内不对同一玩家重复救助
+        if now - last < 3.0 then return end
         lastRescueTime[nearestPlayer.UserId] = now
 
-        -- 执行救助
+        -- 执行秒救
         local targetCharacter = playersFolder and (playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId)))
-        if targetCharacter then
-            local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
-            if targetHRP and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                print("[自动救助] 传送到", nearestPlayer.Name, "身边")
-                lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
-                lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
-                task.wait(0.1)
-                print("[自动救助] 按下 E 键救助")
-                pressE()
-                showNotice("🚑 正在救助 " .. nearestPlayer.Name, true)
-            end
-        end
+        if not targetCharacter then return end
+        local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
+        if not targetHRP then return end
+        if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+
+        -- 传送
+        print("[秒救] 传送到 " .. nearestPlayer.Name)
+        lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+        lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
+        task.wait(0.05)  -- 极短稳定帧
+
+        -- 🔥 时间膨胀秒救：瞬间假装完成 1.6 秒长按
+        print("[秒救] 执行时间膨胀救助")
+        pcall(function()
+            local vim = game:GetService("VirtualInputManager")
+            vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)   -- 按下
+            task.wait(0.01)   -- 0.01 秒欺骗游戏引擎
+            vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)  -- 释放
+        end)
+
+        showNotice("⚡ 秒救 " .. nearestPlayer.Name, true)
     end)
-    print("[自动救助] 监控已启动")
+    print("[秒救 Farm] 监控已启动")
 end
 
 function stopSimpleRescue()
