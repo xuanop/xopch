@@ -60,8 +60,36 @@ local function urlEncode(s)
 end
 
 local function httpGet(url)
-    local success, result = pcall(function() return req({ Url = url, Method = "GET" }) end)
-    return success and result or nil
+    local success, result = pcall(function()
+        return syn.request({
+            Url = url,
+            Method = "GET",
+            Headers = {
+                ["Cache-Control"] = "no-cache, no-store, must-revalidate",
+                ["Pragma"] = "no-cache",
+                ["Expires"] = "0"
+            }
+        })
+    end)
+    if not success then
+        warn("[httpGet] syn.request 调用失败，尝试备用函数...")
+        local req2 = http_request or request
+        if req2 then
+            success, result = pcall(function() return req2({ Url = url, Method = "GET" }) end)
+            if not success then
+                warn("[httpGet] 备用函数也失败")
+                return nil
+            end
+        else
+            return nil
+        end
+    end
+    if result and result.StatusCode == 200 then
+        return result
+    else
+        warn("[httpGet] 状态码异常:", result and result.StatusCode, "URL:", url)
+        return nil
+    end
 end
 
 -- ==================== 簡易通知 ====================
@@ -245,15 +273,41 @@ local function fetchOnlinePlayers()
 end
 
 local function updateCache()
-    if cacheLock then return false end
-    cacheLock = true
-    local success, newData = pcall(fetchOnlinePlayers)
-    cachedPlayers = success and newData or {}
-    cacheLock = false
-    return success
+    print("[updateCache] 开始强制拉取 GAS 数据...")
+    local url = GAS_URL .. "?action=getPlayers&_=" .. os.time()
+    local res = httpGet(url)
+    if not res then
+        warn("[updateCache] httpGet 无响应")
+        return false
+    end
+    if not res.Body then
+        warn("[updateCache] 响应 Body 为空")
+        return false
+    end
+
+    print("[updateCache] 原始响应截取: " .. string.sub(res.Body, 1, 200))
+
+    local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
+    if not success then
+        warn("[updateCache] JSON 解析失败")
+        return false
+    end
+    if not data.players then
+        warn("[updateCache] 返回数据中无 players 字段")
+        return false
+    end
+
+    cachedPlayers = data.players
+    lastSuccessfulFetch = os.time()
+    print("[updateCache] ✅ 成功获取玩家数:", #cachedPlayers)
+    for i, p in ipairs(cachedPlayers) do
+        print(string.format("  [%d] %s (ID:%s) status:%s", i, p.username, p.userId, p.status))
+    end
+    return true
 end
 
 local function renderPlayerList()
+    print("[renderPlayerList] 开始渲染，当前缓存玩家数:", #cachedPlayers)
     for _, child in ipairs(playerList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
@@ -361,11 +415,14 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     if input.KeyCode == PANEL_KEY then
         screenGui.Enabled = not screenGui.Enabled
         if screenGui.Enabled then
-            renderPlayerList()
-            startUIRefresh()
-            task.spawn(function() updateCache(); if screenGui.Enabled then renderPlayerList() end end)
+            print("[面板] 手动触发数据拉取...")
+            if updateCache() then
+                renderPlayerList()
+            else
+                warn("[面板] 数据拉取失败，显示空白")
+            end
         else
-            stopUIRefresh()
+            -- stopUIRefresh()   -- 已注释
         end
     end
 end)
