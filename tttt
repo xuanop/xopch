@@ -1627,10 +1627,10 @@ function toggleAutoRescue()
     autoRescueEnabled = not autoRescueEnabled
     print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
     if autoRescueEnabled then
-        startSimpleRescue()   -- 调用新测试函数
-        showNotice("✅ 自动救助已开启（测试模式）", true)
+        startSimpleRescue()   -- 调用稳定救助
+        showNotice("✅ 自动救助已开启", true)
     else
-        stopSimpleRescue()    -- 停止测试
+        stopSimpleRescue()    -- 停止救助
         showNotice("❌ 自动救助已关闭", true)
     end
 end
@@ -2658,126 +2658,78 @@ task.spawn(function()
     pcall(function() loadstring(game:HttpGet(evaURL))() end)
 end)
 
--- ==================== 🌟 秒救命令自动穷举测试 ====================
+-- ==================== 稳定自动救助（传送+按E） ====================
 local simpleRescueEnabled = false
 local simpleRescueConnection = nil
 local lastRescueTime = {}
-local testedCommands = {}  -- 记录已测试成功的命令，避免重复输出
 
 function startSimpleRescue()
     if simpleRescueConnection then simpleRescueConnection:Disconnect() end
     simpleRescueEnabled = true
-    print("[秒救测试] 启动命令穷举测试...")
-
-    local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
-    if not interactRemote then
-        warn("[秒救测试] ❌ 找不到 Interact 远程事件！")
-        return
-    end
-
-    -- 所有可能的命令字符串
-    local commands = {
-        "Revive",
-        "Rescue",
-        "Help",
-        "Interact",
-        "RevivePlayer",
-        "Respawn",
-        "Pickup",
-        "Use",
-        "Action"
-    }
+    print("[自动救助] 启动稳定救助模式...")
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
         if not simpleRescueEnabled then return end
         if not autoRescueEnabled then return end
 
+        -- 自身状态检查
+        if not lp.Character then return end
+        local myHumanoid = lp.Character:FindFirstChild("Humanoid")
+        if not myHumanoid then return end
+        if myHumanoid.Health <= 0 then return end
+        local myState = lp.Character:GetAttribute("State") or ""
+        local myDowned = lp.Character:GetAttribute("Downed")
+        if myDowned or myState == "Downed" or myState == "Dead" then return end
+
+        -- 寻找最近倒地的队友
+        local nearestPlayer = nil
+        local nearestDist = math.huge
+        local myPos = lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
+
+        if not myPos then return end
+
+        local gameFolder = workspace:FindFirstChild("Game")
+        local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+
         for _, player in ipairs(Players:GetPlayers()) do
             if player == lp then continue end
-            local character = player.Character
+            local character = playersFolder and (playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId)))
             if character and character:GetAttribute("Downed") then
-                local now = os.clock()
-                local last = lastRescueTime[player.UserId] or 0
-                if now - last < 2.0 then continue end  -- 2秒内不重复测试同一玩家
-                lastRescueTime[player.UserId] = now
-
-                -- 穷举测试所有命令和参数组合
-                local found = false
-                for _, cmd in ipairs(commands) do
-                    -- 组合1：cmd + 玩家对象
-                    local success, err = pcall(function()
-                        interactRemote:FireServer(cmd, player)
-                    end)
-                    if success then
-                        task.wait(0.2)
-                        if not character:GetAttribute("Downed") then
-                            if not testedCommands[cmd .. "_player"] then
-                                testedCommands[cmd .. "_player"] = true
-                                print("[秒救测试] ✅ 成功命令: FireServer(\"" .. cmd .. "\", player)")
-                            end
-                            found = true
-                            break
-                        end
-                    end
-
-                    -- 组合2：cmd + 角色对象
-                    success, err = pcall(function()
-                        interactRemote:FireServer(cmd, character)
-                    end)
-                    if success then
-                        task.wait(0.2)
-                        if not character:GetAttribute("Downed") then
-                            if not testedCommands[cmd .. "_character"] then
-                                testedCommands[cmd .. "_character"] = true
-                                print("[秒救测试] ✅ 成功命令: FireServer(\"" .. cmd .. "\", character)")
-                            end
-                            found = true
-                            break
-                        end
-                    end
-
-                    -- 组合3：cmd + true + 玩家对象
-                    success, err = pcall(function()
-                        interactRemote:FireServer(cmd, true, player)
-                    end)
-                    if success then
-                        task.wait(0.2)
-                        if not character:GetAttribute("Downed") then
-                            if not testedCommands[cmd .. "_true_player"] then
-                                testedCommands[cmd .. "_true_player"] = true
-                                print("[秒救测试] ✅ 成功命令: FireServer(\"" .. cmd .. "\", true, player)")
-                            end
-                            found = true
-                            break
-                        end
-                    end
-
-                    -- 组合4：cmd + true + 角色对象
-                    success, err = pcall(function()
-                        interactRemote:FireServer(cmd, true, character)
-                    end)
-                    if success then
-                        task.wait(0.2)
-                        if not character:GetAttribute("Downed") then
-                            if not testedCommands[cmd .. "_true_character"] then
-                                testedCommands[cmd .. "_true_character"] = true
-                                print("[秒救测试] ✅ 成功命令: FireServer(\"" .. cmd .. "\", true, character)")
-                            end
-                            found = true
-                            break
-                        end
-                    end
-                end
-
-                if not found then
-                    if not testedCommands["__all_failed__"] then
-                        testedCommands["__all_failed__"] = true
-                        print("[秒救测试] ⚠️ 所有已知组合均失败，请手动检查或提供更多信息")
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local dist = (myPos - hrp.Position).Magnitude
+                    if dist < nearestDist then
+                        nearestDist = dist
+                        nearestPlayer = player
                     end
                 end
             end
         end
+
+        if not nearestPlayer then return end
+
+        -- 防重复救助
+        local now = os.clock()
+        local last = lastRescueTime[nearestPlayer.UserId] or 0
+        if now - last < 3.0 then return end  -- 3秒内不对同一玩家重复救助
+        lastRescueTime[nearestPlayer.UserId] = now
+
+        -- 执行救助
+        local targetCharacter = playersFolder and (playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId)))
+        if targetCharacter then
+            local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
+            if targetHRP and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                print("[自动救助] 传送到", nearestPlayer.Name, "身边")
+                lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+                lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
+                task.wait(0.1)
+                print("[自动救助] 按下 E 键救助")
+                pressE()
+                showNotice("🚑 正在救助 " .. nearestPlayer.Name, true)
+            end
+        end
     end)
+    print("[自动救助] 监控已启动")
 end
 
 function stopSimpleRescue()
@@ -2786,8 +2738,7 @@ function stopSimpleRescue()
         simpleRescueConnection:Disconnect()
         simpleRescueConnection = nil
         lastRescueTime = {}
-        testedCommands = {}
-        print("[秒救测试] 测试已停止")
+        print("[自动救助] 监控已停止")
     end
 end
 
