@@ -2668,7 +2668,10 @@ local lastRescueTime = {}
 function startSimpleRescue()
     if simpleRescueConnection then simpleRescueConnection:Disconnect() end
     simpleRescueEnabled = true
-    print("[救助] 开启公服跟随瞬移模式...")
+    print("[救助] 公服跟随瞬移模式启动...")
+
+    -- 日志冷却记录：避免同一事件刷屏
+    local lastLogTime = {}
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
         if not simpleRescueEnabled then return end
@@ -2709,14 +2712,19 @@ function startSimpleRescue()
 
         if not nearestPlayer then return end
 
-        -- 获取目标角色引用
+        -- 获取目标角色
         local targetCharacter = playersFolder and (playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId)))
         if not targetCharacter then return end
 
-        -- 循环救助该队友，直到起身或达到最大尝试次数
+        -- 防重复（同一玩家 5 秒内不再救）
+        local now = os.clock()
+        local last = lastRescueTime[nearestPlayer.UserId] or 0
+        if now - last < 5.0 then return end
+        lastRescueTime[nearestPlayer.UserId] = now
+
+        -- 循环跟随救助，直到队友起身或达到最大尝试次数
         local maxAttempts = 5
         for attempt = 1, maxAttempts do
-            -- 再次检查自身存活和目标倒地状态
             if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then break end
             if myHumanoid.Health <= 0 or lp.Character:GetAttribute("Downed") then break end
             if not targetCharacter:GetAttribute("Downed") then break end
@@ -2724,7 +2732,12 @@ function startSimpleRescue()
             local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
             if not targetHRP then break end
 
-            print(string.format("[救助] 第%d次尝试救助 %s", attempt, nearestPlayer.Name))
+            -- 日志冷却：每个玩家每 2 秒最多输出一次“尝试”
+            local lastAttemptLog = lastLogTime[nearestPlayer.UserId .. "_attempt"] or 0
+            if now - lastAttemptLog > 2 then
+                print(string.format("[救助] 第%d次尝试救助 %s", attempt, nearestPlayer.Name))
+                lastLogTime[nearestPlayer.UserId .. "_attempt"] = now
+            end
 
             -- 瞬移到目标身后
             lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
@@ -2748,27 +2761,21 @@ function startSimpleRescue()
                 task.wait(1.2)
                 vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
             end)
-            task.wait(0.3) -- 等待游戏反馈
+            task.wait(0.3)  -- 等待服务器反馈
 
             -- 如果目标已起身，结束循环
             if not targetCharacter:GetAttribute("Downed") then
-                print("[救助] " .. nearestPlayer.Name .. " 已起身，切换下一个目标")
-                showNotice("🚑 已救助 " .. nearestPlayer.Name, true)
+                local lastUpLog = lastLogTime[nearestPlayer.UserId .. "_up"] or 0
+                if now - lastUpLog > 3 then
+                    print("[救助] " .. nearestPlayer.Name .. " 已起身")
+                    showNotice("🚑 已救助 " .. nearestPlayer.Name, true)
+                    lastLogTime[nearestPlayer.UserId .. "_up"] = now
+                end
                 break
             end
         end
     end)
-    print("[救助] 公服跟随瞬移监控已启动")
-end
-
-function stopSimpleRescue()
-    simpleRescueEnabled = false
-    if simpleRescueConnection then
-        simpleRescueConnection:Disconnect()
-        simpleRescueConnection = nil
-        lastRescueTime = {}
-        print("[救助] 监控已停止")
-    end
+    print("[救助] 监控已启动")
 end
 
 -- ==================== 初始化无头效果 ====================
