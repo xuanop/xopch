@@ -1534,7 +1534,7 @@ function pressE()
     pcall(function()
         local vim = game:GetService("VirtualInputManager")
         vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
-        task.wait()   -- 仅等一帧
+        task.wait(1.5)   -- 仅等一帧
         vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
     end)
 end
