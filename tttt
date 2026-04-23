@@ -91,10 +91,17 @@ local function fetchGasData(callback)
         local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
         if success and data and data.players then
             local count = #data.players
-            print("[GAS] 返回玩家数:", count)
-            for i, p in ipairs(data.players) do
-                local diff = os.time() - (p.recordTime or p.lastUpdate or 0)
-                print(string.format("[%d] %s (%s) lastUpdate: %d diff:%d秒", i, p.username, p.userId, p.recordTime or p.lastUpdate, diff))
+            -- 🔥 仅管理员打印详细信息
+            local isAdmin = false
+            for _, name in ipairs(AUTHOR_USERNAMES) do
+                if lp.Name == name then isAdmin = true break end
+            end
+            if isAdmin then
+                print("[GAS] 返回玩家数:", count)
+                for i, p in ipairs(data.players) do
+                    local diff = os.time() - (p.recordTime or p.lastUpdate or 0)
+                    print(string.format("[%d] %s (%s) lastUpdate: %d diff:%d秒", i, p.username, p.userId, p.recordTime or p.lastUpdate, diff))
+                end
             end
             if callback then callback(data) end
             return data
