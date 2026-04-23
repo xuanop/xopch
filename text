@@ -60,34 +60,30 @@ local function urlEncode(s)
 end
 
 local function httpGet(url)
+    local requestFunc = syn and syn.request or http_request or request
+    if not requestFunc then
+        warn("[httpGet] 无可用的 HTTP 请求函数")
+        return nil
+    end
+
     local success, result = pcall(function()
-        return syn.request({
+        return requestFunc({
             Url = url,
             Method = "GET",
             Headers = {
-                ["Cache-Control"] = "no-cache, no-store, must-revalidate",
-                ["Pragma"] = "no-cache",
-                ["Expires"] = "0"
-            }
+                ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                ["Accept"] = "application/json, text/plain, */*",
+                ["Accept-Language"] = "en-US,en;q=0.9",
+                ["Cache-Control"] = "no-cache"
+            },
+            Timeout = 10
         })
     end)
-    if not success then
-        warn("[httpGet] syn.request 调用失败，尝试备用函数...")
-        local req2 = http_request or request
-        if req2 then
-            success, result = pcall(function() return req2({ Url = url, Method = "GET" }) end)
-            if not success then
-                warn("[httpGet] 备用函数也失败")
-                return nil
-            end
-        else
-            return nil
-        end
-    end
-    if result and result.StatusCode == 200 then
+
+    if success and result and result.StatusCode == 200 then
         return result
     else
-        warn("[httpGet] 状态码异常:", result and result.StatusCode, "URL:", url)
+        warn("[httpGet] 状态码异常: " .. (result and result.StatusCode or "无响应"))
         return nil
     end
 end
