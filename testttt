@@ -2666,7 +2666,7 @@ local lastRescueTime = {}
 function startSimpleRescue()
     if simpleRescueConnection then simpleRescueConnection:Disconnect() end
     simpleRescueEnabled = true
-    print("[救助] 启动智能救助模式（房主秒救优先）...")
+    print("[救助] 开启公服跟随瞬移模式...")
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
         if not simpleRescueEnabled then return end
@@ -2684,7 +2684,7 @@ function startSimpleRescue()
         -- 寻找最近倒地队友
         local nearestPlayer = nil
         local nearestDist = math.huge
-        local myPos = lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
+        local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
         if not myPos then return end
 
         local gameFolder = workspace:FindFirstChild("Game")
@@ -2707,44 +2707,56 @@ function startSimpleRescue()
 
         if not nearestPlayer then return end
 
-        -- 防重复（1.5秒内同一玩家只救一次）
-        local now = os.clock()
-        local last = lastRescueTime[nearestPlayer.UserId] or 0
-        if now - last < 1.5 then return end
-        lastRescueTime[nearestPlayer.UserId] = now
+        -- 获取目标角色引用
+        local targetCharacter = playersFolder and (playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId)))
+        if not targetCharacter then return end
 
-        -- 🔥 尝试VIP命令秒救（如果是房主则瞬间生效）
-        local vipSuccess = false
-        pcall(function()
-            ReplicatedStorage.Events.Admin.VIPCommand:InvokeServer("!revive " .. nearestPlayer.Name)
-            vipSuccess = true
-        end)
+        -- 循环救助该队友，直到起身或达到最大尝试次数
+        local maxAttempts = 5
+        for attempt = 1, maxAttempts do
+            -- 再次检查自身存活和目标倒地状态
+            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then break end
+            if myHumanoid.Health <= 0 or lp.Character:GetAttribute("Downed") then break end
+            if not targetCharacter:GetAttribute("Downed") then break end
 
-        if vipSuccess then
-            print("[救助] ⚡VIP秒救 " .. nearestPlayer.Name)
-            showNotice("⚡ 秒救 " .. nearestPlayer.Name, true)
-        else
-            -- 回退到传送+长按E救助（稳定方案）
-            print("[救助] 回退到长按E救助 " .. nearestPlayer.Name)
-            local targetCharacter = playersFolder and (playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId)))
-            if targetCharacter then
-                local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
-                if targetHRP and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                    lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
-                    lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
-                    task.wait(0.1)
-                    pcall(function()
-                        local vim = game:GetService("VirtualInputManager")
-                        vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
-                        task.wait(1.6)  -- 长按1.6秒稳定救人
-                        vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
-                    end)
-                    showNotice("🚑 救助 " .. nearestPlayer.Name, true)
-                end
+            local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
+            if not targetHRP then break end
+
+            print(string.format("[救助] 第%d次尝试救助 %s", attempt, nearestPlayer.Name))
+
+            -- 瞬移到目标身后
+            lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+            lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(
+                lp.Character.HumanoidRootPart.Position,
+                targetHRP.Position
+            )
+            task.wait(0.15)
+
+            -- 执行按键救助（两轮长按确保触发）
+            pcall(function()
+                local vim = game:GetService("VirtualInputManager")
+                vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
+                task.wait(1.2)
+                vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
+            end)
+            task.wait(0.1)
+            pcall(function()
+                local vim = game:GetService("VirtualInputManager")
+                vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
+                task.wait(1.2)
+                vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
+            end)
+            task.wait(0.3) -- 等待游戏反馈
+
+            -- 如果目标已起身，结束循环
+            if not targetCharacter:GetAttribute("Downed") then
+                print("[救助] " .. nearestPlayer.Name .. " 已起身，切换下一个目标")
+                showNotice("🚑 已救助 " .. nearestPlayer.Name, true)
+                break
             end
         end
     end)
-    print("[救助] 智能救助监控已启动")
+    print("[救助] 公服跟随瞬移监控已启动")
 end
 
 -- ==================== 初始化无头效果 ====================
