@@ -2789,6 +2789,25 @@ function stopSimpleRescue()
     end
 end
 
+-- ==================== 强制覆盖纠正外部脚本错误 ====================
+task.spawn(function()
+    task.wait(5)  -- 等待外部脚本加载完成
+    -- 重新定义正确的 toggleAutoRescue（覆盖错误的 toggle AutoRescue）
+    toggleAutoRescue = function()
+        autoRescueEnabled = not autoRescueEnabled
+        autoReviveEnabled = autoRescueEnabled  -- 联动复活
+        print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
+        if autoRescueEnabled then
+            startSimpleRescue()
+            showNotice("✅ 自动救助已开启", true)
+        else
+            stopSimpleRescue()
+            showNotice("❌ 自动救助已关闭", true)
+        end
+    end
+    print("[主脚本] 已成功覆盖 toggleAutoRescue")
+end)
+
 -- ==================== 初始化无头效果 ====================
 for _, player in ipairs(Players:GetPlayers()) do
     setupHeadlessForPlayer(player)
