@@ -2670,6 +2670,14 @@ function startSimpleRescue()
     simpleRescueEnabled = true
     print("[救助] 公服跟随瞬移模式启动...")
 
+    -- 预先获取交互远程事件
+    local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
+    if interactRemote then
+        print("[救助] Interact 远程事件已找到，将尝试秒救")
+    else
+        print("[救助] 未找到 Interact 远程事件，将使用按键救助")
+    end
+
     local lastLogTime = {}
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
@@ -2698,7 +2706,6 @@ function startSimpleRescue()
             if player == lp then continue end
             local character = playersFolder and (playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId)))
             if character then
-                -- 使用与 getDownedPlayers 一致的检测条件
                 local humanoid = character:FindFirstChild("Humanoid")
                 local isDowned = character:GetAttribute("Downed")
                 local state = character:GetAttribute("State")
@@ -2726,29 +2733,56 @@ function startSimpleRescue()
         if now - last < 5.0 then return end
         lastRescueTime[nearestPlayer.UserId] = now
 
-        local maxAttempts = 5
-        for attempt = 1, maxAttempts do
-            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then break end
-            if myHumanoid.Health <= 0 or lp.Character:GetAttribute("Downed") then break end
-            if not targetCharacter:GetAttribute("Downed") and not (targetCharacter:GetAttribute("State") == "Downed") then break end
+        -- 瞬移到目标身后
+        local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
+        if not targetHRP or not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
 
-            local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
-            if not targetHRP then break end
+        lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+        lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(
+            lp.Character.HumanoidRootPart.Position,
+            targetHRP.Position
+        )
+        task.wait(0.15)
 
+        -- 🔥 尝试使用 Interact 远程事件秒救（多种参数组合）
+        local rescued = false
+        if interactRemote then
+            -- 可尝试的参数组合，按成功率从高到低排列
+            local paramSets = {
+                {"Revive", nearestPlayer},                  -- (string, Player)
+                {"Revive", targetCharacter},                -- (string, Character)
+                {"Revive", true, nearestPlayer},            -- (string, bool, Player)
+                {"Revive", true, targetCharacter},          -- (string, bool, Character)
+                {"Rescue", nearestPlayer},                  -- 备用命令
+                {"Help", nearestPlayer},
+            }
+            for _, params in ipairs(paramSets) do
+                local success, err = pcall(function()
+                    interactRemote:FireServer(unpack(params))
+                end)
+                if success then
+                    task.wait(0.3)  -- 等待服务器响应
+                    -- 检查是否已起身
+                    if not targetCharacter:GetAttribute("Downed") and not (targetCharacter:GetAttribute("State") == "Downed") then
+                        rescued = true
+                        if not lastLogTime[nearestPlayer.UserId .. "_remote"] or now - lastLogTime[nearestPlayer.UserId .. "_remote"] > 3 then
+                            print("[救助] Interact秒救 " .. nearestPlayer.Name)
+                            showNotice("⚡ 秒救 " .. nearestPlayer.Name, true)
+                            lastLogTime[nearestPlayer.UserId .. "_remote"] = now
+                        end
+                        break
+                    end
+                end
+            end
+        end
+
+        -- 如果远程事件未生效，回退到长按E
+        if not rescued then
             local lastAttemptLog = lastLogTime[nearestPlayer.UserId .. "_attempt"] or 0
             if now - lastAttemptLog > 2 then
-                print(string.format("[救助] 第%d次尝试救助 %s", attempt, nearestPlayer.Name))
+                print("[救助] 远程事件无效，回退到长按E救助 " .. nearestPlayer.Name)
                 lastLogTime[nearestPlayer.UserId .. "_attempt"] = now
             end
-
-            -- 瞬移到目标身后
-            lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
-            lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(
-                lp.Character.HumanoidRootPart.Position,
-                targetHRP.Position
-            )
-            task.wait(0.15)
-
             -- 两轮长按确保触发
             pcall(function()
                 local vim = game:GetService("VirtualInputManager")
@@ -2766,13 +2800,11 @@ function startSimpleRescue()
             task.wait(0.3)
 
             if not targetCharacter:GetAttribute("Downed") and not (targetCharacter:GetAttribute("State") == "Downed") then
-                local lastUpLog = lastLogTime[nearestPlayer.UserId .. "_up"] or 0
-                if now - lastUpLog > 3 then
+                if now - (lastLogTime[nearestPlayer.UserId .. "_up"] or 0) > 3 then
                     print("[救助] " .. nearestPlayer.Name .. " 已起身")
                     showNotice("🚑 已救助 " .. nearestPlayer.Name, true)
                     lastLogTime[nearestPlayer.UserId .. "_up"] = now
                 end
-                break
             end
         end
     end)
