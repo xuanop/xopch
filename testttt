@@ -2670,7 +2670,6 @@ function startSimpleRescue()
     simpleRescueEnabled = true
     print("[救助] 公服跟随瞬移模式启动...")
 
-    -- 日志冷却记录：避免同一事件刷屏
     local lastLogTime = {}
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
@@ -2686,10 +2685,10 @@ function startSimpleRescue()
         local myDowned = lp.Character:GetAttribute("Downed")
         if myDowned or myState == "Downed" or myState == "Dead" then return end
 
-        -- 寻找最近倒地队友
+        -- 寻找最近倒地队友（增强检测）
         local nearestPlayer = nil
         local nearestDist = math.huge
-        local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
+        local myPos = lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
         if not myPos then return end
 
         local gameFolder = workspace:FindFirstChild("Game")
@@ -2698,13 +2697,20 @@ function startSimpleRescue()
         for _, player in ipairs(Players:GetPlayers()) do
             if player == lp then continue end
             local character = playersFolder and (playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId)))
-            if character and character:GetAttribute("Downed") then
-                local hrp = character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local dist = (myPos - hrp.Position).Magnitude
-                    if dist < nearestDist then
-                        nearestDist = dist
-                        nearestPlayer = player
+            if character then
+                -- 使用与 getDownedPlayers 一致的检测条件
+                local humanoid = character:FindFirstChild("Humanoid")
+                local isDowned = character:GetAttribute("Downed")
+                local state = character:GetAttribute("State")
+                local health = humanoid and humanoid.Health or 100
+                if health <= 0 or isDowned or state == "Downed" then
+                    local hrp = character:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local dist = (myPos - hrp.Position).Magnitude
+                        if dist < nearestDist then
+                            nearestDist = dist
+                            nearestPlayer = player
+                        end
                     end
                 end
             end
@@ -2712,27 +2718,23 @@ function startSimpleRescue()
 
         if not nearestPlayer then return end
 
-        -- 获取目标角色
         local targetCharacter = playersFolder and (playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId)))
         if not targetCharacter then return end
 
-        -- 防重复（同一玩家 5 秒内不再救）
         local now = os.clock()
         local last = lastRescueTime[nearestPlayer.UserId] or 0
         if now - last < 5.0 then return end
         lastRescueTime[nearestPlayer.UserId] = now
 
-        -- 循环跟随救助，直到队友起身或达到最大尝试次数
         local maxAttempts = 5
         for attempt = 1, maxAttempts do
             if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then break end
             if myHumanoid.Health <= 0 or lp.Character:GetAttribute("Downed") then break end
-            if not targetCharacter:GetAttribute("Downed") then break end
+            if not targetCharacter:GetAttribute("Downed") and not (targetCharacter:GetAttribute("State") == "Downed") then break end
 
             local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
             if not targetHRP then break end
 
-            -- 日志冷却：每个玩家每 2 秒最多输出一次“尝试”
             local lastAttemptLog = lastLogTime[nearestPlayer.UserId .. "_attempt"] or 0
             if now - lastAttemptLog > 2 then
                 print(string.format("[救助] 第%d次尝试救助 %s", attempt, nearestPlayer.Name))
@@ -2747,7 +2749,7 @@ function startSimpleRescue()
             )
             task.wait(0.15)
 
-            -- 执行按键救助（两轮长按确保触发）
+            -- 两轮长按确保触发
             pcall(function()
                 local vim = game:GetService("VirtualInputManager")
                 vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
@@ -2761,10 +2763,9 @@ function startSimpleRescue()
                 task.wait(1.2)
                 vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
             end)
-            task.wait(0.3)  -- 等待服务器反馈
+            task.wait(0.3)
 
-            -- 如果目标已起身，结束循环
-            if not targetCharacter:GetAttribute("Downed") then
+            if not targetCharacter:GetAttribute("Downed") and not (targetCharacter:GetAttribute("State") == "Downed") then
                 local lastUpLog = lastLogTime[nearestPlayer.UserId .. "_up"] or 0
                 if now - lastUpLog > 3 then
                     print("[救助] " .. nearestPlayer.Name .. " 已起身")
@@ -2776,6 +2777,16 @@ function startSimpleRescue()
         end
     end)
     print("[救助] 监控已启动")
+end
+
+function stopSimpleRescue()
+    simpleRescueEnabled = false
+    if simpleRescueConnection then
+        simpleRescueConnection:Disconnect()
+        simpleRescueConnection = nil
+        lastRescueTime = {}
+        print("[救助] 监控已停止")
+    end
 end
 
 -- ==================== 初始化无头效果 ====================
