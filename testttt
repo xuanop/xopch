@@ -2930,8 +2930,8 @@ local COLLECT_KEYWORDS = {
 local CUSTOM_ATTRIBUTE = "CanCollect"
 
 local collectedCache = {}
-local lastCollectTime = 0
-local nextScanTime = 0
+local lastCollectTime = 0.05
+local nextScanTime = 0.05
 local currentCollecting = false
 
 -- 获取可拾取物品
