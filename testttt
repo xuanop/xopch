@@ -1,4 +1,5 @@
 --[[ 🔑 XUAN Commander - 稳定单例版 ]]--
+
 -- 作者列表
 local AUTHOR_USERNAMES = {
     "xuan_1529",
@@ -1483,118 +1484,64 @@ function toggleAutoFarm()
     end
 end
 
--- ==================== 自动救助倒地队友（最终安全版） ====================
+-- ==================== 自动救助倒地队友（仅高频瞬移秒救版） ====================
 local autoRescueEnabled = false
-local rescueHeartbeat = nil
-local rescueCooldown = {}   -- 冷却表
 
-function startSimpleRescue()
-    if rescueHeartbeat then rescueHeartbeat:Disconnect() end
-    autoRescueEnabled = true
-    print("[救助] 安全秒救模式已启动")
-
-    rescueHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
-        if not autoRescueEnabled then return end
-
-        -- 动态获取远程事件（每次循环都重新获取，确保永远有效）
-        local remote = ReplicatedStorage:FindFirstChild("Events")
-        if remote then remote = remote:FindFirstChild("Character") end
-        if remote then remote = remote:FindFirstChild("Interact") end
-        if not remote then return end
-
-        -- 自身状态检查
-        if not lp.Character then return end
-        local hum = lp.Character:FindFirstChild("Humanoid")
-        if not hum or hum.Health <= 0 then return end
-        if lp.Character:GetAttribute("Downed") then return end
-        local state = lp.Character:GetAttribute("State") or ""
-        if state == "Downed" or state == "Dead" then return end
-
-        -- 获取自己位置
-        local myPos = lp.Character:FindFirstChild("HumanoidRootPart")
-        if not myPos then return end
-        myPos = myPos.Position
-
-        -- 获取玩家文件夹
-        local gameFolder = workspace:FindFirstChild("Game")
-        local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
-        if not playersFolder then return end
-
-        -- 寻找最近倒地队友
-        local targetPlayer = nil
-        local targetChar = nil
-        local minDist = math.huge
-
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr == lp then continue end
-            local char = playersFolder:FindFirstChild(plr.Name) or playersFolder:FindFirstChild(tostring(plr.UserId))
-            if char then
-                local isDowned = char:GetAttribute("Downed") or (char:GetAttribute("State") == "Downed")
-                if isDowned then
-                    local hrp = char:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        local dist = (myPos - hrp.Position).Magnitude
-                        if dist < minDist then
-                            minDist = dist
-                            targetPlayer = plr
-                            targetChar = char
-                        end
-                    end
-                end
+-- 简单辅助函数（可选保留，但不需要了，因为高频循环内已实现）
+function getDownedPlayers()
+    local downedList = {}
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return downedList end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == lp then continue end
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            local isDowned = character:GetAttribute("Downed")
+            local state = character:GetAttribute("State")
+            local health = humanoid and humanoid.Health or 100
+            if health <= 0 or isDowned or state == "Downed" then
+                table.insert(downedList, player)
             end
         end
-
-        if not targetPlayer or not targetChar then return end
-
-        -- 冷却检查（每个玩家 0.5 秒内只尝试一次）
-        local now = os.clock()
-        local last = rescueCooldown[targetPlayer.UserId] or 0
-        if now - last < 0.5 then return end
-        rescueCooldown[targetPlayer.UserId] = now
-
-        -- 瞬移到目标身后
-        local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
-        if targetHRP and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-            lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
-            lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(
-                lp.Character.HumanoidRootPart.Position,
-                targetHRP.Position
-            )
-        end
-
-        -- 清洗玩家名字并调用远程事件
-        local cleanName = targetPlayer.Name:gsub("%s+", "")
-        if cleanName ~= "" then
-            local ok, err = pcall(function()
-                remote:FireServer("Revive", true, cleanName)
-            end)
-            if not ok then
-                -- 静默失败，不打印错误避免刷屏
-            end
-        end
-    end)
-end
-
-function stopSimpleRescue()
-    autoRescueEnabled = false
-    if rescueHeartbeat then
-        rescueHeartbeat:Disconnect()
-        rescueHeartbeat = nil
     end
-    rescueCooldown = {}
-    print("[救助] 秒救监控已停止")
+    return downedList
 end
 
+function findNearestDowned()
+    local nearest = nil
+    local minDist = math.huge
+    local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
+    if not myPos then return nil end
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return nil end
+    for _, player in ipairs(getDownedPlayers()) do
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist = (myPos - hrp.Position).Magnitude
+                if dist < minDist then minDist = dist; nearest = player end
+            end
+        end
+    end
+    return nearest
+end
+
+-- 注意：不再有 startAutoRescue / stopAutoRescue / rescueConnection
+-- 只保留 toggleAutoRescue 来启动/停止高频瞬移秒救
 function toggleAutoRescue()
     autoRescueEnabled = not autoRescueEnabled
-    autoReviveEnabled = autoRescueEnabled   -- 联动复活
-    print("[自动救助] 状态:", autoRescueEnabled and "开启" or "关闭")
+    autoReviveEnabled = autoRescueEnabled  -- 联动复活
+    print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
     if autoRescueEnabled then
         startSimpleRescue()
-        if showNotice then showNotice("✅ 自动救人已开启", true) end
+        showNotice("✅ 自动救人已开启", true)
     else
         stopSimpleRescue()
-        if showNotice then showNotice("❌ 自动救人已关闭", true) end
+        showNotice("❌ 自动救人已关闭", true)
     end
 end
 
