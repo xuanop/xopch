@@ -2721,7 +2721,7 @@ function startSimpleRescue()
 
         local now = os.clock()
         local last = lastRescueTime[nearestPlayer.UserId] or 0
-        if now - last < 3.5 then return end
+        if now - last < 1.5 then return end
         lastRescueTime[nearestPlayer.UserId] = now
 
         print("[调试] 找到倒地队友:", nearestPlayer.Name, "距离:", nearestDist)
