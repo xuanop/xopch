@@ -1413,7 +1413,7 @@ local function findSafeSkyPosition()
             highestY = obj.Position.Y
         end
     end
-    local offsetY = 500   -- 固定在地图最高点上方 20 格
+    local offsetY = 300   -- 固定在地图最高点上方 20 格
     local offsetX = 250    -- 水平 X 方向不偏移
     local offsetZ = 250    -- 水平 Z 方向不偏移
     return Vector3.new(offsetX, highestY + offsetY, offsetZ)
