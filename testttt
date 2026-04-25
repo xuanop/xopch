@@ -2663,9 +2663,9 @@ end)
 function startSimpleRescue()
     if simpleRescueConnection then simpleRescueConnection:Disconnect() end
     simpleRescueEnabled = true
-    print("[救助] 纯秒救模式已启动（增强稳定版）")
+    print("[救助] 纯秒救模式已启动（仅救助 Downed 状态玩家）")
 
-    -- 确保全局 lastRescueTime 存在（防止外部脚本意外置空）
+    -- 确保全局 lastRescueTime 存在
     if type(lastRescueTime) ~= "table" then
         lastRescueTime = {}
     end
@@ -2679,7 +2679,6 @@ function startSimpleRescue()
     local lastLogTime = {}
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
-        -- 安全防护：确保 lastRescueTime 是表
         if type(lastRescueTime) ~= "table" then
             lastRescueTime = {}
         end
@@ -2701,7 +2700,7 @@ function startSimpleRescue()
         local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
         if not playersFolder then return end
 
-        -- 寻找最近倒地队友
+        -- 寻找最近倒地队友（仅 Downed 状态，排除 DEAD）
         local nearestPlayer = nil
         local nearestDist = math.huge
         local targetCharacter = nil
@@ -2710,10 +2709,9 @@ function startSimpleRescue()
             if player == lp then continue end
             local char = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
             if char then
-                local isDowned = char:GetAttribute("Downed") or (char:GetAttribute("State") == "Downed")
-                local humanoid = char:FindFirstChild("Humanoid")
-                local health = humanoid and humanoid.Health or 100
-                if health <= 0 or isDowned then
+                -- 核心修改：只检测 Downed 属性或 State == "Downed"，不检测 health <= 0
+                local isDowned = char:GetAttribute("Downed") == true or (char:GetAttribute("State") == "Downed")
+                if isDowned then
                     local hrp = char:FindFirstChild("HumanoidRootPart")
                     if hrp then
                         local dist = (myPos - hrp.Position).Magnitude
@@ -2730,27 +2728,25 @@ function startSimpleRescue()
         if not nearestPlayer or not targetCharacter then return end
 
         local now = os.clock()
-        -- 安全访问 lastRescueTime
         local last = (lastRescueTime[nearestPlayer.UserId] or 0)
-        if now - last < 1.5 then return end
+        if now - last < 3.5 then return end
         lastRescueTime[nearestPlayer.UserId] = now
 
-        print("[调试] 找到倒地队友:", nearestPlayer.Name, "距离:", nearestDist)
+        print("[调试] 找到倒地(Downed)队友:", nearestPlayer.Name, "距离:", nearestDist)
 
-        -- 瞬移到目标身后
+        -- 瞬移
         local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
         if not targetHRP or not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
 
         lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
         lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
         
-        -- 清洗玩家名（移除可能存在的空格）
         local cleanName = nearestPlayer.Name:gsub("%s+", "")
         if cleanName ~= nearestPlayer.Name then
             print("[调试] 原始名字: '" .. nearestPlayer.Name .. "' -> 清洗后: '" .. cleanName .. "'")
         end
 
-        -- 纯秒救：多次尝试 FireServer，无按键回退
+        -- 纯秒救重试
         local rescued = false
         for attempt = 1, 3 do
             if rescued then break end
@@ -2765,7 +2761,7 @@ function startSimpleRescue()
                 task.wait(0.15)
                 local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
                 if freshChar then
-                    local stillDowned = freshChar:GetAttribute("Downed") or (freshChar:GetAttribute("State") == "Downed")
+                    local stillDowned = freshChar:GetAttribute("Downed") == true or (freshChar:GetAttribute("State") == "Downed")
                     if not stillDowned then
                         rescued = true
                         if now - (lastLogTime[nearestPlayer.UserId] or 0) > 3 then
@@ -2783,12 +2779,12 @@ function startSimpleRescue()
 
         if not rescued then
             if now - (lastLogTime[nearestPlayer.UserId .. "_fail"] or 0) > 5 then
-                print("[秒救] 失败，玩家 " .. nearestPlayer.Name .. " 未起身（等待下次机会）")
+                print("[秒救] 失败，玩家 " .. nearestPlayer.Name .. " 仍为 Downed（等待下次机会）")
                 lastLogTime[nearestPlayer.UserId .. "_fail"] = now
             end
         end
     end)
-    print("[救助] 纯秒救监控已启动")
+    print("[救助] 纯秒救监控已启动（仅救助 Downed）")
 end
 
 function stopSimpleRescue()
