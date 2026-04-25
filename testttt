@@ -1414,8 +1414,8 @@ local function findSafeSkyPosition()
         end
     end
     local offsetY = 20   -- 固定在地图最高点上方 20 格
-    local offsetX = 250    -- 水平 X 方向不偏移
-    local offsetZ = 250    -- 水平 Z 方向不偏移
+    local offsetX = 25    -- 水平 X 方向不偏移
+    local offsetZ = 25    -- 水平 Z 方向不偏移
     return Vector3.new(offsetX, highestY + offsetY, offsetZ)
 end
 
