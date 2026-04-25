@@ -6,4 +6,4 @@
 --    █   █ █ ████ █ ██    █  █ ████--
 --    ███  █ █ █  █ █  █    █  █ █   --
 --    ██ ██ ███ █  █ █  █    ████ █   --
-    loadstring(game:HttpGet('https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/cccccc'))()
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/testttt'))()
