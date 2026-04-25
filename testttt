@@ -2917,9 +2917,9 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（独立线程版 - 流畅连续拾取） ====================
+-- ==================== 自动收集物品（兼容版 - 流畅连续拾取） ====================
 local autoCollectEnabled = false
-local collectThread = nil
+local collectCoroutine = nil
 local COLLECT_COOLDOWN = 0.2
 local COLLECT_DISTANCE = 12
 local SCAN_INTERVAL = 0.2
@@ -2984,42 +2984,42 @@ local function performCollect(targetItem)
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return false end
     if TELEPORT_TO_ITEM then
         lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
-        task.wait(0.05)
+        wait(0.05)
     else
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         if humanoid then humanoid:MoveTo(targetItem.position) end
-        task.wait(0.3)
+        wait(0.3)
     end
     collectItem(targetItem.obj)
     return true
 end
 
--- 独立线程主循环
+-- 独立线程主循环（使用 spawn，兼容老执行器）
 local function autoCollectThread()
     while autoCollectEnabled do
         -- 暂停条件：救助或挂机活跃
         if (autoRescueEnabled and activeRescueTarget ~= nil) or autoFarmEnabled then
-            task.wait(0.2)
+            wait(0.2)
             goto continue
         end
         if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
-            task.wait(0.5)
+            wait(0.5)
             goto continue
         end
 
         local now = os.clock()
         if now - lastCollectTime < COLLECT_COOLDOWN then
-            task.wait(0.05)
+            wait(0.05)
             goto continue
         end
         if now < nextScanTime then
-            task.wait(0.05)
+            wait(0.05)
             goto continue
         end
 
         local items = getCollectibles()
         if #items == 0 then
-            task.wait(0.2)
+            wait(0.2)
             goto continue
         end
 
@@ -3054,24 +3054,21 @@ local function autoCollectThread()
             nextScanTime = now + SCAN_INTERVAL
         end
 
-        task.wait(0.05)
+        wait(0.05)
         ::continue::
     end
 end
 
 function startAutoCollect()
-    if collectThread then return end
+    if collectCoroutine then return end
     autoCollectEnabled = true
-    collectThread = task.spawn(autoCollectThread)
-    print("[自动收集] 已启动（独立线程版）")
+    collectCoroutine = spawn(autoCollectThread)   -- 使用 spawn 启动协程
+    print("[自动收集] 已启动（兼容版）")
 end
 
 function stopAutoCollect()
     autoCollectEnabled = false
-    if collectThread then
-        coroutine.close(collectThread)
-        collectThread = nil
-    end
+    collectCoroutine = nil   -- 协程会在下次循环检查 autoCollectEnabled 时自动退出
     collectedCache = {}
     nextScanTime = 0
     lastCollectTime = 0
