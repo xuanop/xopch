@@ -1501,7 +1501,7 @@ function toggleAutoFarm()
     autoFarmEnabled = not autoFarmEnabled
     if autoFarmEnabled then
         startAutoFarm()
-        showNotice("☁️ 高空挂机已开启（固定平台）", true)
+        showNotice("☁️ 高空挂机已开启", true)
     else
         stopAutoFarm()
         showNotice("💤 高空挂机已关闭", true)
