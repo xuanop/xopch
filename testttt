@@ -2926,7 +2926,7 @@ local COLLECT_DISTANCE = 100          -- 搜索物品的最大距离（格）
 local SCAN_INTERVAL = 0.3             -- 扫描物品列表的间隔（秒）
 local TELEPORT_TO_ITEM = true
 local COLLECT_KEYWORDS = {
-    "Coin", "Gem", "Token", "Star", "Candy", "Present", "PowerUp", "Item", "Pickup"
+    "Coin", "Gem", "Token", "Star", "Candy", "Present", "PowerUp", "Pickup", "Collect"
 }
 local CUSTOM_ATTRIBUTE = "CanCollect"
 
