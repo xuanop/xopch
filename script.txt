@@ -6,4 +6,21 @@
 --    █   █ █ ████ █ ██    █  █ ████--
 --    ███  █ █ █  █ █  █    █  █ █   --
 --    ██ ██ ███ █  █ █  █    ████ █   --
-loadstring(game:HttpGet('https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/testttt'))()
+
+local gameScripts = {
+    [9872472334] = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/testttt"
+}
+
+local currentGameId = game.PlaceId
+local targetScriptUrl = gameScripts[currentGameId]
+
+if targetScriptUrl then
+    local success, err = pcall(function()
+        loadstring(game:HttpGet(targetScriptUrl))()
+    end)
+    if not success then
+        warn("脚本加载失败:", err)
+    end
+else
+    print("当前游戏没有专用的脚本。")
+end
