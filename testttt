@@ -2676,7 +2676,7 @@ function startSimpleRescue()
     end
 
     local lastLogTime = {}
-    local lastRescueTime = lastRescueTime or {}
+  --local lastRescueTime = lastRescueTime or {}
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
         if not simpleRescueEnabled or not autoRescueEnabled then return end
