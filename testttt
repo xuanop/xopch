@@ -2545,7 +2545,6 @@ task.spawn(function()
 end)
 
 -- ==================== 外部腳本載入 ====================
---[[
 task.spawn(function()
     local url = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/text"
     local success, err = pcall(function()
@@ -2568,8 +2567,6 @@ task.spawn(function()
     local evaURL = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/gas"
     pcall(function() loadstring(game:HttpGet(evaURL))() end)
 end)
---]]
-
 
 -- ==================== 稳定自动救助（传送+按E） ====================
 local simpleRescueEnabled = false
