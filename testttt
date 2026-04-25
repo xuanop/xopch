@@ -2663,7 +2663,12 @@ end)
 function startSimpleRescue()
     if simpleRescueConnection then simpleRescueConnection:Disconnect() end
     simpleRescueEnabled = true
-    print("[救助] 纯秒救模式已启动（仅远程事件，无按键回退）")
+    print("[救助] 纯秒救模式已启动（增强稳定版）")
+
+    -- 确保全局 lastRescueTime 存在（防止外部脚本意外置空）
+    if type(lastRescueTime) ~= "table" then
+        lastRescueTime = {}
+    end
 
     local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
     if not interactRemote then
@@ -2674,6 +2679,11 @@ function startSimpleRescue()
     local lastLogTime = {}
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
+        -- 安全防护：确保 lastRescueTime 是表
+        if type(lastRescueTime) ~= "table" then
+            lastRescueTime = {}
+        end
+
         if not simpleRescueEnabled or not autoRescueEnabled then return end
 
         -- 自身状态检查
@@ -2720,7 +2730,8 @@ function startSimpleRescue()
         if not nearestPlayer or not targetCharacter then return end
 
         local now = os.clock()
-        local last = lastRescueTime[nearestPlayer.UserId] or 0
+        -- 安全访问 lastRescueTime
+        local last = (lastRescueTime[nearestPlayer.UserId] or 0)
         if now - last < 1.5 then return end
         lastRescueTime[nearestPlayer.UserId] = now
 
@@ -2751,8 +2762,7 @@ function startSimpleRescue()
             end)
             if success then
                 print(string.format("[尝试 %d] FireServer 调用成功", attempt))
-                task.wait(0.15)  -- 等待服务器处理
-                -- 检查起身状态
+                task.wait(0.15)
                 local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
                 if freshChar then
                     local stillDowned = freshChar:GetAttribute("Downed") or (freshChar:GetAttribute("State") == "Downed")
@@ -2772,7 +2782,6 @@ function startSimpleRescue()
         end
 
         if not rescued then
-            -- 仅记录失败，不做任何按键操作
             if now - (lastLogTime[nearestPlayer.UserId .. "_fail"] or 0) > 5 then
                 print("[秒救] 失败，玩家 " .. nearestPlayer.Name .. " 未起身（等待下次机会）")
                 lastLogTime[nearestPlayer.UserId .. "_fail"] = now
