@@ -2668,7 +2668,7 @@ local lastRescueTime = {}
 function startSimpleRescue()
     if simpleRescueConnection then simpleRescueConnection:Disconnect() end
     simpleRescueEnabled = true
-    print("[救助] 秒救模式已启动（瞬移+远程事件）")
+    print("[救助] 秒救模式已启动（增强稳定版）")
 
     local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
     if not interactRemote then
@@ -2676,12 +2676,9 @@ function startSimpleRescue()
     end
 
     local lastLogTime = {}
-    -- 注意：这里不再重新声明 lastRescueTime，直接使用外部的（由文件顶部定义）
 
     simpleRescueConnection = RunService.Heartbeat:Connect(function()
-        if not simpleRescueEnabled or not autoRescueEnabled then 
-            return 
-        end
+        if not simpleRescueEnabled or not autoRescueEnabled then return end
 
         -- 自身状态检查
         if not lp.Character then return end
@@ -2724,83 +2721,80 @@ function startSimpleRescue()
             end
         end
 
-        if not nearestPlayer or not targetCharacter then 
-            return 
-        end
+        if not nearestPlayer or not targetCharacter then return end
 
-        -- 冷却检查（使用外部 lastRescueTime）
         local now = os.clock()
         local last = lastRescueTime[nearestPlayer.UserId] or 0
-        if now - last < 4.0 then 
-            -- print("[调试] 冷却中，跳过", nearestPlayer.Name)
-            return 
-        end
+        if now - last < 3.5 then return end   -- 缩短冷却到3.5秒，提高响应
         lastRescueTime[nearestPlayer.UserId] = now
 
         print("[调试] 找到倒地队友:", nearestPlayer.Name, "距离:", nearestDist)
 
-        -- 瞬移到目标身后
+        -- 瞬移
         local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
-        if not targetHRP or not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then 
-            return 
-        end
+        if not targetHRP or not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
 
         lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
         lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
-        task.wait(0.05)  -- 缩短等待
+        
+        -- 清洗玩家名
+        local cleanName = nearestPlayer.Name:gsub("%s+", "")
+        print("[调试] 原始名字: '" .. nearestPlayer.Name .. "' -> 清洗后: '" .. cleanName .. "'")
 
-        print("[调试] 原始玩家名: '" .. nearestPlayer.Name .. "'")
-        print("[调试] 玩家名字节长度:", #nearestPlayer.Name)
-
-        -- 秒救调用（使用已验证的正确参数）
-        -- 秒救调用（使用已验证的正确参数，并清洗名字）
-if interactRemote then
-    local cleanName = nearestPlayer.Name:gsub("%s+", "")   -- 移除所有空格
-    print("[调试] 原始玩家名: '" .. nearestPlayer.Name .. "' -> 清洗后: '" .. cleanName .. "'")
-    print("[调试] 发送秒救请求: Revive, true, " .. cleanName)
-    local success, err = pcall(function()
-        interactRemote:FireServer("Revive", true, cleanName)
-    end)
-    if success then
-        print("[调试] FireServer 调用成功，等待0.2秒...")
-        task.wait(0.2)
-        -- 刷新角色状态
-        local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
-        if freshChar then
-            local stillDowned = freshChar:GetAttribute("Downed") or (freshChar:GetAttribute("State") == "Downed")
-            if not stillDowned then
-                if now - (lastLogTime[nearestPlayer.UserId] or 0) > 3 then
-                    print("[秒救] ✅ 成功救助 " .. nearestPlayer.Name)
-                    showNotice("⚡ 秒救 " .. nearestPlayer.Name, true)
-                    lastLogTime[nearestPlayer.UserId] = now
+        -- 🔁 多次尝试 FireServer（增强稳定性）
+        local rescued = false
+        if interactRemote then
+            for attempt = 1, 3 do
+                if rescued then break end
+                -- 动态等待：第一次瞬移后等0.05秒，后续重试等0.1秒
+                local waitTime = (attempt == 1) and 0.05 or 0.1
+                if attempt > 1 then task.wait(waitTime) end
+                
+                local success, err = pcall(function()
+                    interactRemote:FireServer("Revive", true, cleanName)
+                end)
+                if success then
+                    print(string.format("[尝试 %d] FireServer 调用成功", attempt))
+                    task.wait(0.15)  -- 等待服务器处理
+                    -- 检查起身状态
+                    local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
+                    if freshChar then
+                        local stillDowned = freshChar:GetAttribute("Downed") or (freshChar:GetAttribute("State") == "Downed")
+                        if not stillDowned then
+                            rescued = true
+                            if now - (lastLogTime[nearestPlayer.UserId] or 0) > 3 then
+                                print("[秒救] ✅ 成功救助 " .. nearestPlayer.Name)
+                                showNotice("⚡ 秒救 " .. nearestPlayer.Name, true)
+                                lastLogTime[nearestPlayer.UserId] = now
+                            end
+                            break
+                        end
+                    end
+                else
+                    warn("[尝试 " .. attempt .. "] FireServer 错误: " .. tostring(err))
                 end
-                return  -- 成功，不再执行按键回退
-            else
-                print("[秒救] 调用成功但队友未起身，可能服务器拒绝或需要更长等待")
             end
         end
-    else
-        warn("[秒救] FireServer 错误: " .. tostring(err))
-    end
-end
 
-        -- 回退：长按E（保留保险）
-        print("[调试] 秒救失败，回退到长按E")
-        local vim = game:GetService("VirtualInputManager")
-        vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
-        task.wait(1.0)
-        vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
-        task.wait(0.3)
-        local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
-        if freshChar and not (freshChar:GetAttribute("Downed") or freshChar:GetAttribute("State") == "Downed") then
-            if now - (lastLogTime[nearestPlayer.UserId .. "_up"] or 0) > 3 then
-                print("[救助] " .. nearestPlayer.Name .. " 已起身（按键）")
-                showNotice("🚑 已救助 " .. nearestPlayer.Name, true)
-                lastLogTime[nearestPlayer.UserId .. "_up"] = now
+        -- 如果所有远程尝试都失败，回退到长按E
+        if not rescued then
+            print("[调试] 秒救失败，回退到长按E")
+            local vim = game:GetService("VirtualInputManager")
+            vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
+            task.wait(1.0)
+            vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
+            task.wait(0.3)
+            local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
+            if freshChar and not (freshChar:GetAttribute("Downed") or freshChar:GetAttribute("State") == "Downed") then
+                if now - (lastLogTime[nearestPlayer.UserId .. "_up"] or 0) > 3 then
+                    print("[救助] " .. nearestPlayer.Name .. " 已起身（按键）")
+                    showNotice("🚑 已救助 " .. nearestPlayer.Name, true)
+                    lastLogTime[nearestPlayer.UserId .. "_up"] = now
+                end
             end
         end
     end)
-    print("[救助] 秒救监控已启动")
+    print("[救助] 增强秒救监控已启动")
 end
 
 function stopSimpleRescue()
