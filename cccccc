@@ -1,0 +1,9 @@
+-- 全局错误捕获（包裹整个脚本）
+local function __globalErrorHandler(err)
+    warn("[全局错误] " .. tostring(err))
+    warn(debug.traceback())
+end
+xpcall(function()
+
+--[[ 🔑 XUAN Commander - 稳定单例版 ]]--
+end, __globalErrorHandler)
