@@ -2920,9 +2920,9 @@ end
 -- ==================== 自动收集物品（Xeno 兼容版 - 流畅连续拾取） ====================
 local autoCollectEnabled = false
 local collectThread = nil
-local COLLECT_COOLDOWN = 0.2
-local COLLECT_DISTANCE = 12
-local SCAN_INTERVAL = 0.2
+local COLLECT_COOLDOWN = 0.5
+local COLLECT_DISTANCE = 100
+local SCAN_INTERVAL = 0.5
 local TELEPORT_TO_ITEM = true
 local COLLECT_KEYWORDS = {
     "Coin", "Gem", "Token", "Star", "Candy", "Present", "PowerUp", "Item", "Pickup"
