@@ -2390,6 +2390,7 @@ if other2Cont then
     createButtonSafe(other2Cont, "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌"), 
         function(btn) 
             toggleAutoCollect()
+            task.wait(0.05)
             btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
             btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
         end, Color3.fromRGB(100, 200, 150))
