@@ -1484,6 +1484,67 @@ function toggleAutoFarm()
     end
 end
 
+-- ==================== 自动救助倒地队友（仅高频瞬移秒救版） ====================
+local autoRescueEnabled = false
+
+-- 简单辅助函数（可选保留，但不需要了，因为高频循环内已实现）
+function getDownedPlayers()
+    local downedList = {}
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return downedList end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == lp then continue end
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            local isDowned = character:GetAttribute("Downed")
+            local state = character:GetAttribute("State")
+            local health = humanoid and humanoid.Health or 100
+            if health <= 0 or isDowned or state == "Downed" then
+                table.insert(downedList, player)
+            end
+        end
+    end
+    return downedList
+end
+
+function findNearestDowned()
+    local nearest = nil
+    local minDist = math.huge
+    local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
+    if not myPos then return nil end
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return nil end
+    for _, player in ipairs(getDownedPlayers()) do
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist = (myPos - hrp.Position).Magnitude
+                if dist < minDist then minDist = dist; nearest = player end
+            end
+        end
+    end
+    return nearest
+end
+
+-- 注意：不再有 startAutoRescue / stopAutoRescue / rescueConnection
+-- 只保留 toggleAutoRescue 来启动/停止高频瞬移秒救
+function toggleAutoRescue()
+    autoRescueEnabled = not autoRescueEnabled
+    autoReviveEnabled = autoRescueEnabled  -- 联动复活
+    print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
+    if autoRescueEnabled then
+        startSimpleRescue()
+        showNotice("✅ 自动救人已开启", true)
+    else
+        stopSimpleRescue()
+        showNotice("❌ 自动救人已关闭", true)
+    end
+end
+
 -- ==================== 自定义重命名器 ====================
 local function createRenamerWindow()
     safeCall(function()
