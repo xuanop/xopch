@@ -2735,6 +2735,7 @@ function startSimpleRescue()
         -- 瞬移到目标身后
         local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
         if not targetHRP or not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+                    task.wait(0.2)
 
         lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
         lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
