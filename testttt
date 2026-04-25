@@ -2368,31 +2368,34 @@ local function createAdminPanel()
         updateCanvas(otherCont)
 
         -- 其他 2 分页
-        local other2Cont = contentContainers["其他 2"]
-        if other2Cont then
-            -- 高空挂机开关
-            createButtonSafe(other2Cont, "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌"), 
-    function(btn) 
-        toggleAutoFarm()
-        btn.Text = "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌")
-        btn.BackgroundTransparency = autoFarmEnabled and 0.5 or 0.85
-    end, Color3.fromRGB(100, 150, 200))
-            
-            -- 自动救助队友开关
-            createButtonSafe(other2Cont, "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌"), 
-            function(btn) 
-                toggleAutoRescue()
-                btn.Text = "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌")
-                btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
-            end, Color3.fromRGB(200, 100, 100))
-            updateCanvas(other2Cont)
-        end
-            -- 自动收集按钮
-            createButtonSafe(other2Cont, "💰 自动收集: 关闭 ❌", function(btn)
-                toggleAutoCollect()
-                btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
-                btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
-            end, Color3.fromRGB(100, 200, 150))
+local other2Cont = contentContainers["其他 2"]
+if other2Cont then
+    -- 高空挂机开关
+    createButtonSafe(other2Cont, "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌"), 
+        function(btn) 
+            toggleAutoFarm()
+            btn.Text = "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌")
+            btn.BackgroundTransparency = autoFarmEnabled and 0.5 or 0.85
+        end, Color3.fromRGB(100, 150, 200))
+    
+    -- 自动救助队友开关
+    createButtonSafe(other2Cont, "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌"), 
+        function(btn) 
+            toggleAutoRescue()
+            btn.Text = "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌")
+            btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
+        end, Color3.fromRGB(200, 100, 100))
+    
+    -- 自动收集按钮（新增）
+    createButtonSafe(other2Cont, "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌"), 
+        function(btn) 
+            toggleAutoCollect()
+            btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
+            btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
+        end, Color3.fromRGB(100, 200, 150))
+    
+    updateCanvas(other2Cont)
+end
 
         if contentContainers["主要"] then contentContainers["主要"].Visible = true end
         if tabButtons["主要"] then tabButtons["主要"].BackgroundTransparency = 0.1; tabButtons["主要"].TextColor3 = Color3.new(1,1,1) end
@@ -2913,16 +2916,16 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（可配置） ====================
+--- ==================== 自动收集物品（可配置） ====================
 local autoCollectEnabled = false
 local collectConnection = nil
 local COLLECT_COOLDOWN = 0.5      -- 每次拾取后冷却时间（秒）
-local COLLECT_DISTANCE = 8        -- 触发拾取的距离（格）
+local COLLECT_DISTANCE = 10       -- 搜索物品的最大距离（格）
 local TELEPORT_TO_ITEM = true     -- 是否瞬移到物品旁（true=瞬移，false=走过去）
 local COLLECT_KEYWORDS = {        -- 物品名称关键词（包含任一即视为可拾取）
     "Coin", "Gem", "Token", "Star", "Candy", "Present", "PowerUp", "Item", "Pickup"
 }
--- 额外自定义属性匹配（例如物品有 "Collectible" 属性或值为 true）
+-- 额外自定义属性匹配（例如物品有 "CanCollect" 属性且值为 true）
 local CUSTOM_ATTRIBUTE = "CanCollect"   -- 如果物品有此属性且为 true，也视为可拾取
 
 -- 获取所有可拾取物品
@@ -2946,7 +2949,7 @@ local function getCollectibles()
                 attrMatch = true
             end
             if nameMatch or attrMatch then
-                -- 获取物品的位置（RootPart 或自身位置）
+                -- 获取物品的位置
                 local pos = nil
                 if obj:IsA("BasePart") then
                     pos = obj.Position
@@ -2966,23 +2969,22 @@ local function getCollectibles()
     return items
 end
 
--- 拾取物品（通常会通过触摸触发，我们只需移动到物品旁边）
+-- 拾取物品（尝试调用远程事件，或依赖触摸）
 local function collectItem(itemObj)
-    -- 尝试调用物品的远程事件（如果有）
     local remote = itemObj:FindFirstChild("Collect") or itemObj:FindFirstChild("Pickup")
     if remote and remote:IsA("RemoteEvent") then
         pcall(function() remote:FireServer() end)
         return true
     end
-    -- 否则依赖触摸（瞬移到物品旁后自动触发 TouchInterest）
     return true
 end
 
 -- 自动收集心跳
 local function autoCollectHeartbeat()
     if not autoCollectEnabled then return end
-    -- 可选：当救助或挂机启用时，暂停收集（避免冲突）。您也可以不要此判断
-    -- 这里为了兼容，不做强制暂停，因为收集动作很快
+    -- 可选：当救助或挂机活跃时暂停收集（避免瞬移干扰）
+    if autoRescueEnabled and activeRescueTarget ~= nil then return end
+    if autoFarmEnabled then return end   -- 挂机时也暂停，您可以根据需要注释掉
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     
     local myPos = lp.Character.HumanoidRootPart.Position
@@ -2998,22 +3000,17 @@ local function autoCollectHeartbeat()
     end
     
     if nearestItem then
-        -- 瞬移或移动到物品位置
         if TELEPORT_TO_ITEM then
-            lp.Character.HumanoidRootPart.CFrame = CFrame.new(nearestItem.position + Vector3.new(0, 2, 0)) -- 略高于物品
+            lp.Character.HumanoidRootPart.CFrame = CFrame.new(nearestItem.position + Vector3.new(0, 2, 0))
             task.wait(0.05)
         else
-            -- 平滑移动（可选）
-            humanoid:MoveTo(nearestItem.position)
-            task.wait(0.3)
+            local humanoid = lp.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid:MoveTo(nearestItem.position)
+                task.wait(0.3)
+            end
         end
-        -- 触发拾取
-        local success = collectItem(nearestItem.obj)
-        if success then
-            -- 可选：显示通知
-            -- showNotice("拾取 " .. nearestItem.obj.Name, true)
-        end
-        -- 冷却（避免同一帧反复拾取）
+        collectItem(nearestItem.obj)
         task.wait(COLLECT_COOLDOWN)
     end
 end
