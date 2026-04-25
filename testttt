@@ -2387,6 +2387,12 @@ local function createAdminPanel()
             end, Color3.fromRGB(200, 100, 100))
             updateCanvas(other2Cont)
         end
+            -- 自动收集按钮
+            createButtonSafe(other2Cont, "💰 自动收集: 关闭 ❌", function(btn)
+                toggleAutoCollect()
+                btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
+                btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
+            end, Color3.fromRGB(100, 200, 150))
 
         if contentContainers["主要"] then contentContainers["主要"].Visible = true end
         if tabButtons["主要"] then tabButtons["主要"].BackgroundTransparency = 0.1; tabButtons["主要"].TextColor3 = Color3.new(1,1,1) end
@@ -2904,6 +2910,133 @@ function stopSimpleRescue()
         simpleRescueConnection = nil
         lastRescueTime = {}
         print("[救助] 监控已停止")
+    end
+end
+
+-- ==================== 自动收集物品（可配置） ====================
+local autoCollectEnabled = false
+local collectConnection = nil
+local COLLECT_COOLDOWN = 0.5      -- 每次拾取后冷却时间（秒）
+local COLLECT_DISTANCE = 8        -- 触发拾取的距离（格）
+local TELEPORT_TO_ITEM = true     -- 是否瞬移到物品旁（true=瞬移，false=走过去）
+local COLLECT_KEYWORDS = {        -- 物品名称关键词（包含任一即视为可拾取）
+    "Coin", "Gem", "Token", "Star", "Candy", "Present", "PowerUp", "Item", "Pickup"
+}
+-- 额外自定义属性匹配（例如物品有 "Collectible" 属性或值为 true）
+local CUSTOM_ATTRIBUTE = "CanCollect"   -- 如果物品有此属性且为 true，也视为可拾取
+
+-- 获取所有可拾取物品
+local function getCollectibles()
+    local items = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        -- 只考虑 BasePart 或 Model（且不是玩家角色）
+        if obj:IsA("BasePart") or (obj:IsA("Model") and obj ~= lp.Character and obj:FindFirstChild("Humanoid") == nil) then
+            -- 根据名称关键词匹配
+            local nameMatch = false
+            local lowerName = obj.Name:lower()
+            for _, kw in ipairs(COLLECT_KEYWORDS) do
+                if lowerName:find(kw:lower()) then
+                    nameMatch = true
+                    break
+                end
+            end
+            -- 根据自定义属性匹配
+            local attrMatch = false
+            if CUSTOM_ATTRIBUTE and obj:GetAttribute(CUSTOM_ATTRIBUTE) == true then
+                attrMatch = true
+            end
+            if nameMatch or attrMatch then
+                -- 获取物品的位置（RootPart 或自身位置）
+                local pos = nil
+                if obj:IsA("BasePart") then
+                    pos = obj.Position
+                elseif obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") then
+                    pos = obj.PrimaryPart.Position
+                elseif obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") then
+                    pos = obj.HumanoidRootPart.Position
+                elseif obj:IsA("Model") and obj:FindFirstChildOfClass("BasePart") then
+                    pos = obj:FindFirstChildOfClass("BasePart").Position
+                end
+                if pos then
+                    table.insert(items, {obj = obj, position = pos})
+                end
+            end
+        end
+    end
+    return items
+end
+
+-- 拾取物品（通常会通过触摸触发，我们只需移动到物品旁边）
+local function collectItem(itemObj)
+    -- 尝试调用物品的远程事件（如果有）
+    local remote = itemObj:FindFirstChild("Collect") or itemObj:FindFirstChild("Pickup")
+    if remote and remote:IsA("RemoteEvent") then
+        pcall(function() remote:FireServer() end)
+        return true
+    end
+    -- 否则依赖触摸（瞬移到物品旁后自动触发 TouchInterest）
+    return true
+end
+
+-- 自动收集心跳
+local function autoCollectHeartbeat()
+    if not autoCollectEnabled then return end
+    -- 可选：当救助或挂机启用时，暂停收集（避免冲突）。您也可以不要此判断
+    -- 这里为了兼容，不做强制暂停，因为收集动作很快
+    if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local myPos = lp.Character.HumanoidRootPart.Position
+    local items = getCollectibles()
+    local nearestItem = nil
+    local nearestDist = COLLECT_DISTANCE
+    for _, item in ipairs(items) do
+        local dist = (myPos - item.position).Magnitude
+        if dist < nearestDist then
+            nearestDist = dist
+            nearestItem = item
+        end
+    end
+    
+    if nearestItem then
+        -- 瞬移或移动到物品位置
+        if TELEPORT_TO_ITEM then
+            lp.Character.HumanoidRootPart.CFrame = CFrame.new(nearestItem.position + Vector3.new(0, 2, 0)) -- 略高于物品
+            task.wait(0.05)
+        else
+            -- 平滑移动（可选）
+            humanoid:MoveTo(nearestItem.position)
+            task.wait(0.3)
+        end
+        -- 触发拾取
+        local success = collectItem(nearestItem.obj)
+        if success then
+            -- 可选：显示通知
+            -- showNotice("拾取 " .. nearestItem.obj.Name, true)
+        end
+        -- 冷却（避免同一帧反复拾取）
+        task.wait(COLLECT_COOLDOWN)
+    end
+end
+
+function startAutoCollect()
+    if collectConnection then collectConnection:Disconnect() end
+    collectConnection = RunService.Heartbeat:Connect(autoCollectHeartbeat)
+    print("[自动收集] 已启动")
+end
+
+function stopAutoCollect()
+    if collectConnection then collectConnection:Disconnect(); collectConnection = nil end
+    print("[自动收集] 已停止")
+end
+
+function toggleAutoCollect()
+    autoCollectEnabled = not autoCollectEnabled
+    if autoCollectEnabled then
+        startAutoCollect()
+        showNotice("💰 自动收集已开启", true)
+    else
+        stopAutoCollect()
+        showNotice("💤 自动收集已关闭", true)
     end
 end
 
