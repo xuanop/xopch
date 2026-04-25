@@ -2672,19 +2672,25 @@ function startSimpleRescue()
         simpleRescueConnection = nil
     end
     simpleRescueEnabled = true
-    print("[救助] 高频瞬移秒救模式已启动（间隔 0.03 秒）")
-
-    local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
-    if not interactRemote then
-        warn("[救助] 未找到 Interact 远程事件，秒救不可用")
-        return
-    end
+    print("[救助] 高频瞬移秒救模式已启动（间隔 0.03 秒，动态获取远程事件）")
 
     task.spawn(function()
         local lastLogTime = {}
         local lastRescueAttemptTime = {}
         
         while simpleRescueEnabled and autoRescueEnabled do
+            -- ✅ 关键修复：每次循环都重新获取远程事件（避免闭包失效）
+            local interactRemote = ReplicatedStorage:FindFirstChild("Events") 
+                and ReplicatedStorage.Events:FindFirstChild("Character") 
+                and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
+            
+            if not interactRemote then
+                -- 如果找不到事件，等待 0.5 秒再试（避免疯狂报错）
+                task.wait(0.5)
+                goto continue
+            end
+
+            -- 自身状态检查
             if not lp.Character then task.wait(0.03); goto continue end
             local myHumanoid = lp.Character:FindFirstChild("Humanoid")
             if not myHumanoid or myHumanoid.Health <= 0 then task.wait(0.03); goto continue end
@@ -2699,6 +2705,7 @@ function startSimpleRescue()
             local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
             if not playersFolder then task.wait(0.03); goto continue end
 
+            -- 寻找最近倒地队友
             local nearestPlayer, nearestDist, targetCharacter = nil, math.huge, nil
             for _, player in ipairs(Players:GetPlayers()) do
                 if player == lp then continue end
@@ -2725,37 +2732,39 @@ function startSimpleRescue()
             if now - lastTry < 0.5 then task.wait(0.03); goto continue end
             lastRescueAttemptTime[nearestPlayer.UserId] = now
 
+            -- 瞬移到目标身后
             local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
             if targetHRP and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
                 lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
             end
 
+            -- 清洗玩家名
             local cleanName = nearestPlayer.Name:gsub("%s+", "")
             if cleanName ~= nearestPlayer.Name then
                 print("[调试] 原始名字: '" .. nearestPlayer.Name .. "' -> 清洗后: '" .. cleanName .. "'")
             end
 
-            -- ✅ 关键：再次确认 interactRemote 有效（防止外部被意外置空）
-            if interactRemote then
-                local success, err = pcall(function()
-                    interactRemote:FireServer("Revive", true, cleanName)
-                end)
-                if success then
-                    task.wait(0.05)
-                    local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
-                    if freshChar then
-                        local stillDowned = freshChar:GetAttribute("Downed") or (freshChar:GetAttribute("State") == "Downed")
-                        if not stillDowned then
-                            if now - (lastLogTime[nearestPlayer.UserId] or 0) > 3 then
-                                print("[秒救] ✅ 成功救助 " .. nearestPlayer.Name)
-                                showNotice("⚡ 秒救 " .. nearestPlayer.Name, true)
-                                lastLogTime[nearestPlayer.UserId] = now
-                            end
-                            task.wait(0.5)
+            -- 调用秒救
+            local success, err = pcall(function()
+                interactRemote:FireServer("Revive", true, cleanName)
+            end)
+            if success then
+                task.wait(0.05)
+                local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
+                if freshChar then
+                    local stillDowned = freshChar:GetAttribute("Downed") or (freshChar:GetAttribute("State") == "Downed")
+                    if not stillDowned then
+                        if now - (lastLogTime[nearestPlayer.UserId] or 0) > 3 then
+                            print("[秒救] ✅ 成功救助 " .. nearestPlayer.Name)
+                            if showNotice then showNotice("⚡ 秒救 " .. nearestPlayer.Name, true) end
+                            lastLogTime[nearestPlayer.UserId] = now
                         end
+                        task.wait(0.5)
                     end
                 end
+            else
+                -- 静默失败，不打印错误避免刷屏
             end
 
             ::continue::
@@ -2764,6 +2773,7 @@ function startSimpleRescue()
         print("[救助] 高频瞬移循环已退出")
     end)
     
+    -- 占位连接，保持兼容
     simpleRescueConnection = RunService.Heartbeat:Connect(function() end)
 end
 
