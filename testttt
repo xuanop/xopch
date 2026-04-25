@@ -1,3 +1,4 @@
+--[[ 🔑 XUAN Commander - 稳定单例版 ]]--
 -- 作者列表
 local AUTHOR_USERNAMES = {
     "xuan_1529",
