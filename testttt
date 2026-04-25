@@ -2920,7 +2920,7 @@ end
 -- ==================== 自动收集物品（独立线程版 - 流畅连续拾取） ====================
 local autoCollectEnabled = false
 local collectThread = nil
-local COLLECT_COOLDOWN = 0.2          -- 每次拾取后冷却（秒）
+local COLLECT_COOLDOWN = 0.2
 local COLLECT_DISTANCE = 12
 local SCAN_INTERVAL = 0.2
 local TELEPORT_TO_ITEM = true
@@ -2934,7 +2934,7 @@ local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
 
--- 获取可拾取物品（保留原逻辑，优化搜索半径）
+-- 获取可拾取物品
 local function getCollectibles()
     local items = {}
     local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
