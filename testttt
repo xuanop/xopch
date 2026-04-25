@@ -2753,33 +2753,36 @@ function startSimpleRescue()
         print("[调试] 玩家名字节长度:", #nearestPlayer.Name)
 
         -- 秒救调用（使用已验证的正确参数）
-        if interactRemote then
-            print("[调试] 发送秒救请求: Revive, true, " .. nearestPlayer.Name)
-            local success, err = pcall(function()
-                interactRemote:FireServer("Revive", true, nearestPlayer.Name)
-            end)
-            if success then
-                print("[调试] FireServer 调用成功，等待0.2秒...")
-                task.wait(0.2)
-                -- 刷新角色状态
-                local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
-                if freshChar then
-                    local stillDowned = freshChar:GetAttribute("Downed") or (freshChar:GetAttribute("State") == "Downed")
-                    if not stillDowned then
-                        if now - (lastLogTime[nearestPlayer.UserId] or 0) > 3 then
-                            print("[秒救] ✅ 成功救助 " .. nearestPlayer.Name)
-                            showNotice("⚡ 秒救 " .. nearestPlayer.Name, true)
-                            lastLogTime[nearestPlayer.UserId] = now
-                        end
-                        return  -- 成功，不再执行按键回退
-                    else
-                        print("[秒救] 调用成功但队友未起身，可能服务器拒绝或需要更长等待")
-                    end
+        -- 秒救调用（使用已验证的正确参数，并清洗名字）
+if interactRemote then
+    local cleanName = nearestPlayer.Name:gsub("%s+", "")   -- 移除所有空格
+    print("[调试] 原始玩家名: '" .. nearestPlayer.Name .. "' -> 清洗后: '" .. cleanName .. "'")
+    print("[调试] 发送秒救请求: Revive, true, " .. cleanName)
+    local success, err = pcall(function()
+        interactRemote:FireServer("Revive", true, cleanName)
+    end)
+    if success then
+        print("[调试] FireServer 调用成功，等待0.2秒...")
+        task.wait(0.2)
+        -- 刷新角色状态
+        local freshChar = playersFolder:FindFirstChild(nearestPlayer.Name) or playersFolder:FindFirstChild(tostring(nearestPlayer.UserId))
+        if freshChar then
+            local stillDowned = freshChar:GetAttribute("Downed") or (freshChar:GetAttribute("State") == "Downed")
+            if not stillDowned then
+                if now - (lastLogTime[nearestPlayer.UserId] or 0) > 3 then
+                    print("[秒救] ✅ 成功救助 " .. nearestPlayer.Name)
+                    showNotice("⚡ 秒救 " .. nearestPlayer.Name, true)
+                    lastLogTime[nearestPlayer.UserId] = now
                 end
+                return  -- 成功，不再执行按键回退
             else
-                warn("[秒救] FireServer 错误: " .. tostring(err))
+                print("[秒救] 调用成功但队友未起身，可能服务器拒绝或需要更长等待")
             end
         end
+    else
+        warn("[秒救] FireServer 错误: " .. tostring(err))
+    end
+end
 
         -- 回退：长按E（保留保险）
         print("[调试] 秒救失败，回退到长按E")
