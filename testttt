@@ -2917,9 +2917,9 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（Xeno 兼容版 - 流畅连续拾取） ====================
+-- ==================== 自动收集物品（优化版 - 流畅连续拾取） ====================
 local autoCollectEnabled = false
-local collectThread = nil
+local collectTask = nil
 local COLLECT_COOLDOWN = 0.5
 local COLLECT_DISTANCE = 100
 local SCAN_INTERVAL = 0.5
@@ -2934,6 +2934,7 @@ local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
 
+-- 获取可拾取物品
 local function getCollectibles()
     local items = {}
     local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
@@ -2983,40 +2984,42 @@ local function performCollect(targetItem)
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return false end
     if TELEPORT_TO_ITEM then
         lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
-        wait(0.05)
+        task.wait(0.05)
     else
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         if humanoid then humanoid:MoveTo(targetItem.position) end
-        wait(0.3)
+        task.wait(0.3)
     end
     collectItem(targetItem.obj)
     return true
 end
 
-local function autoCollectThread()
+-- 主循环（独立任务）
+local function autoCollectLoop()
     while autoCollectEnabled do
+        -- 暂停条件：救助或挂机活跃
         if (autoRescueEnabled and activeRescueTarget ~= nil) or autoFarmEnabled then
-            wait(0.2)
+            task.wait(0.2)
             goto continue
         end
         if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
-            wait(0.5)
+            task.wait(0.5)
             goto continue
         end
 
         local now = os.clock()
         if now - lastCollectTime < COLLECT_COOLDOWN then
-            wait(0.05)
+            task.wait(0.05)
             goto continue
         end
         if now < nextScanTime then
-            wait(0.05)
+            task.wait(0.05)
             goto continue
         end
 
         local items = getCollectibles()
         if #items == 0 then
-            wait(0.2)
+            task.wait(0.2)
             goto continue
         end
 
@@ -3040,7 +3043,7 @@ local function autoCollectThread()
             if success then
                 collectedCache[bestItem.obj] = nil
                 lastCollectTime = os.clock()
-                nextScanTime = os.clock() + 0.05
+                nextScanTime = os.clock() + 0.05   -- 立即允许扫描下一个
             else
                 collectedCache[bestItem.obj] = os.clock()
                 nextScanTime = os.clock() + SCAN_INTERVAL
@@ -3049,21 +3052,21 @@ local function autoCollectThread()
             nextScanTime = now + SCAN_INTERVAL
         end
 
-        wait(0.05)
+        task.wait(0.05)
         ::continue::
     end
 end
 
 function startAutoCollect()
-    if collectThread then return end
+    if collectTask then return end
     autoCollectEnabled = true
-    collectThread = spawn(autoCollectThread)   -- 使用 spawn 而非 task.spawn
-    print("[自动收集] 已启动（Xeno兼容版）")
+    collectTask = task.spawn(autoCollectLoop)
+    print("[自动收集] 已启动（优化版）")
 end
 
 function stopAutoCollect()
     autoCollectEnabled = false
-    collectThread = nil   -- 协程会在下次循环检测到 false 时自然退出
+    collectTask = nil   -- 任务会在下次循环检查到 false 后自行退出
     collectedCache = {}
     nextScanTime = 0
     lastCollectTime = 0
@@ -3074,7 +3077,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（流畅版）", true)
+        showNotice("💰 自动收集已开启（优化版）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
