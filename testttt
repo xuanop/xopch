@@ -8,7 +8,7 @@ local AUTHOR_USERNAMES = {
     "tanweiquan3"
 }  
 
-local DC_CODE = "6bcp6StHey"
+local DC_CODE = "6bcp6StHey"    
 local DC_URL = "https://discord.gg/" .. DC_CODE
 
 -- 无头效果使用的 Mesh ID (仅 R6)
@@ -1631,10 +1631,10 @@ function toggleAutoRescue()
     print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
     if autoRescueEnabled then
         startSimpleRescue()   -- 调用稳定救助
-        showNotice("✅ 自动救助已开启", true)
+        showNotice("✅ 自动救人已开启", true)
     else
         stopSimpleRescue()    -- 停止救助
-        showNotice("❌ 自动救助已关闭", true)
+        showNotice("❌ 自动救人已关闭", true)
     end
 end
 
@@ -2326,10 +2326,10 @@ local function createAdminPanel()
     end, Color3.fromRGB(100, 150, 200))
             
             -- 自动救助队友开关
-            createButtonSafe(other2Cont, "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌"), 
+            createButtonSafe(other2Cont, "🚑 自动救人: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌"), 
             function(btn) 
                 toggleAutoRescue()
-                btn.Text = "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌")
+                btn.Text = "🚑 自动救人: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌")
                 btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
             end, Color3.fromRGB(200, 100, 100))
             updateCanvas(other2Cont)
@@ -2808,10 +2808,10 @@ task.spawn(function()
         print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
         if autoRescueEnabled then
             startSimpleRescue()
-            showNotice("✅ 自动救助已开启", true)
+            showNotice("✅ 自动救人已开启", true)
         else
             stopSimpleRescue()
-            showNotice("❌ 自动救助已关闭", true)
+            showNotice("❌ 自动救人已关闭", true)
         end
     end
     print("[主脚本] 已成功覆盖 toggleAutoRescue")
