@@ -2917,12 +2917,12 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（性能优化版v2） ====================
+-- ==================== 自动收集物品（独立线程版 - 流畅连续拾取） ====================
 local autoCollectEnabled = false
 local collectThread = nil
-local COLLECT_COOLDOWN = 0.2          -- 每次拾取后冷却时间（秒）
-local COLLECT_DISTANCE = 12           -- 搜索物品的最大距离（格）
-local SCAN_INTERVAL = 0.2             -- 扫描物品列表的最小间隔（秒）
+local COLLECT_COOLDOWN = 0.2          -- 每次拾取后冷却（秒）
+local COLLECT_DISTANCE = 12
+local SCAN_INTERVAL = 0.2
 local TELEPORT_TO_ITEM = true
 local COLLECT_KEYWORDS = {
     "Coin", "Gem", "Token", "Star", "Candy", "Present", "PowerUp", "Item", "Pickup"
@@ -2934,7 +2934,7 @@ local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
 
--- 获取可拾取物品（同原版）
+-- 获取可拾取物品（保留原逻辑，优化搜索半径）
 local function getCollectibles()
     local items = {}
     local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
@@ -2983,8 +2983,7 @@ local function performCollect(targetItem)
     if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return false end
     if TELEPORT_TO_ITEM then
-        local targetPos = targetItem.position + Vector3.new(0, 2, 0)
-        lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos)
+        lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
         task.wait(0.05)
     else
         local humanoid = lp.Character:FindFirstChild("Humanoid")
@@ -2995,7 +2994,7 @@ local function performCollect(targetItem)
     return true
 end
 
--- 主循环（独立线程）
+-- 独立线程主循环
 local function autoCollectThread()
     while autoCollectEnabled do
         -- 暂停条件：救助或挂机活跃
@@ -3007,27 +3006,23 @@ local function autoCollectThread()
             task.wait(0.5)
             goto continue
         end
-        
+
         local now = os.clock()
         if now - lastCollectTime < COLLECT_COOLDOWN then
             task.wait(0.05)
             goto continue
         end
-        
-        -- 扫描节流
         if now < nextScanTime then
             task.wait(0.05)
             goto continue
         end
-        
+
         local items = getCollectibles()
         if #items == 0 then
-            -- 无物品时休眠稍长，降低CPU
             task.wait(0.2)
             goto continue
         end
-        
-        -- 找最近物品
+
         local myPos = lp.Character.HumanoidRootPart.Position
         local bestItem = nil
         local bestDist = COLLECT_DISTANCE
@@ -3035,31 +3030,30 @@ local function autoCollectThread()
             local dist = (myPos - item.position).Magnitude
             if dist < bestDist then
                 if collectedCache[item.obj] and now - collectedCache[item.obj] < 10 then
-                    -- 跳过缓存
+                    -- 跳过短期失败的物品
                 else
                     bestDist = dist
                     bestItem = item
                 end
             end
         end
-        
+
         if bestItem then
-            -- 拾取
+            currentCollecting = true
             local success = performCollect(bestItem)
+            currentCollecting = false
             if success then
                 collectedCache[bestItem.obj] = nil
                 lastCollectTime = os.clock()
-                -- 关键：拾取成功后立即允许下一次扫描（0.05秒后）
-                nextScanTime = os.clock() + 0.05
+                nextScanTime = os.clock() + 0.05   -- 拾取成功后立即允许扫描
             else
                 collectedCache[bestItem.obj] = os.clock()
                 nextScanTime = os.clock() + SCAN_INTERVAL
             end
         else
-            -- 无可用物品，延长扫描间隔
             nextScanTime = now + SCAN_INTERVAL
         end
-        
+
         task.wait(0.05)
         ::continue::
     end
@@ -3069,7 +3063,7 @@ function startAutoCollect()
     if collectThread then return end
     autoCollectEnabled = true
     collectThread = task.spawn(autoCollectThread)
-    print("[自动收集] 已启动（优化版v2）")
+    print("[自动收集] 已启动（独立线程版）")
 end
 
 function stopAutoCollect()
@@ -3078,7 +3072,6 @@ function stopAutoCollect()
         coroutine.close(collectThread)
         collectThread = nil
     end
-    -- 清理缓存
     collectedCache = {}
     nextScanTime = 0
     lastCollectTime = 0
