@@ -2749,6 +2749,9 @@ function startSimpleRescue()
         lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
         task.wait(0.05)  -- 缩短等待
 
+        print("[调试] 原始玩家名: '" .. nearestPlayer.Name .. "'")
+        print("[调试] 玩家名字节长度:", #nearestPlayer.Name)
+
         -- 秒救调用（使用已验证的正确参数）
         if interactRemote then
             print("[调试] 发送秒救请求: Revive, true, " .. nearestPlayer.Name)
