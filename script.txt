@@ -1,4 +1,3 @@
-
 --𝓍𝓊𝒶𝓃--
 
 --██ ██ █ █ ████ █  █    ████ ████--
@@ -6,6 +5,7 @@
 --    █   █ █ ████ █ ██    █  █ ████--
 --    ███  █ █ █  █ █  █    █  █ █   --
 --    ██ ██ ███ █  █ █  █    ████ █   --
+--9898--
 local gameScripts = {
     [9872472334] = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/testttt"
 }
