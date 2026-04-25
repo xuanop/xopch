@@ -2670,7 +2670,7 @@ function startSimpleRescue()
     local RETRY_WAIT = 0.05           -- 重试间隔（秒）
     local POST_FIRE_WAIT = 0.15      -- 调用后等待起身检测（秒）
     local COOLDOWN = 1.5             -- 对同一玩家的冷却时间（秒）
-    local MAX_ATTEMPTS = 4           -- 最大重试次数
+    local MAX_ATTEMPTS = 2           -- 最大重试次数
     -- ====================================================
 
     -- 确保全局 lastRescueTime 存在
