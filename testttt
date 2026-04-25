@@ -1403,31 +1403,31 @@ local function createTeleportWindow()
 end
 
 -- ==================== 高空挂机优化版（前置定义） ====================
+-- ==================== 高空挂机（固定坐标 + 平台支撑 + 关闭返回地面） ====================
 -- 固定高空坐标（可根据需要修改）
 local SKY_X = 0          -- X轴坐标
 local SKY_Y = 500        -- Y轴高度（建议 300~800）
 local SKY_Z = 0          -- Z轴坐标
 local PLATFORM_SIZE = 12 -- 平台边长（格）
 
-local skyPlatform = nil  -- 平台实例引用
+local skyPlatform = nil          -- 平台实例引用
+local savedGroundPosition = nil  -- 开启挂机时保存的地面位置
 
 -- 创建脚下平台
 local function createSkyPlatform()
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return nil end
-    -- 销毁旧平台
     if skyPlatform and skyPlatform.Parent then
         skyPlatform:Destroy()
         skyPlatform = nil
     end
-    
     local hrp = lp.Character.HumanoidRootPart
-    local platformPos = hrp.Position - Vector3.new(0, 2.5, 0)  -- 在脚下位置
+    local platformPos = hrp.Position - Vector3.new(0, 2.5, 0)
     local platform = Instance.new("Part")
     platform.Size = Vector3.new(PLATFORM_SIZE, 1, PLATFORM_SIZE)
     platform.Position = platformPos
     platform.Anchored = true
     platform.CanCollide = true
-    platform.Transparency = 0.5   -- 半透明，可改为 0 完全可见
+    platform.Transparency = 0.5
     platform.BrickColor = BrickColor.new("Bright blue")
     platform.Material = Enum.Material.Plastic
     platform.Name = "SkyPlatform_XUAN"
@@ -1449,14 +1449,49 @@ local function teleportToSky()
     local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
     lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos)
     task.wait(0.2)
-    -- 创建或更新平台
     if not skyPlatform or not skyPlatform.Parent then
         skyPlatform = createSkyPlatform()
     else
-        -- 如果平台已存在但需要更新位置（玩家移动后）
         local newPos = lp.Character.HumanoidRootPart.Position - Vector3.new(0, 2.5, 0)
         skyPlatform.Position = newPos
     end
+end
+
+-- 尝试获取地图重生点
+local function getSpawnPosition()
+    -- 方法1：直接查找 SpawnLocation
+    local spawn = workspace:FindFirstChild("SpawnLocation")
+    if spawn and spawn:IsA("SpawnLocation") then
+        return spawn.Position
+    end
+    -- 方法2：查找 Teams 下的 SpawnLocation（Evade 常见结构）
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("SpawnLocation") then
+            return obj.Position
+        end
+    end
+    -- 方法3：回退到地图最高点上方 10 格（不至于悬空）
+    local highestY = 100
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Position.Y > highestY then
+            highestY = obj.Position.Y
+        end
+    end
+    return Vector3.new(0, highestY + 10, 0)
+end
+
+-- 返回地面（关闭挂机时调用）
+local function returnToGround()
+    if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+    local target = nil
+    if savedGroundPosition then
+        target = savedGroundPosition
+        savedGroundPosition = nil
+    else
+        target = getSpawnPosition()
+    end
+    lp.Character.HumanoidRootPart.CFrame = CFrame.new(target)
+    showNotice("已返回地面", true)
 end
 
 -- 挂机心跳逻辑
@@ -1468,17 +1503,13 @@ local function autoFarmHeartbeat()
     local hrp = lp.Character.HumanoidRootPart
     local currentPos = hrp.Position
     local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
-    -- 如果偏离目标高度过远，重新传送并重置平台
     if math.abs(currentPos.Y - targetPos.Y) > 10 then
         teleportToSky()
     else
-        -- 轻微随机摆动，模拟正常活动
         hrp.Velocity = Vector3.new(math.random(-3,3), math.random(-1,1), math.random(-3,3))
-        -- 确保平台存在（防止被意外摧毁）
         if not skyPlatform or not skyPlatform.Parent then
             skyPlatform = createSkyPlatform()
         else
-            -- 跟随玩家位置更新平台（防止玩家轻微移动后平台错位）
             local newPos = hrp.Position - Vector3.new(0, 2.5, 0)
             skyPlatform.Position = newPos
         end
@@ -1487,7 +1518,12 @@ end
 
 function startAutoFarm()
     if farmConnection then farmConnection:Disconnect() end
-    -- 初始传送并创建平台
+    -- 保存当前地面位置（用于关闭时返回）
+    if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        savedGroundPosition = lp.Character.HumanoidRootPart.Position
+    else
+        savedGroundPosition = nil
+    end
     teleportToSky()
     farmConnection = RunService.Heartbeat:Connect(autoFarmHeartbeat)
 end
@@ -1495,6 +1531,8 @@ end
 function stopAutoFarm()
     if farmConnection then farmConnection:Disconnect(); farmConnection = nil end
     destroySkyPlatform()
+    -- 异步返回地面，避免与销毁冲突
+    task.spawn(returnToGround)
 end
 
 function toggleAutoFarm()
