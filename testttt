@@ -1595,7 +1595,7 @@ function startAutoRescue()
                         -- 🚀 使用已验证的远程事件瞬间救助
                         if interactRemote then
                             pcall(function()
-                               interactRemote:FireServer("Revive", true, player.UserId)   -- 使用 UserId
+                               interactRemote:FireServer("Revive", true, downedPlayer.UserId)   -- 使用 UserId
                                -- 或 
                                interactRemote:FireServer("Revive", player)                -- 无需 true
                                -- 或
