@@ -1,5 +1,3 @@
---[[ 🔑 XUAN Commander ]]
-
 -- 作者列表
 local AUTHOR_USERNAMES = {
     "xuan_1529",
