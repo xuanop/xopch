@@ -1403,7 +1403,6 @@ local function createTeleportWindow()
 end
 
 -- ==================== 高空挂机优化版（前置定义） ====================
--- ==================== 高空挂机（固定坐标 + 平台支撑 + 关闭返回地面） ====================
 -- 固定高空坐标（可根据需要修改）
 local SKY_X = 0          -- X轴坐标
 local SKY_Y = 500        -- Y轴高度（建议 300~800）
@@ -1459,18 +1458,16 @@ end
 
 -- 尝试获取地图重生点
 local function getSpawnPosition()
-    -- 方法1：直接查找 SpawnLocation
     local spawn = workspace:FindFirstChild("SpawnLocation")
     if spawn and spawn:IsA("SpawnLocation") then
         return spawn.Position
     end
-    -- 方法2：查找 Teams 下的 SpawnLocation（Evade 常见结构）
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("SpawnLocation") then
             return obj.Position
         end
     end
-    -- 方法3：回退到地图最高点上方 10 格（不至于悬空）
+    -- 回退：取地图最高点上方 10 格
     local highestY = 100
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") and obj.Position.Y > highestY then
@@ -1483,13 +1480,8 @@ end
 -- 返回地面（关闭挂机时调用）
 local function returnToGround()
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
-    local target = nil
-    if savedGroundPosition then
-        target = savedGroundPosition
-        savedGroundPosition = nil
-    else
-        target = getSpawnPosition()
-    end
+    local target = savedGroundPosition or getSpawnPosition()
+    savedGroundPosition = nil
     lp.Character.HumanoidRootPart.CFrame = CFrame.new(target)
     showNotice("已返回地面", true)
 end
@@ -1497,7 +1489,7 @@ end
 -- 挂机心跳逻辑
 local function autoFarmHeartbeat()
     if not autoFarmEnabled then return end
-    -- 救助优先：如果正在救助，暂停挂机
+    -- 救助优先：如果自动救助已开启且有活跃救助目标，则暂停挂机
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = lp.Character.HumanoidRootPart
@@ -1531,15 +1523,14 @@ end
 function stopAutoFarm()
     if farmConnection then farmConnection:Disconnect(); farmConnection = nil end
     destroySkyPlatform()
-    -- 异步返回地面，避免与销毁冲突
-    task.spawn(returnToGround)
+    task.spawn(returnToGround)  -- 异步返回，避免冲突
 end
 
 function toggleAutoFarm()
     autoFarmEnabled = not autoFarmEnabled
     if autoFarmEnabled then
         startAutoFarm()
-        showNotice("☁️ 高空挂机已开启", true)
+        showNotice("☁️ 高空挂机已开启（固定平台）", true)
     else
         stopAutoFarm()
         showNotice("💤 高空挂机已关闭", true)
