@@ -215,6 +215,7 @@ local espObjects = {}
 
 -- ==================== 自动复活变量 ====================
 local autoReviveEnabled = false
+local activeRescueTarget = nil   -- 救助优先标志：当前正尝试救助的玩家
 local reviveRemote = safeCall(function()
     return ReplicatedStorage:FindFirstChild("Events")
         and ReplicatedStorage.Events:FindFirstChild("Player")
@@ -1450,6 +1451,10 @@ end
 function startAutoFarm()
     if farmConnection then farmConnection:Disconnect() end
     farmConnection = RunService.Heartbeat:Connect(function()
+        -- 救助优先：如果自动救助已开启且有活跃救助目标，则暂停挂机
+        if autoRescueEnabled and activeRescueTarget ~= nil then
+            return
+        end
         if not autoFarmEnabled then return end
         if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
         local hrp = lp.Character.HumanoidRootPart
