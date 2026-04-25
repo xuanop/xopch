@@ -1490,7 +1490,7 @@ end
 local function autoFarmHeartbeat()
     if not autoFarmEnabled then return end
     -- 救助优先：如果自动救助已开启且有活跃救助目标，则暂停挂机
-    if autoRescueEnabled and activeRescueTarget ~= nil then return end
+    if (autoRescueEnabled and activeRescueTarget ~= nil) or autoCollectEnabled then return end
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = lp.Character.HumanoidRootPart
     local currentPos = hrp.Position
@@ -2996,7 +2996,7 @@ end
 
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
-    if (autoRescueEnabled and activeRescueTarget ~= nil) or autoFarmEnabled then return end
+    if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if currentCollecting then return end
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
 
