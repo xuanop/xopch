@@ -2917,9 +2917,9 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（兼容版 - 流畅连续拾取） ====================
+-- ==================== 自动收集物品（Xeno 兼容版 - 流畅连续拾取） ====================
 local autoCollectEnabled = false
-local collectCoroutine = nil
+local collectThread = nil
 local COLLECT_COOLDOWN = 0.2
 local COLLECT_DISTANCE = 12
 local SCAN_INTERVAL = 0.2
@@ -2930,11 +2930,10 @@ local COLLECT_KEYWORDS = {
 local CUSTOM_ATTRIBUTE = "CanCollect"
 
 local collectedCache = {}
-local lastCollectTime = 0.05
-local nextScanTime = 0.05
+local lastCollectTime = 0
+local nextScanTime = 0
 local currentCollecting = false
 
--- 获取可拾取物品
 local function getCollectibles()
     local items = {}
     local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
@@ -2994,10 +2993,8 @@ local function performCollect(targetItem)
     return true
 end
 
--- 独立线程主循环（使用 spawn，兼容老执行器）
 local function autoCollectThread()
     while autoCollectEnabled do
-        -- 暂停条件：救助或挂机活跃
         if (autoRescueEnabled and activeRescueTarget ~= nil) or autoFarmEnabled then
             wait(0.2)
             goto continue
@@ -3029,9 +3026,7 @@ local function autoCollectThread()
         for _, item in ipairs(items) do
             local dist = (myPos - item.position).Magnitude
             if dist < bestDist then
-                if collectedCache[item.obj] and now - collectedCache[item.obj] < 10 then
-                    -- 跳过短期失败的物品
-                else
+                if not (collectedCache[item.obj] and now - collectedCache[item.obj] < 10) then
                     bestDist = dist
                     bestItem = item
                 end
@@ -3045,7 +3040,7 @@ local function autoCollectThread()
             if success then
                 collectedCache[bestItem.obj] = nil
                 lastCollectTime = os.clock()
-                nextScanTime = os.clock() + 0.05   -- 拾取成功后立即允许扫描
+                nextScanTime = os.clock() + 0.05
             else
                 collectedCache[bestItem.obj] = os.clock()
                 nextScanTime = os.clock() + SCAN_INTERVAL
@@ -3060,15 +3055,15 @@ local function autoCollectThread()
 end
 
 function startAutoCollect()
-    if collectCoroutine then return end
+    if collectThread then return end
     autoCollectEnabled = true
-    collectCoroutine = spawn(autoCollectThread)   -- 使用 spawn 启动协程
-    print("[自动收集] 已启动（兼容版）")
+    collectThread = spawn(autoCollectThread)   -- 使用 spawn 而非 task.spawn
+    print("[自动收集] 已启动（Xeno兼容版）")
 end
 
 function stopAutoCollect()
     autoCollectEnabled = false
-    collectCoroutine = nil   -- 协程会在下次循环检查 autoCollectEnabled 时自动退出
+    collectThread = nil   -- 协程会在下次循环检测到 false 时自然退出
     collectedCache = {}
     nextScanTime = 0
     lastCollectTime = 0
