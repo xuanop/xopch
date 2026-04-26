@@ -2490,12 +2490,27 @@ if other2Cont then
             btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
         end, Color3.fromRGB(200, 100, 100))
     
-    createButtonSafe(other2Cont, "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌"), 
-    function(btn) 
-        toggleAutoCollect()
-        btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
-        btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
-    end, Color3.fromRGB(100, 200, 150))
+    -- 自动收集按钮（新增）
+createButtonSafe(other2Cont, "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌"), 
+function(btn) 
+    -- 切换状态
+    autoCollectEnabled = not autoCollectEnabled
+    if autoCollectEnabled then
+        startAutoCollect()
+        showNotice("💰 自动收集已开启（优化版）", true)
+    else
+        stopAutoCollect()
+        showNotice("💤 自动收集已关闭", true)
+    end
+    updateAntiAFK()
+    
+    -- 立即更新当前按钮的显示（不依赖 refreshPanelButtons）
+    btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
+    btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
+    
+    -- 可选：同时刷新其他面板按钮（如防AFK和其他开关）
+    refreshPanelButtons()
+end, Color3.fromRGB(100, 200, 150))
     
     updateCanvas(other2Cont)
 end
