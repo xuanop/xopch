@@ -3153,6 +3153,7 @@ task.spawn(function()
             showNotice("❌ 自动救助已关闭", true)
         end
     end
+    updateAntiAFK()
     print("[主脚本] 已成功覆盖 toggleAutoRescue")
 end)
 
