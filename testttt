@@ -1590,27 +1590,24 @@ local function returnToGround()
 end
 
 -- 挂机心跳逻辑
--- 节流：每0.2秒传送一次
-if not lastTeleportTime or tick() - lastTeleportTime >= 0.2 then
-    lastTeleportTime = tick()
-    hrp.CFrame = CFrame.new(targetPos)
 local function autoFarmHeartbeat()
     if not autoFarmEnabled then return end
     -- 救助优先：如果自动救助已开启且有活跃救助目标，则暂停挂机
     if (autoRescueEnabled and activeRescueTarget ~= nil) or autoCollectEnabled then return end
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = lp.Character.HumanoidRootPart
+    local currentPos = hrp.Position
     local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
-    
-    -- 直接传送至固定高空坐标（无等待）
-    hrp.CFrame = CFrame.new(targetPos)
-    
-    -- 确保脚下平台存在并跟随当前位置
-    if not skyPlatform or not skyPlatform.Parent then
-        skyPlatform = createSkyPlatform()
+    if math.abs(currentPos.Y - targetPos.Y) > 10 then
+        teleportToSky()
     else
-        local newPlatformPos = hrp.Position - Vector3.new(0, 2.5, 0)
-        skyPlatform.Position = newPlatformPos
+        hrp.Velocity = Vector3.new(math.random(-3,3), math.random(-1,1), math.random(-3,3))
+        if not skyPlatform or not skyPlatform.Parent then
+            skyPlatform = createSkyPlatform()
+        else
+            local newPos = hrp.Position - Vector3.new(0, 2.5, 0)
+            skyPlatform.Position = newPos
+        end
     end
 end
 
