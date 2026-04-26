@@ -2387,13 +2387,12 @@ if other2Cont then
         end, Color3.fromRGB(200, 100, 100))
     
     -- 自动收集按钮（新增）
-    createButtonSafe(other2Cont, "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌"), 
-        function(btn) 
-            toggleAutoCollect()
-            task.wait(0.05)
-            btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
-            btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
-        end, Color3.fromRGB(100, 200, 150))
+    ccreateButtonSafe(other2Cont, "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌"), 
+    function(btn) 
+        toggleAutoCollect()
+        btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
+        btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
+    end, Color3.fromRGB(100, 200, 150))
     
     updateCanvas(other2Cont)
 end
