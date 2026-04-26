@@ -1481,8 +1481,6 @@ local function autoCollectLoop()
     end
 end
 
-    local myPos = getPlayerPosition()
-    if not myPos then return end
 ----------------
     if bestItem then
         currentCollecting = true
