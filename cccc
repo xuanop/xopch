@@ -1483,20 +1483,7 @@ end
 
     local myPos = getPlayerPosition()
     if not myPos then return end
-
-    local bestItem = nil
-    local bestDist = COLLECT_DISTANCE
-    for _, item in ipairs(items) do
-        if not item.obj or not item.obj.Parent then continue end
-        local dist = item.distance or (myPos - item.position).Magnitude
-        if dist < bestDist then
-            if not (collectedCache[item.obj] and now - collectedCache[item.obj] < 10) then
-                bestDist = dist
-                bestItem = item
-            end
-        end
-    end
-
+----------------
     if bestItem then
         currentCollecting = true
         local success = performCollect(bestItem)
@@ -2770,6 +2757,7 @@ function startSimpleRescue()
             end
             if nearestPlayer then
                 activeTarget = nearestPlayer
+                activeRescueTarget = nearestPlayer
                 retryCount = 0
                 nextRetryTime = 0
             else
@@ -2783,6 +2771,7 @@ function startSimpleRescue()
                 lastLogTime[activeTarget.UserId .. "_giveup"] = now
             end
             activeTarget = nil; retryCount = 0; nextRetryTime = 0
+            activeRescueTarget = nil
             return
         end
         local targetChar = playersFolder:FindFirstChild(activeTarget.Name) or playersFolder:FindFirstChild(tostring(activeTarget.UserId))
@@ -2808,6 +2797,7 @@ function startSimpleRescue()
                     print("[连续救助] ✅ 成功救助 " .. activeTarget.Name)
                     showNotice("⚡ 秒救 " .. activeTarget.Name, true)
                     activeTarget = nil; retryCount = 0; nextRetryTime = 0
+                    activeRescueTarget = nil
                     if autoFarmEnabled then
                         task.spawn(function()
                             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
