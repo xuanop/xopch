@@ -1288,12 +1288,12 @@ if not respawnHandlerAdded then
     end)
 end
 
--- ==================== 自动收集物品（现在可以调用 teleportToSky） ====================
+-- ==================== 自动收集物品（性能优化版） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
-local COLLECT_COOLDOWN = 0.2
-local COLLECT_DISTANCE = 100
-local SCAN_INTERVAL = 1.0
+local COLLECT_COOLDOWN = 0.2          -- 拾取后冷却（秒）
+local COLLECT_DISTANCE = 100          -- 搜索距离（格）
+local SCAN_INTERVAL = 1.0             -- 扫描间隔（秒），原为0.3，降低CPU占用
 local COLLECT_KEYWORDS = {"visual"}
 local TELEPORT_TO_ITEM = true
 
@@ -1301,6 +1301,34 @@ local collectedCache = {}
 local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
+
+-- 缓存搜索根容器（避免每帧重复查找）
+local searchRootCache = nil
+local searchRootCacheTime = 0
+local function getSearchRoot()
+    local now = os.clock()
+    -- 每5秒刷新一次搜索根（适应地图变化）
+    if searchRootCache and (now - searchRootCacheTime) < 5 then
+        return searchRootCache
+    end
+    -- 可能的物品容器优先顺序
+    local candidates = {
+        workspace:FindFirstChild("Game"),          -- Evade 常用
+        workspace:FindFirstChild("Items"),
+        workspace:FindFirstChild("Drops"),
+        workspace
+    }
+    for _, root in ipairs(candidates) do
+        if root then
+            searchRootCache = root
+            searchRootCacheTime = now
+            return root
+        end
+    end
+    searchRootCache = workspace
+    searchRootCacheTime = now
+    return workspace
+end
 
 local function getPlayerPosition()
     if not lp or not lp.Character then return nil end
@@ -1319,9 +1347,17 @@ local function getCollectibles()
     local items = {}
     local myPos = getPlayerPosition()
     if not myPos then return items end
+    
+    local searchRoot = getSearchRoot()
+    if not searchRoot then return items end
+    
     local MAX_SEARCH_RADIUS = 150
-    for _, obj in ipairs(workspace:GetDescendants()) do
+    -- 仅遍历搜索根下的后代，而非全 workspace
+    local descendants = searchRoot:GetDescendants()
+    
+    for _, obj in ipairs(descendants) do
         if isPlayerCharacter(obj) then continue end
+        -- 只关心 BasePart 或没有 Humanoid 的 Model
         if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
             local lowerName = obj.Name:lower()
             local nameMatch = false
@@ -1332,6 +1368,7 @@ local function getCollectibles()
                 end
             end
             if not nameMatch then continue end
+            
             local pos = nil
             if obj:IsA("BasePart") then
                 pos = obj.Position
@@ -1344,8 +1381,10 @@ local function getCollectibles()
             else
                 continue
             end
-            if (myPos - pos).Magnitude > MAX_SEARCH_RADIUS then continue end
-            table.insert(items, {obj = obj, position = pos})
+            
+            local dist = (myPos - pos).Magnitude
+            if dist > MAX_SEARCH_RADIUS then continue end
+            table.insert(items, {obj = obj, position = pos, distance = dist})
         end
     end
     return items
@@ -1375,11 +1414,11 @@ local function autoCollectLoop()
     local now = os.clock()
     if now - lastCollectTime < COLLECT_COOLDOWN then return end
     if now < nextScanTime then return end
-    nextScanTime = now + 0.3
+    nextScanTime = now + SCAN_INTERVAL   -- 使用较长的扫描间隔
 
     local items = getCollectibles()
     if #items == 0 then
-        -- 没有发现物品，如果高空挂机开启，则返回高空
+        -- 没有发现物品，若高空挂机开启则返回高空
         if autoFarmEnabled then
             teleportToSky()
         end
@@ -1393,7 +1432,7 @@ local function autoCollectLoop()
     local bestDist = COLLECT_DISTANCE
     for _, item in ipairs(items) do
         if not item.obj or not item.obj.Parent then continue end
-        local dist = (myPos - item.position).Magnitude
+        local dist = item.distance or (myPos - item.position).Magnitude
         if dist < bestDist then
             if not (collectedCache[item.obj] and now - collectedCache[item.obj] < 10) then
                 bestDist = dist
@@ -1408,9 +1447,8 @@ local function autoCollectLoop()
         if success then
             collectedCache[bestItem.obj] = nil
             lastCollectTime = os.clock()
-            nextScanTime = os.clock() + 0.05
+            nextScanTime = os.clock() + 0.05   -- 拾取后快速再扫描
             print("[自动收集] 拾取 " .. bestItem.obj.Name)
-            -- 拾取成功后，若高空挂机开启，立即返回高空平台
             if autoFarmEnabled then
                 teleportToSky()
             end
@@ -1433,7 +1471,7 @@ function startAutoCollect()
             autoCollectLoop()
         end
     end)
-    print("[自动收集] 已启动")
+    print("[自动收集] 已启动（性能优化版，扫描间隔 " .. SCAN_INTERVAL .. " 秒）")
 end
 
 function stopAutoCollect()
@@ -1448,7 +1486,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启", true)
+        showNotice("💰 自动收集已开启（优化性能）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
