@@ -3056,7 +3056,7 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（最终稳定版） ====================
+-- ==================== 自动收集物品（调试版） ====================
 local autoCollectEnabled = false
 local collectScanConnection = nil
 local COLLECT_COOLDOWN = 0.2
@@ -3072,6 +3072,7 @@ local collectedCache = {}
 local nextScanTime = 0
 local currentCollecting = false
 local lastCollectTime = 0
+local debugTimer = 0
 
 local function getPlayerPosition()
     if not lp or not lp.Character then return nil end
@@ -3125,9 +3126,15 @@ local function collectItem(itemObj)
 end
 
 local function performCollect(targetItem)
-    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
+    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then 
+        print("[调试] 拾取失败：物品已消失")
+        return false 
+    end
     local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
+    if not hrp then 
+        print("[调试] 拾取失败：没有 HumanoidRootPart")
+        return false 
+    end
     if TELEPORT_TO_ITEM then
         hrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
         task.wait(0.05)
@@ -3141,18 +3148,43 @@ local function performCollect(targetItem)
 end
 
 local function autoCollectLoop()
-    if not autoCollectEnabled then return end
-    if autoRescueEnabled and activeRescueTarget ~= nil then return end
-    if currentCollecting then return end
-    if not getPlayerPosition() then return end
+    if not autoCollectEnabled then 
+        return 
+    end
+    
+    -- 调试：每秒打印一次状态
+    local now = os.clock()
+    if now - debugTimer > 1 then
+        debugTimer = now
+        print(string.format("[调试] autoCollectEnabled=%s, autoRescueEnabled=%s, activeRescueTarget=%s", 
+            tostring(autoCollectEnabled), tostring(autoRescueEnabled), tostring(activeRescueTarget)))
+    end
+    
+    if autoRescueEnabled and activeRescueTarget ~= nil then 
+        return 
+    end
+    if currentCollecting then 
+        return 
+    end
+    if not getPlayerPosition() then 
+        return 
+    end
 
     local now = os.clock()
-    if now - lastCollectTime < COLLECT_COOLDOWN then return end
-    if now < nextScanTime then return end
+    if now - lastCollectTime < COLLECT_COOLDOWN then 
+        return 
+    end
+    if now < nextScanTime then 
+        return 
+    end
     nextScanTime = now + SCAN_INTERVAL
 
     local items = getCollectibles()
-    if #items == 0 then return end
+    if #items == 0 then 
+        return 
+    end
+    
+    print("[调试] 扫描到 " .. #items .. " 个可拾取物品，第一个名称: " .. items[1].obj.Name)
 
     local myPos = getPlayerPosition()
     if not myPos then return end
@@ -3171,20 +3203,25 @@ local function autoCollectLoop()
     end
 
     if bestItem then
+        print(string.format("[调试] 准备拾取 %s，距离 %.1f", bestItem.obj.Name, bestDist))
         currentCollecting = true
         if bestItem.obj and bestItem.obj.Parent then
             local success = performCollect(bestItem)
             if success then
+                print("[调试] 拾取成功！")
                 collectedCache[bestItem.obj] = nil
                 lastCollectTime = os.clock()
                 nextScanTime = os.clock() + 0.05
             else
+                print("[调试] 拾取失败，加入缓存")
                 collectedCache[bestItem.obj] = os.clock()
             end
         else
             collectedCache[bestItem.obj] = nil
         end
         currentCollecting = false
+    else
+        print("[调试] 未找到合适物品（可能都被缓存）")
     end
 end
 
@@ -3195,7 +3232,7 @@ function startAutoCollect()
             task.spawn(autoCollectLoop)
         end
     end)
-    print("[自动收集] 已启动")
+    print("[自动收集] 已启动（调试版）")
 end
 
 function stopAutoCollect()
@@ -3210,7 +3247,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启", true)
+        showNotice("💰 自动收集已开启（调试版）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
@@ -3218,7 +3255,7 @@ function toggleAutoCollect()
     updateAntiAFK()
     refreshPanelButtons()
 
-    -- 强制刷新当前按钮
+    -- 强制刷新按钮
     local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
     if panel then
         local other2Cont = panel:FindFirstChild("其他 2Container")
