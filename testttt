@@ -1782,7 +1782,8 @@ function toggleAutoRescue()
         stopSimpleRescue()
         showNotice("❌ 自动救助已关闭", true)
     end
-    updateAntiAFK()   -- <--- 添加这一行
+    updateAntiAFK()
+    refreshPanelButtons()
 end
 
 -- ==================== 自定义重命名器 ====================
