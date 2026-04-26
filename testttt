@@ -1734,17 +1734,16 @@ end
 
 function toggleAutoRescue()
     autoRescueEnabled = not autoRescueEnabled
-    -- 🔥 联动自动复活：开启救助时自动开启复活，关闭时同步关闭
     autoReviveEnabled = autoRescueEnabled
     print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
     if autoRescueEnabled then
-        startSimpleRescue()   -- 调用稳定救助
+        startSimpleRescue()
         showNotice("✅ 自动救助已开启", true)
     else
-        stopSimpleRescue()    -- 停止救助
+        stopSimpleRescue()
         showNotice("❌ 自动救助已关闭", true)
     end
-    updateAntiAFK()
+    updateAntiAFK()   -- <--- 添加这一行
 end
 
 -- ==================== 自定义重命名器 ====================
@@ -2930,15 +2929,6 @@ function startSimpleRescue()
         local success, err = pcall(function()
             interactRemote:FireServer("Revive", true, cleanName)
         end)
-
-        if success then
-            print(string.format("[连续救助] 尝试 %d: FireServer 成功", retryCount + 1))
-            task.wait(POST_FIRE_WAIT)
-            -- 再次检查目标状态
-            local freshChar = playersFolder:FindFirstChild(activeTarget.Name) or playersFolder:FindFirstChild(tostring(activeTarget.UserId))
-            if freshChar then
-                local stillDowned = freshChar:GetAttribute("Downed") == true or (freshChar:GetAttribute("State") == "Downed")
-                if not stillDowned then
                     -- 救起成功
                     print("[连续救助] ✅ 成功救助 " .. activeTarget.Name)
                     showNotice("⚡ 秒救 " .. activeTarget.Name, true)
@@ -2955,9 +2945,6 @@ function startSimpleRescue()
         -- 本轮失败，增加重试计数并设置下次重试时间
         retryCount = retryCount + 1
         nextRetryTime = now + RETRY_INTERVAL
-        if retryCount % 3 == 1 then
-            print(string.format("[连续救助] 第 %d 次尝试失败，继续重试...", retryCount))
-        end
     end)
     print("[救助] 连续秒救监控已启动（锁定目标直至救起）")
 end
