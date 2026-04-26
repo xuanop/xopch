@@ -3078,6 +3078,21 @@ function toggleAutoCollect()
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
     end
+
+    -- 强制刷新面板中“自动收集”按钮的显示
+    local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
+    if panel then
+        local other2Cont = panel:FindFirstChild("其他 2Container")
+        if other2Cont then
+            for _, btn in ipairs(other2Cont:GetChildren()) do
+                if btn:IsA("TextButton") and btn.Text:find("自动收集") then
+                    btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
+                    btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
+                    break
+                end
+            end
+        end
+    end
 end
 
 -- ==================== 强制覆盖纠正外部脚本错误 ====================
