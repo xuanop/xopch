@@ -3136,7 +3136,7 @@ function stopAutoCollect()
     print("[自动收集] 已停止")
 end
 
-ffunction toggleAutoCollect()
+function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
