@@ -2867,14 +2867,14 @@ function startSimpleRescue()
                 activeTarget = nearestPlayer
                 retryCount = 0
                 nextRetryTime = 0
-                -- 可选：如需调试可取消注释下一行
+                -- 可选：如需调试可取消注释
                 -- print("[连续救助] 锁定新目标:", activeTarget.Name, "距离:", nearestDist)
             else
                 return
             end
         end
 
-        -- 限频控制
+        -- 限频与重试次数检查
         if now < nextRetryTime then return end
         if retryCount >= MAX_RETRIES_PER_TARGET then
             if now - (lastLogTime[activeTarget.UserId .. "_giveup"] or 0) > 10 then
@@ -2914,7 +2914,7 @@ function startSimpleRescue()
             if freshChar then
                 local stillDowned = freshChar:GetAttribute("Downed") == true or (freshChar:GetAttribute("State") == "Downed")
                 if not stillDowned then
-                    -- 救起成功，只显示成功通知
+                    -- 救起成功，只输出最终成功信息
                     print("[连续救助] ✅ 成功救助 " .. activeTarget.Name)
                     showNotice("⚡ 秒救 " .. activeTarget.Name, true)
                     activeTarget = nil
@@ -2927,7 +2927,7 @@ function startSimpleRescue()
             warn("[连续救助] FireServer 错误: " .. tostring(err))
         end
 
-        -- 本轮失败，增加重试计数
+        -- 本轮失败，增加重试计数并设置下次重试时间
         retryCount = retryCount + 1
         nextRetryTime = now + RETRY_INTERVAL
     end)
