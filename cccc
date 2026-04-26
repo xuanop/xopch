@@ -1293,6 +1293,7 @@ local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2
 local COLLECT_DISTANCE = 100
+local SCAN_INTERVAL = 1.0
 local COLLECT_KEYWORDS = {"visual"}
 local TELEPORT_TO_ITEM = true
 
