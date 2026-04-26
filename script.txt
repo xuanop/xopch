@@ -1,4 +1,3 @@
-
 --𝓍𝓊𝒶𝓃--
 
 --██ ██ █ █ ████ █  █    ████ ████--
@@ -7,20 +6,14 @@
 --    ███  █ █ █  █ █  █    █  █ █   --
 --    ██ ██ ███ █  █ █  █    ████ █   --
 --9898--
-local gameScripts = {
-[9872472334] = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/testttt"
-}
 
-local currentGameId = game.PlaceId
-local targetScriptUrl = gameScripts[currentGameId]
+-- 直接指定要加载的脚本地址（不再检查游戏ID）
+local scriptUrl = "https://raw.githubusercontent.com/xuanop/xopch/refs/heads/main/testttt"
 
-if targetScriptUrl then
 local success, err = pcall(function()
-loadstring(game:HttpGet(targetScriptUrl))()
+    loadstring(game:HttpGet(scriptUrl))()
 end)
+
 if not success then
-warn("脚本加载失败:", err)
-end
-else
-print("当前游戏没有专用的脚本。")
+    warn("脚本加载失败:", err)
 end
