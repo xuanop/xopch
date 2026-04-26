@@ -2917,31 +2917,23 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（稳定版 - 避免传送到无效物品） ====================
+-- ==================== 自动收集物品（极简可靠版） ====================
 local autoCollectEnabled = false
-local collectScanConnection = nil
-local COLLECT_COOLDOWN = 0.2          -- 每次拾取后冷却（秒）
-local COLLECT_DISTANCE = 100          -- 搜索距离（格）
-local SCAN_INTERVAL = 0.3             -- 扫描间隔（秒）
+local collectThread = nil
+local COLLECT_DELAY = 0.2           -- 每轮扫描间隔（秒）
+local COLLECT_DISTANCE = 100        -- 搜索距离
 local TELEPORT_TO_ITEM = true
 local COLLECT_KEYWORDS = {
     "Coin", "Gem", "Token", "Star", "Candy", "Present", "PowerUp", "Item", "Pickup"
 }
 local CUSTOM_ATTRIBUTE = "CanCollect"
 
-local collectedCache = {}             -- 失败物品缓存
-local nextScanTime = 0
-local currentCollecting = false
-local lastCollectTime = 0
-
--- 获取当前所有可拾取物品（实时位置）
+-- 获取可拾取物品（实时）
 local function getCollectibles()
     local items = {}
     local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
     if not myPos then return items end
-    local MAX_SEARCH_RADIUS = 150
     for _, obj in ipairs(workspace:GetDescendants()) do
-        -- 只考虑有效的零件或模型
         if obj:IsA("BasePart") or (obj:IsA("Model") and obj ~= lp.Character and not obj:FindFirstChild("Humanoid")) then
             local pos = nil
             if obj:IsA("BasePart") then
@@ -2955,7 +2947,6 @@ local function getCollectibles()
             else
                 continue
             end
-            if (myPos - pos).Magnitude > MAX_SEARCH_RADIUS then continue end
             local nameMatch = false
             local lowerName = obj.Name:lower()
             for _, kw in ipairs(COLLECT_KEYWORDS) do
@@ -2973,6 +2964,7 @@ local function getCollectibles()
     return items
 end
 
+-- 拾取物品（尝试远程事件）
 local function collectItem(itemObj)
     local remote = itemObj:FindFirstChild("Collect") or itemObj:FindFirstChild("Pickup")
     if remote and remote:IsA("RemoteEvent") then
@@ -2980,85 +2972,63 @@ local function collectItem(itemObj)
     end
 end
 
-local function performCollect(targetItem)
-    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
-    if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return false end
-    if TELEPORT_TO_ITEM then
-        lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
-        task.wait(0.05)
-    else
-        local humanoid = lp.Character:FindFirstChild("Humanoid")
-        if humanoid then humanoid:MoveTo(targetItem.position) end
-        task.wait(0.3)
-    end
-    collectItem(targetItem.obj)
-    return true
-end
-
+-- 主循环
 local function autoCollectLoop()
-    if not autoCollectEnabled then return end
-    -- 只被救助打断（收集优先于挂机，挂机不暂停收集）
-    if autoRescueEnabled and activeRescueTarget ~= nil then return end
-    if currentCollecting then return end
-    if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
+    while autoCollectEnabled do
+        -- 暂停条件：救助优先
+        if autoRescueEnabled and activeRescueTarget ~= nil then
+            task.wait(0.2)
+            goto continue
+        end
+        if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
+            task.wait(0.5)
+            goto continue
+        end
 
-    local now = os.clock()
-    if now - lastCollectTime < COLLECT_COOLDOWN then return end
-    if now < nextScanTime then return end
-    nextScanTime = now + SCAN_INTERVAL
+        local items = getCollectibles()
+        if #items == 0 then
+            task.wait(COLLECT_DELAY)
+            goto continue
+        end
 
-    local items = getCollectibles()
-    if #items == 0 then return end
-
-    local myPos = lp.Character.HumanoidRootPart.Position
-    local bestItem = nil
-    local bestDist = COLLECT_DISTANCE
-    for _, item in ipairs(items) do
-        -- 实时有效性检查
-        if not item.obj or not item.obj.Parent then continue end
-        local dist = (myPos - item.position).Magnitude
-        if dist < bestDist then
-            if not (collectedCache[item.obj] and now - collectedCache[item.obj] < 10) then
+        local myPos = lp.Character.HumanoidRootPart.Position
+        local bestItem = nil
+        local bestDist = COLLECT_DISTANCE
+        for _, item in ipairs(items) do
+            local dist = (myPos - item.position).Magnitude
+            if dist < bestDist then
                 bestDist = dist
                 bestItem = item
             end
         end
-    end
 
-    if bestItem then
-        currentCollecting = true
-        -- 再次确认物品仍然存在
-        if bestItem.obj and bestItem.obj.Parent then
-            local success = performCollect(bestItem)
-            if success then
-                collectedCache[bestItem.obj] = nil
-                lastCollectTime = os.clock()
-                nextScanTime = os.clock() + 0.05   -- 立即扫描下一个
+        if bestItem and bestItem.obj and bestItem.obj.Parent then
+            if TELEPORT_TO_ITEM then
+                lp.Character.HumanoidRootPart.CFrame = CFrame.new(bestItem.position + Vector3.new(0, 2, 0))
+                task.wait(0.05)
             else
-                collectedCache[bestItem.obj] = os.clock()
+                local humanoid = lp.Character:FindFirstChild("Humanoid")
+                if humanoid then humanoid:MoveTo(bestItem.position) end
+                task.wait(0.3)
             end
-        else
-            collectedCache[bestItem.obj] = nil
+            collectItem(bestItem.obj)
         end
-        currentCollecting = false
+
+        task.wait(COLLECT_DELAY)   -- 每次动作后等待，避免过快
+        ::continue::
     end
 end
 
 function startAutoCollect()
-    if collectScanConnection then collectScanConnection:Disconnect() end
-    collectScanConnection = RunService.Stepped:Connect(function()
-        if autoCollectEnabled then
-            task.spawn(autoCollectLoop)
-        end
-    end)
-    print("[自动收集] 已启动（稳定版）")
+    if collectThread then return end
+    autoCollectEnabled = true
+    collectThread = task.spawn(autoCollectLoop)
+    print("[自动收集] 已启动（极简版）")
 end
 
 function stopAutoCollect()
-    if collectScanConnection then collectScanConnection:Disconnect(); collectScanConnection = nil end
-    collectedCache = {}
-    nextScanTime = 0
-    lastCollectTime = 0
+    autoCollectEnabled = false
+    collectThread = nil
     print("[自动收集] 已停止")
 end
 
@@ -3066,7 +3036,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（稳定版）", true)
+        showNotice("💰 自动收集已开启（极简版）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
