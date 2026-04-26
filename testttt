@@ -1167,8 +1167,19 @@ local function updateAntiAFK()
 end
 
 -- 强制刷新面板中所有自动化功能按钮的状态
+-- 强制刷新面板中所有自动化功能按钮的状态
 local function refreshPanelButtons()
-    local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
+    -- 尝试多个可能的父级容器
+    local possibleParents = { PlayerGui, game:GetService("CoreGui") }
+    if gethui then
+        table.insert(possibleParents, gethui())
+    end
+    
+    local panel = nil
+    for _, parent in ipairs(possibleParents) do
+        panel = parent:FindFirstChild("MyCommanderPanel")
+        if panel then break end
+    end
     if not panel then return end
     
     -- 刷新“其他 2”分页中的按钮
@@ -1191,7 +1202,7 @@ local function refreshPanelButtons()
         end
     end
     
-    -- 刷新“主要”分页中的防AFK按钮（可选）
+    -- 刷新“主要”分页中的防AFK按钮
     local mainCont = panel:FindFirstChild("主要Container")
     if mainCont then
         for _, btn in ipairs(mainCont:GetChildren()) do
