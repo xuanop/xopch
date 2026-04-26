@@ -1452,6 +1452,7 @@ function stopAutoCollect()
 end
 
 function toggleAutoCollect()
+    print("🔔 toggleAutoCollect 被调用了")   -- 添加这一行
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
