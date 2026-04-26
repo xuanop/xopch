@@ -2984,6 +2984,30 @@ function startSimpleRescue()
                     activeTarget = nil
                     retryCount = 0
                     nextRetryTime = 0
+                    
+                    -- ========== 新增：救助成功后，若高空挂机开启，则返回高空平台 ==========
+                    if autoFarmEnabled then
+                        task.spawn(function()
+                            -- 传送到高空挂机坐标
+                            targetHRP = nil  -- 避免变量冲突，重新获取本地玩家HRP
+                            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                                local hrp = lp.Character.HumanoidRootPart
+                                local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
+                                hrp.CFrame = CFrame.new(targetPos)
+                                task.wait(0.1)
+                                -- 确保平台存在并跟随
+                                if not skyPlatform or not skyPlatform.Parent then
+                                    skyPlatform = createSkyPlatform()
+                                else
+                                    local newPos = hrp.Position - Vector3.new(0, 2.5, 0)
+                                    skyPlatform.Position = newPos
+                                end
+                                print("[救助] 已返回高空挂机点")
+                            end
+                        end)
+                    end
+                    -- ================================================================
+                    
                     return
                 end
             end
