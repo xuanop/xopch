@@ -1218,7 +1218,16 @@ end
 -- 挂机心跳逻辑（自动收集开启时会被抑制）
 local function autoFarmHeartbeat()
     if not autoFarmEnabled then return end
-    if (autoRescueEnabled and activeRescueTarget ~= nil) or autoCollectEnabled then return end
+    
+    -- 优先级：救助 > 收集 > 挂机
+    -- 如果救助或收集任一开启且正在活动，则挂机暂停
+    if autoRescueEnabled and activeRescueTarget ~= nil then
+        return  -- 救助优先，挂机让位
+    end
+    if autoCollectEnabled then
+        return  -- 收集优先，挂机让位（即使当前没有物品，也让收集循环决定是否返回高空）
+    end
+    
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = lp.Character.HumanoidRootPart
     local currentPos = hrp.Position
@@ -1407,23 +1416,70 @@ end
 
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
-    if autoRescueEnabled and activeRescueTarget ~= nil then return end
+    
+    -- 🚑 优先级1：如果自动救助已开启且有活跃救助目标，则完全跳过收集
+    if autoRescueEnabled and activeRescueTarget ~= nil then
+        return
+    end
+    
+    -- 可选：即使没有 activeRescueTarget，也可以快速检查是否存在倒地玩家（避免在救助间隙收集）
+    -- 但为了性能，暂不添加额外检查
+    
     if currentCollecting then return end
     if not getPlayerPosition() then return end
 
     local now = os.clock()
     if now - lastCollectTime < COLLECT_COOLDOWN then return end
     if now < nextScanTime then return end
-    nextScanTime = now + SCAN_INTERVAL   -- 使用较长的扫描间隔
+    nextScanTime = now + SCAN_INTERVAL
 
     local items = getCollectibles()
     if #items == 0 then
-        -- 没有发现物品，若高空挂机开启则返回高空
+        -- 没有发现物品，若高空挂机开启则让位给挂机
         if autoFarmEnabled then
             teleportToSky()
         end
         return
     end
+
+    local myPos = getPlayerPosition()
+    if not myPos then return end
+
+    local bestItem = nil
+    local bestDist = COLLECT_DISTANCE
+    for _, item in ipairs(items) do
+        if not item.obj or not item.obj.Parent then continue end
+        local dist = item.distance or (myPos - item.position).Magnitude
+        if dist < bestDist then
+            if not (collectedCache[item.obj] and now - collectedCache[item.obj] < 10) then
+                bestDist = dist
+                bestItem = item
+            end
+        end
+    end
+
+    if bestItem then
+        currentCollecting = true
+        local success = performCollect(bestItem)
+        if success then
+            collectedCache[bestItem.obj] = nil
+            lastCollectTime = os.clock()
+            nextScanTime = os.clock() + 0.05
+            print("[自动收集] 拾取 " .. bestItem.obj.Name)
+            -- 拾取后若高空挂机开启，返回高空（但注意可能马上又有倒地玩家，救助会再次接管）
+            if autoFarmEnabled then
+                teleportToSky()
+            end
+        else
+            collectedCache[bestItem.obj] = os.clock()
+        end
+        currentCollecting = false
+    else
+        if autoFarmEnabled then
+            teleportToSky()
+        end
+    end
+end
 
     local myPos = getPlayerPosition()
     if not myPos then return end
