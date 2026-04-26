@@ -3062,7 +3062,7 @@ local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2          -- 每次拾取后冷却（秒）
 local COLLECT_DISTANCE = 100          -- 搜索距离（格）
 local COLLECT_KEYWORDS = {
-    "visual"                          -- 不区分大小写匹配
+    "Visual"                          -- 不区分大小写匹配
 }
 local TELEPORT_TO_ITEM = true
 
