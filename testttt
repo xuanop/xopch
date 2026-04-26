@@ -1590,6 +1590,10 @@ local function returnToGround()
 end
 
 -- 挂机心跳逻辑
+-- 节流：每0.2秒传送一次
+if not lastTeleportTime or tick() - lastTeleportTime >= 0.2 then
+    lastTeleportTime = tick()
+    hrp.CFrame = CFrame.new(targetPos)
 local function autoFarmHeartbeat()
     if not autoFarmEnabled then return end
     -- 救助优先：如果自动救助已开启且有活跃救助目标，则暂停挂机
