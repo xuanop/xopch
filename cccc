@@ -1400,12 +1400,25 @@ local function getCollectibles()
 end
 
 local function performCollect(targetItem)
-    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
+    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then 
+        print("[自动收集] 错误: 目标物品无效")
+        return false 
+    end
     local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
+    if not hrp then 
+        print("[自动收集] 错误: 找不到 HumanoidRootPart")
+        return false 
+    end
     if TELEPORT_TO_ITEM then
-        hrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
-        task.wait(0.05)
+        local targetPos = targetItem.position
+        if not targetPos then
+            print("[自动收集] 错误: 物品位置无效")
+            return false
+        end
+        local newPos = targetPos + Vector3.new(0, 2, 0)
+        hrp.CFrame = CFrame.new(newPos)
+        print("[自动收集] 传送到物品: " .. targetItem.obj.Name .. " 位置 " .. tostring(targetPos))
+        task.wait(0.1)   -- 增加等待确保传送完成
     else
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         if humanoid then humanoid:MoveTo(targetItem.position) end
