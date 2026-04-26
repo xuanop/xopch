@@ -1596,18 +1596,17 @@ local function autoFarmHeartbeat()
     if (autoRescueEnabled and activeRescueTarget ~= nil) or autoCollectEnabled then return end
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = lp.Character.HumanoidRootPart
-    local currentPos = hrp.Position
     local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
-    if math.abs(currentPos.Y - targetPos.Y) > 10 then
-        teleportToSky()
+    
+    -- 直接传送至固定高空坐标（无等待）
+    hrp.CFrame = CFrame.new(targetPos)
+    
+    -- 确保脚下平台存在并跟随当前位置
+    if not skyPlatform or not skyPlatform.Parent then
+        skyPlatform = createSkyPlatform()
     else
-        hrp.Velocity = Vector3.new(math.random(-3,3), math.random(-1,1), math.random(-3,3))
-        if not skyPlatform or not skyPlatform.Parent then
-            skyPlatform = createSkyPlatform()
-        else
-            local newPos = hrp.Position - Vector3.new(0, 2.5, 0)
-            skyPlatform.Position = newPos
-        end
+        local newPlatformPos = hrp.Position - Vector3.new(0, 2.5, 0)
+        skyPlatform.Position = newPlatformPos
     end
 end
 
