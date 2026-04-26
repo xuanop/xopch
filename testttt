@@ -3056,29 +3056,35 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（调试版） ====================
+-- ==================== 自动收集物品（基于测试验证版） ====================
 local autoCollectEnabled = false
-local collectScanConnection = nil
-local COLLECT_COOLDOWN = 0.2
-local COLLECT_DISTANCE = 100
-local SCAN_INTERVAL = 0.3
-local TELEPORT_TO_ITEM = true
+local collectHeartbeatConnection = nil
+local COLLECT_COOLDOWN = 0.2          -- 每次拾取后冷却（秒）
+local COLLECT_DISTANCE = 100          -- 搜索距离（格）
 local COLLECT_KEYWORDS = {
-    "Visual", "visual", "VISUAL"
+    "visual"                          -- 不区分大小写匹配
 }
-local CUSTOM_ATTRIBUTE = "CanCollect"
+local TELEPORT_TO_ITEM = true
 
 local collectedCache = {}
+local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
-local lastCollectTime = 0
-local debugTimer = 0
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local function getPlayerPosition()
     if not lp or not lp.Character then return nil end
     local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
-    if hrp then return hrp.Position end
-    return nil
+    return hrp and hrp.Position or nil
+end
+
+local function isPlayerCharacter(obj)
+    if obj:FindFirstChild("Humanoid") then return true end
+    if Players:GetPlayerFromCharacter(obj) then return true end
+    if obj == lp.Character then return true end
+    return false
 end
 
 local function getCollectibles()
@@ -3087,7 +3093,17 @@ local function getCollectibles()
     if not myPos then return items end
     local MAX_SEARCH_RADIUS = 150
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") or (obj:IsA("Model") and obj ~= lp.Character and not obj:FindFirstChild("Humanoid")) then
+        if isPlayerCharacter(obj) then continue end
+        if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
+            local lowerName = obj.Name:lower()
+            local nameMatch = false
+            for _, kw in ipairs(COLLECT_KEYWORDS) do
+                if lowerName:find(kw) then
+                    nameMatch = true
+                    break
+                end
+            end
+            if not nameMatch then continue end
             local pos = nil
             if obj:IsA("BasePart") then
                 pos = obj.Position
@@ -3101,40 +3117,16 @@ local function getCollectibles()
                 continue
             end
             if (myPos - pos).Magnitude > MAX_SEARCH_RADIUS then continue end
-            local nameMatch = false
-            local lowerName = obj.Name:lower()
-            for _, kw in ipairs(COLLECT_KEYWORDS) do
-                if lowerName:find(kw:lower()) then
-                    nameMatch = true
-                    break
-                end
-            end
-            local attrMatch = (CUSTOM_ATTRIBUTE and obj:GetAttribute(CUSTOM_ATTRIBUTE) == true)
-            if nameMatch or attrMatch then
-                table.insert(items, {obj = obj, position = pos})
-            end
+            table.insert(items, {obj = obj, position = pos})
         end
     end
     return items
 end
 
-local function collectItem(itemObj)
-    local remote = itemObj:FindFirstChild("Collect") or itemObj:FindFirstChild("Pickup")
-    if remote and remote:IsA("RemoteEvent") then
-        pcall(function() remote:FireServer() end)
-    end
-end
-
 local function performCollect(targetItem)
-    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then 
-        print("[调试] 拾取失败：物品已消失")
-        return false 
-    end
+    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
     local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then 
-        print("[调试] 拾取失败：没有 HumanoidRootPart")
-        return false 
-    end
+    if not hrp then return false end
     if TELEPORT_TO_ITEM then
         hrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
         task.wait(0.05)
@@ -3143,48 +3135,23 @@ local function performCollect(targetItem)
         if humanoid then humanoid:MoveTo(targetItem.position) end
         task.wait(0.3)
     end
-    collectItem(targetItem.obj)
+    -- 无需调用远程事件，物品会通过触摸自动拾取
     return true
 end
 
 local function autoCollectLoop()
-    if not autoCollectEnabled then 
-        return 
-    end
-    
-    -- 调试：每秒打印一次状态
-    local now = os.clock()
-    if now - debugTimer > 1 then
-        debugTimer = now
-        print(string.format("[调试] autoCollectEnabled=%s, autoRescueEnabled=%s, activeRescueTarget=%s", 
-            tostring(autoCollectEnabled), tostring(autoRescueEnabled), tostring(activeRescueTarget)))
-    end
-    
-    if autoRescueEnabled and activeRescueTarget ~= nil then 
-        return 
-    end
-    if currentCollecting then 
-        return 
-    end
-    if not getPlayerPosition() then 
-        return 
-    end
+    if not autoCollectEnabled then return end
+    if autoRescueEnabled and activeRescueTarget ~= nil then return end
+    if currentCollecting then return end
+    if not getPlayerPosition() then return end
 
     local now = os.clock()
-    if now - lastCollectTime < COLLECT_COOLDOWN then 
-        return 
-    end
-    if now < nextScanTime then 
-        return 
-    end
-    nextScanTime = now + SCAN_INTERVAL
+    if now - lastCollectTime < COLLECT_COOLDOWN then return end
+    if now < nextScanTime then return end
+    nextScanTime = now + 0.3   -- 固定扫描间隔
 
     local items = getCollectibles()
-    if #items == 0 then 
-        return 
-    end
-    
-    print("[调试] 扫描到 " .. #items .. " 个可拾取物品，第一个名称: " .. items[1].obj.Name)
+    if #items == 0 then return end
 
     local myPos = getPlayerPosition()
     if not myPos then return end
@@ -3203,40 +3170,32 @@ local function autoCollectLoop()
     end
 
     if bestItem then
-        print(string.format("[调试] 准备拾取 %s，距离 %.1f", bestItem.obj.Name, bestDist))
         currentCollecting = true
-        if bestItem.obj and bestItem.obj.Parent then
-            local success = performCollect(bestItem)
-            if success then
-                print("[调试] 拾取成功！")
-                collectedCache[bestItem.obj] = nil
-                lastCollectTime = os.clock()
-                nextScanTime = os.clock() + 0.05
-            else
-                print("[调试] 拾取失败，加入缓存")
-                collectedCache[bestItem.obj] = os.clock()
-            end
-        else
+        local success = performCollect(bestItem)
+        if success then
             collectedCache[bestItem.obj] = nil
+            lastCollectTime = os.clock()
+            nextScanTime = os.clock() + 0.05   -- 拾取成功后立即重新扫描
+            print("[自动收集] 拾取 " .. bestItem.obj.Name)
+        else
+            collectedCache[bestItem.obj] = os.clock()
         end
         currentCollecting = false
-    else
-        print("[调试] 未找到合适物品（可能都被缓存）")
     end
 end
 
 function startAutoCollect()
-    if collectScanConnection then collectScanConnection:Disconnect() end
-    collectScanConnection = RunService.Stepped:Connect(function()
+    if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
+    collectHeartbeatConnection = RunService.Heartbeat:Connect(function()
         if autoCollectEnabled then
-            task.spawn(autoCollectLoop)
+            autoCollectLoop()
         end
     end)
-    print("[自动收集] 已启动（调试版）")
+    print("[自动收集] 已启动")
 end
 
 function stopAutoCollect()
-    if collectScanConnection then collectScanConnection:Disconnect(); collectScanConnection = nil end
+    if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect(); collectHeartbeatConnection = nil end
     collectedCache = {}
     nextScanTime = 0
     lastCollectTime = 0
@@ -3247,7 +3206,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（调试版）", true)
+        showNotice("💰 自动收集已开启", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
@@ -3255,7 +3214,7 @@ function toggleAutoCollect()
     updateAntiAFK()
     refreshPanelButtons()
 
-    -- 强制刷新按钮
+    -- 强制刷新当前按钮（直接查找并更新）
     local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
     if panel then
         local other2Cont = panel:FindFirstChild("其他 2Container")
