@@ -3064,7 +3064,7 @@ local COLLECT_DISTANCE = 100
 local SCAN_INTERVAL = 0.3
 local TELEPORT_TO_ITEM = true
 local COLLECT_KEYWORDS = {
-    "visual"   -- 全部转小写匹配，不区分大小写
+    "Visual", "visual", "VISUAL"   -- 多种大小写匹配
 }
 local CUSTOM_ATTRIBUTE = "CanCollect"
 
@@ -3076,8 +3076,7 @@ local lastCollectTime = 0
 local function getPlayerPosition()
     if not lp or not lp.Character then return nil end
     local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
-    if hrp then return hrp.Position end
-    return nil
+    return hrp and hrp.Position or nil
 end
 
 local function getCollectibles()
@@ -3100,10 +3099,10 @@ local function getCollectibles()
                 continue
             end
             if (myPos - pos).Magnitude > MAX_SEARCH_RADIUS then continue end
-            local lowerName = obj.Name:lower()
             local nameMatch = false
+            local lowerName = obj.Name:lower()
             for _, kw in ipairs(COLLECT_KEYWORDS) do
-                if lowerName:find(kw) then
+                if lowerName:find(kw:lower()) then
                     nameMatch = true
                     break
                 end
