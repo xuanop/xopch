@@ -1506,7 +1506,6 @@ local function createTeleportWindow()
 end
 
 -- ==================== 高空挂机优化版（前置定义） ====================
--- ==================== 高空挂机优化版（前置定义） ====================
 -- 固定高空坐标（可根据需要修改）
 local SKY_X = 0          -- X轴坐标
 local SKY_Y = 500        -- Y轴高度（建议 300~800）
@@ -1515,6 +1514,7 @@ local PLATFORM_SIZE = 12 -- 平台边长（格）
 
 local skyPlatform = nil          -- 平台实例引用
 local savedGroundPosition = nil  -- 开启挂机时保存的地面位置
+local respawnHandlerAdded = false -- 防止重复添加重生归位事件
 
 -- 创建脚下平台
 local function createSkyPlatform()
@@ -1641,6 +1641,30 @@ function toggleAutoFarm()
     end
     updateAntiAFK()
     refreshPanelButtons()
+end
+
+-- ==================== 重生后自动归位（整合到高空挂机模块） ====================
+if not respawnHandlerAdded then
+    respawnHandlerAdded = true
+    lp.CharacterAdded:Connect(function(character)
+        task.wait(0.5)  -- 等待角色稳定
+        if autoFarmEnabled then
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
+                hrp.CFrame = CFrame.new(targetPos)
+                task.wait(0.1)
+                -- 重新创建或更新平台
+                if not skyPlatform or not skyPlatform.Parent then
+                    skyPlatform = createSkyPlatform()
+                else
+                    local newPos = hrp.Position - Vector3.new(0, 2.5, 0)
+                    skyPlatform.Position = newPos
+                end
+                print("[高空挂机] 重生后已自动返回高空平台")
+            end
+        end
+    end)
 end
 
 -- ==================== 自动救助倒地队友（前置定义） ====================
