@@ -3064,7 +3064,7 @@ local COLLECT_DISTANCE = 100
 local SCAN_INTERVAL = 0.3
 local TELEPORT_TO_ITEM = true
 local COLLECT_KEYWORDS = {
-    "Visual", "visual", "VISUAL"   -- 多种大小写匹配
+    "Visual", "visual", "VISUAL"
 }
 local CUSTOM_ATTRIBUTE = "CanCollect"
 
@@ -3076,7 +3076,8 @@ local lastCollectTime = 0
 local function getPlayerPosition()
     if not lp or not lp.Character then return nil end
     local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
-    return hrp and hrp.Position or nil
+    if hrp then return hrp.Position end
+    return nil
 end
 
 local function getCollectibles()
@@ -3194,7 +3195,7 @@ function startAutoCollect()
             task.spawn(autoCollectLoop)
         end
     end)
-    print("[自动收集] 已启动（最终稳定版）")
+    print("[自动收集] 已启动")
 end
 
 function stopAutoCollect()
@@ -3209,7 +3210,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（最终版）", true)
+        showNotice("💰 自动收集已开启", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
@@ -3217,7 +3218,7 @@ function toggleAutoCollect()
     updateAntiAFK()
     refreshPanelButtons()
 
-    -- 强制刷新当前按钮（直接查找并更新，不依赖 refreshPanelButtons）
+    -- 强制刷新当前按钮
     local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
     if panel then
         local other2Cont = panel:FindFirstChild("其他 2Container")
