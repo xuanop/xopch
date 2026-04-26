@@ -1112,6 +1112,60 @@ local function toggleHeadless(btn)
     end
 end
 
+-- 根据自动化功能状态自动控制防AFK
+local function updateAntiAFK()
+    local needAntiAFK = autoFarmEnabled or autoRescueEnabled or autoCollectEnabled
+    if needAntiAFK and not antiAfkEnabled then
+        -- 需要且未开启，则开启防AFK
+        if antiAfkConnection then antiAfkConnection:Disconnect() end
+        antiAfkEnabled = true
+        task.spawn(function()
+            while antiAfkEnabled do
+                pcall(function()
+                    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                    task.wait(0.1)
+                    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                end)
+                task.wait(60)
+            end
+        end)
+        -- 更新面板按钮（如果有）
+        local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
+        if panel then
+            local mainCont = panel:FindFirstChild("主要Container")
+            if mainCont then
+                for _, btn in ipairs(mainCont:GetChildren()) do
+                    if btn:IsA("TextButton") and btn.Text:find("防踢 AFK") then
+                        btn.Text = "🛡️ 防踢 AFK: 开启 ✅"
+                        btn.BackgroundTransparency = 0.5
+                        break
+                    end
+                end
+            end
+        end
+        print("[防AFK] 自动开启")
+    elseif not needAntiAFK and antiAfkEnabled then
+        -- 不需要且已开启，则关闭防AFK
+        antiAfkEnabled = false
+        -- 注意：原toggleAntiAFK中的while循环依靠 antiAfkEnabled 变量退出，无需额外操作
+        -- 更新面板按钮
+        local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
+        if panel then
+            local mainCont = panel:FindFirstChild("主要Container")
+            if mainCont then
+                for _, btn in ipairs(mainCont:GetChildren()) do
+                    if btn:IsA("TextButton") and btn.Text:find("防踢 AFK") then
+                        btn.Text = "🛡️ 防踢 AFK: 关闭 ❌"
+                        btn.BackgroundTransparency = 0.85
+                        break
+                    end
+                end
+            end
+        end
+        print("[防AFK] 自动关闭")
+    end
+end
+
 -- ==================== 边缘弹射 (触碰检测 V7) ====================
 local function isBouncePart(part)
     local bounceKeywords = {"bounce", "boost", "launch", "jump", "pad", "ramp", "platform"}
@@ -1535,6 +1589,7 @@ function toggleAutoFarm()
         stopAutoFarm()
         showNotice("💤 高空挂机已关闭", true)
     end
+    updateAntiAFK()
 end
 
 -- ==================== 自动救助倒地队友（前置定义） ====================
@@ -1689,6 +1744,7 @@ function toggleAutoRescue()
         stopSimpleRescue()    -- 停止救助
         showNotice("❌ 自动救助已关闭", true)
     end
+    updateAntiAFK()
 end
 
 -- ==================== 自定义重命名器 ====================
@@ -3078,24 +3134,7 @@ function toggleAutoCollect()
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
     end
-
-    -- 延迟一帧，确保状态已完全切换
-    task.spawn(function()
-        task.wait(0.05)
-        -- 查找面板并刷新所有“自动收集”按钮
-        local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
-        if panel then
-            local other2Cont = panel:FindFirstChild("其他 2Container")
-            if other2Cont then
-                for _, btn in ipairs(other2Cont:GetChildren()) do
-                    if btn:IsA("TextButton") and (btn.Text:find("自动收集") or btn.Text:find("💰")) then
-                        btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
-                        btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
-                    end
-                end
-            end
-        end
-    end)
+    updateAntiAFK()   -- 添加这一行
 end
 
 -- ==================== 强制覆盖纠正外部脚本错误 ====================
