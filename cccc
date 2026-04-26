@@ -1417,13 +1417,10 @@ end
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
     
-    -- 🚑 优先级1：如果自动救助已开启且有活跃救助目标，则完全跳过收集
+    -- 优先级1：救助优先
     if autoRescueEnabled and activeRescueTarget ~= nil then
         return
     end
-    
-    -- 可选：即使没有 activeRescueTarget，也可以快速检查是否存在倒地玩家（避免在救助间隙收集）
-    -- 但为了性能，暂不添加额外检查
     
     if currentCollecting then return end
     if not getPlayerPosition() then return end
@@ -1435,7 +1432,6 @@ local function autoCollectLoop()
 
     local items = getCollectibles()
     if #items == 0 then
-        -- 没有发现物品，若高空挂机开启则让位给挂机
         if autoFarmEnabled then
             teleportToSky()
         end
@@ -1466,7 +1462,6 @@ local function autoCollectLoop()
             lastCollectTime = os.clock()
             nextScanTime = os.clock() + 0.05
             print("[自动收集] 拾取 " .. bestItem.obj.Name)
-            -- 拾取后若高空挂机开启，返回高空（但注意可能马上又有倒地玩家，救助会再次接管）
             if autoFarmEnabled then
                 teleportToSky()
             end
@@ -1479,31 +1474,7 @@ local function autoCollectLoop()
             teleportToSky()
         end
     end
-end
-
-----------------
-    if bestItem then
-        currentCollecting = true
-        local success = performCollect(bestItem)
-        if success then
-            collectedCache[bestItem.obj] = nil
-            lastCollectTime = os.clock()
-            nextScanTime = os.clock() + 0.05   -- 拾取后快速再扫描
-            print("[自动收集] 拾取 " .. bestItem.obj.Name)
-            if autoFarmEnabled then
-                teleportToSky()
-            end
-        else
-            collectedCache[bestItem.obj] = os.clock()
-        end
-        currentCollecting = false
-    else
-        -- 有物品但都在缓存中（刚捡过），也返回高空
-        if autoFarmEnabled then
-            teleportToSky()
-        end
-    end
-end
+end   -- 注意：这里只有一个 end，函数结束
 
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
