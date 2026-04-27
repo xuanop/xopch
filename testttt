@@ -1592,7 +1592,7 @@ end
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2
-local COLLECT_DISTANCE = 100                     -- 拾取距离（格）
+local COLLECT_DISTANCE = 1250                     -- 拾取距离（格）
 local SCAN_INTERVAL = 1.0
 local COLLECT_KEYWORDS = {"visual", "bee"}  -- 至少2个关键词（不区分大小写）
 local TELEPORT_TO_ITEM = true
@@ -1653,7 +1653,7 @@ local function getCollectibles()
     local searchRoot = getSearchRoot()
     if not searchRoot then return items end
 
-    local MAX_SEARCH_RADIUS = 150   -- 搜索半径（格）
+    local MAX_SEARCH_RADIUS = 1500   -- 搜索半径（格）
     local descendants = searchRoot:GetDescendants()
 
     for _, obj in ipairs(descendants) do
