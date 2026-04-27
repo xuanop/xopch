@@ -19,7 +19,7 @@ local function safeCall(func, ...)
     if not success then
         warn("[MyCommander] 错误:", result)
     end
-    return result    local bestItem = nil
+    return result
 end
 
 print("[MyCommander] 脚本正在加载...")
