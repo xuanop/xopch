@@ -1597,6 +1597,8 @@ local SCAN_INTERVAL = 1.0
 local COLLECT_KEYWORDS = {"visual", "bee"}  -- 至少2个关键词（不区分大小写）
 local TELEPORT_TO_ITEM = true
 
+hasCollectibleItems = false   -- 全局标志
+
 local collectedCache = {}
 local lastCollectTime = 0
 local nextScanTime = 0
