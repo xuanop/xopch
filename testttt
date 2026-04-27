@@ -1588,11 +1588,10 @@ if not respawnHandlerAdded then
     end)
 end
 
--- ==================== 自动收集物品（性能优化版，添加调试） ====================
 -- ==================== 自动收集物品（性能优化版，带平台跟随） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
-local COLLECT_COOLDOWN = 0.2
+local COLLECT_COOLDOWN = 0.4
 local COLLECT_DISTANCE = 1250                     -- 拾取距离（格）
 local SCAN_INTERVAL = 1.0
 local COLLECT_KEYWORDS = {"visual", "bee"}        -- 至少2个关键词（不区分大小写）
