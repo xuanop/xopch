@@ -1594,17 +1594,18 @@ end
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2
-local COLLECT_DISTANCE = 1250                     -- 拾取距离（格）
+local COLLECT_DISTANCE = 1250
 local SCAN_INTERVAL = 1.0
-local COLLECT_KEYWORDS = {"visual", "bee"}        -- 至少2个关键词（不区分大小写）
+local COLLECT_KEYWORDS = {"visual", "bee"}  -- 可根据需要修改
 local TELEPORT_TO_ITEM = true
 
 hasCollectibleItems = false   -- 全局标志
 
-local collectedCache = {}          -- 成功拾取缓存（防止短时间内重复拾取）
+-- 缓存表
+local collectedCache = {}          -- 成功拾取缓存（短时间内避免重复拾取）
 local failCountCache = {}          -- 失败次数缓存
+local permanentlyIgnored = {}      -- 永久黑名单（拾取失败次数 ≥ 6）
 local FAILED_THRESHOLD = 6         -- 失败6次后永久忽略
-local permanentlyIgnored = {}      -- 永久忽略的物品对象集合
 
 local lastCollectTime = 0
 local nextScanTime = 0
@@ -1735,41 +1736,31 @@ local function autoCollectLoop()
 
     local items = getCollectibles()
     hasCollectibleItems = (#items > 0)
+    print("[调试] 扫描到物品数量:", #items)
     if #items == 0 then return end
 
-    local myPos = getPlayerPosition()
-    if not myPos then return end
-
-    -- 筛选可拾取的物品（排除已成功缓存、失败超过阈值、永久忽略的物品）
+    -- 过滤掉已成功拾取缓存中、永久黑名单中的物品
     local validItems = {}
     for _, item in ipairs(items) do
         local obj = item.obj
-        -- 如果已成功拾取且在缓存期内，跳过
+        -- 成功拾取缓存（10秒内不重复拾取）
         if collectedCache[obj] and now - collectedCache[obj] < 10 then
             -- 仍在冷却中
         elseif permanentlyIgnored[obj] then
             -- 已永久忽略
         else
-            local failCount = failCountCache[obj] or 0
-            if failCount < FAILED_THRESHOLD then
-                table.insert(validItems, item)
-            else
-                -- 失败次数已达阈值，标记为永久忽略（仅首次打印）
-                if not permanentlyIgnored[obj] then
-                    permanentlyIgnored[obj] = true
-                    print("[自动收集] 永久忽略物品: " .. obj.Name .. "（失败次数已达 " .. FAILED_THRESHOLD .. "）")
-                end
-            end
+            table.insert(validItems, item)
         end
     end
 
     if #validItems == 0 then
-        -- 无可拾取的有效物品，若高空挂机开启则返回高空
         if autoFarmEnabled then teleportToSky() end
         return
     end
 
-    -- 找出最近的有效物品
+    local myPos = getPlayerPosition()
+    if not myPos then return end
+
     local bestItem = nil
     local bestDist = COLLECT_DISTANCE
     for _, item in ipairs(validItems) do
@@ -1784,8 +1775,9 @@ local function autoCollectLoop()
         currentCollecting = true
         local success = performCollect(bestItem)
         if success then
-            -- 拾取成功：清空失败计数，并记录到成功缓存
+            -- 拾取成功：清空失败计数，加入成功缓存，并从黑名单中移除（如果之前误加入）
             failCountCache[bestItem.obj] = nil
+            permanentlyIgnored[bestItem.obj] = nil
             collectedCache[bestItem.obj] = now
             lastCollectTime = now
             nextScanTime = now + 0.05
@@ -1796,14 +1788,13 @@ local function autoCollectLoop()
             local currentFail = (failCountCache[bestItem.obj] or 0) + 1
             failCountCache[bestItem.obj] = currentFail
             if currentFail >= FAILED_THRESHOLD then
-                print("[自动收集] 物品 " .. bestItem.obj.Name .. " 失败次数已达 " .. FAILED_THRESHOLD .. "，将永久忽略")
                 permanentlyIgnored[bestItem.obj] = true
+                print("[自动收集] 物品 " .. bestItem.obj.Name .. " 失败次数已达 " .. FAILED_THRESHOLD .. "，加入黑名单，永久忽略")
             else
                 print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
             end
-            -- 失败后也稍微冷却一下，避免疯狂重试
             lastCollectTime = now
-            nextScanTime = now + 0.5
+            nextScanTime = now + 0.5   -- 失败后稍长冷却
         end
         currentCollecting = false
     else
@@ -1818,7 +1809,7 @@ function startAutoCollect()
             autoCollectLoop()
         end
     end)
-    print("[自动收集] 已启动（失败计数模式，阈值 " .. FAILED_THRESHOLD .. " 次）")
+    print("[自动收集] 已启动（失败黑名单模式，阈值 " .. FAILED_THRESHOLD .. "）")
 end
 
 function stopAutoCollect()
@@ -1835,7 +1826,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（失败计数模式）", true)
+        showNotice("💰 自动收集已开启（失败黑名单模式）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
