@@ -1593,25 +1593,25 @@ end
 -- ==================== 自动收集物品（极速优化版） ====================
 local autoCollectEnabled = false
 local collectConnection = nil
-local COLLECT_COOLDOWN = 0.12      -- 原 0.2，大幅提高拾取频率
+local COLLECT_COOLDOWN = 0.12       -- 两次拾取最小间隔（秒）
 local COLLECT_DISTANCE = 1250
-local SCAN_INTERVAL = 0.5         -- 原 1.0，更快扫描新物品
-local COLLECT_KEYWORDS = {"visual", "bee"}
+local SCAN_INTERVAL = 0.5           -- 扫描新物品间隔（秒）
+local COLLECT_KEYWORDS = {"visual", "bee"}  -- 根据游戏修改
 local TELEPORT_TO_ITEM = true
-local TELEPORT_WAIT = 0.1         -- 原 0.15，缩短传送等待
-local FAILED_THRESHOLD = 6
+local TELEPORT_WAIT = 0.1           -- 传送后等待时间
+local FAILED_THRESHOLD = 6          -- 失败6次加入黑名单
 
-hasCollectibleItems = false
+hasCollectibleItems = false         -- 全局标志，供高空挂机判断
 
 -- 缓存表
-local collectedCache = {}
-local failCountCache = {}
-local permanentlyIgnored = {}
+local collectedCache = {}           -- 成功拾取缓存（10秒内不重复）
+local failCountCache = {}           -- 失败次数累计
+local permanentlyIgnored = {}       -- 永久黑名单
 local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
 
--- 性能优化：缓存常用对象引用
+-- 性能优化：缓存角色引用
 local cachedCharacter = nil
 local cachedHrp = nil
 local lastCharUpdate = 0
@@ -1630,7 +1630,7 @@ local function getPlayerPosition()
     return cachedHrp and cachedHrp.Position or nil
 end
 
--- 缓存搜索根容器
+-- 缓存搜索根容器（避免每帧全量搜索）
 local searchRootCache = nil
 local searchRootCacheTime = 0
 local function getSearchRoot()
@@ -1664,7 +1664,7 @@ local function isPlayerCharacter(obj)
     return false
 end
 
--- 快速获取物品列表（带距离剪枝）
+-- 快速获取可拾取物品列表（带距离剪枝）
 local function getCollectibles()
     local items = {}
     local myPos = getPlayerPosition()
@@ -1682,18 +1682,17 @@ local function getCollectibles()
         local obj = descendants[i]
         if isPlayerCharacter(obj) then goto skip end
 
-        -- 快速类型判断
         local isBasePart = obj:IsA("BasePart")
         local isModel = obj:IsA("Model")
         if not (isBasePart or (isModel and not obj:FindFirstChild("Humanoid"))) then goto skip end
 
         local lowerName = obj.Name:lower()
-        -- 快速排除身体部件
-        if lowerName == "humanoidrootpart" or lowerName:find("humanoid") or lowerName:find("torso") or lowerName:find("leg") or lowerName:find("arm") or lowerName:find("head") then
+        -- 排除玩家身体部件
+        if lowerName == "humanoidrootpart" or lowerName:find("humanoid") or lowerName:find("torso") or
+           lowerName:find("leg") or lowerName:find("arm") or lowerName:find("head") then
             goto skip
         end
 
-        -- 关键词匹配
         if useKw then
             local matched = false
             for _, kw in ipairs(COLLECT_KEYWORDS) do
@@ -1705,8 +1704,7 @@ local function getCollectibles()
             if not matched then goto skip end
         end
 
-        -- 获取位置
-        local pos
+        local pos = nil
         if isBasePart then
             pos = obj.Position
         elseif isModel then
@@ -1745,7 +1743,6 @@ local function performCollect(targetItem)
     local originalParent = itemObj.Parent
     local originalPos = itemObj.Position
 
-    -- 传送或移动
     if TELEPORT_TO_ITEM then
         cachedHrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
         task.wait(TELEPORT_WAIT)
@@ -1755,7 +1752,7 @@ local function performCollect(targetItem)
         task.wait(0.2)
     end
 
-    -- 成功检测
+    -- 成功检测：物品消失或位置明显变化
     local stillExists = itemObj and itemObj.Parent and itemObj.Parent == originalParent
     local posChanged = stillExists and (itemObj.Position - originalPos).Magnitude > 0.1
     if not stillExists or posChanged then
@@ -1771,13 +1768,12 @@ local function performCollect(targetItem)
     return false
 end
 
--- 主循环（使用 Stepped 更平滑，也可用 Heartbeat）
+-- 主循环（使用 Stepped 保持平滑）
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if currentCollecting then return end
-    local myPos = getPlayerPosition()
-    if not myPos then return end
+    if not getPlayerPosition() then return end
 
     local now = os.clock()
     if now - lastCollectTime < COLLECT_COOLDOWN then return end
@@ -1795,10 +1791,11 @@ local function autoCollectLoop()
     local validItems = {}
     for _, item in ipairs(items) do
         local obj = item.obj
-        if collectedCache[obj] and now - collectedCache[obj] < 10 then
-            -- 冷却中
+        local cacheTime = collectedCache[obj]
+        if cacheTime and now - cacheTime < 10 then
+            -- 还在成功冷却中
         elseif permanentlyIgnored[obj] then
-            -- 已黑名单
+            -- 永久黑名单
         else
             table.insert(validItems, item)
         end
@@ -1809,7 +1806,7 @@ local function autoCollectLoop()
         return
     end
 
-    -- 找最近物品
+    -- 找最近的物品
     local bestItem = nil
     local bestDist = COLLECT_DISTANCE
     for _, item in ipairs(validItems) do
@@ -1829,15 +1826,17 @@ local function autoCollectLoop()
     local success = performCollect(bestItem)
 
     if success then
+        -- 拾取成功
         failCountCache[bestItem.obj] = nil
         permanentlyIgnored[bestItem.obj] = nil
         collectedCache[bestItem.obj] = now
         lastCollectTime = now
-        nextScanTime = now + 0.03      -- 极速重新扫描
+        nextScanTime = now + 0.03    -- 成功后快速开始下一轮
         if autoFarmEnabled then teleportToSky() end
-        -- 可选静默模式：去掉逐条打印以减少控制台开销
-        -- print("[自动收集] 拾取 " .. bestItem.obj.Name)
+        -- 若觉得打印过多可注释下面这行
+        print("[自动收集] 拾取 " .. bestItem.obj.Name)
     else
+        -- 拾取失败
         local currentFail = (failCountCache[bestItem.obj] or 0) + 1
         failCountCache[bestItem.obj] = currentFail
         if currentFail >= FAILED_THRESHOLD then
@@ -1847,20 +1846,19 @@ local function autoCollectLoop()
             print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
         end
         lastCollectTime = now
-        nextScanTime = now + 0.3       -- 失败后短暂冷却
+        nextScanTime = now + 0.3      -- 失败后稍长冷却
     end
     currentCollecting = false
 end
 
 function startAutoCollect()
     if collectConnection then collectConnection:Disconnect() end
-    -- 使用 Stepped 确保每帧都能处理，比 Heartbeat 更及时
     collectConnection = RunService.Stepped:Connect(function()
         if autoCollectEnabled then
             autoCollectLoop()
         end
     end)
-    print("[自动收集] 极速模式已启动（失败黑名单阈值 " .. FAILED_THRESHOLD .. "）")
+    print("[自动收集] 已启动（失败黑名单阈值 " .. FAILED_THRESHOLD .. "）")
 end
 
 function stopAutoCollect()
@@ -1873,14 +1871,14 @@ function stopAutoCollect()
     permanentlyIgnored = {}
     nextScanTime = 0
     lastCollectTime = 0
-    print("[自动收集] 已停止，缓存已清空")
+    print("[自动收集] 已停止，所有缓存已清空")
 end
 
 function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（极速模式）", true)
+        showNotice("💰 自动收集已开启（极速稳定模式）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
