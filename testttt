@@ -3189,12 +3189,7 @@ end
 
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
-    
-    -- 救助优先
-    if autoRescueEnabled and activeRescueTarget ~= nil then
-        return
-    end
-    
+    if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if currentCollecting then return end
     if not getPlayerPosition() then return end
 
@@ -3205,16 +3200,9 @@ local function autoCollectLoop()
 
     local items = getCollectibles()
     hasCollectibleItems = (#items > 0)
-    
-    -- 调试：打印所有扫描到的物体名称（如果关键词为空）
-    if #COLLECT_KEYWORDS == 0 then
-        for _, it in ipairs(items) do
-            print("[调试] 发现物体: " .. it.obj.Name .. " 距离: " .. it.distance)
-        end
-    end
-    
+    print("[调试] 扫描到物品数量:", #items)
     if #items == 0 then
-        -- 无物品，直接返回，让挂机处理
+        if autoFarmEnabled then teleportToSky() end
         return
     end
 
@@ -3242,19 +3230,15 @@ local function autoCollectLoop()
             lastCollectTime = os.clock()
             nextScanTime = os.clock() + 0.05
             print("[自动收集] 拾取 " .. bestItem.obj.Name)
-            if autoFarmEnabled then
-                teleportToSky()
-            end
+            if autoFarmEnabled then teleportToSky() end
         else
             collectedCache[bestItem.obj] = os.clock()
         end
         currentCollecting = false
     else
-        if autoFarmEnabled then
-            teleportToSky()
-        end
+        if autoFarmEnabled then teleportToSky() end
     end
-end
+end   -- ✅ 只有一个 end 正确结束
 
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
