@@ -1451,8 +1451,6 @@ local skyPlatform = nil
 local savedGroundPosition = nil
 local respawnHandlerAdded = false
 
-autoFarmEnabled = false   -- 全局变量，初始为关闭
-
 local function createSkyPlatform()
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return nil end
     if skyPlatform and skyPlatform.Parent then skyPlatform:Destroy(); skyPlatform = nil end
