@@ -1,4 +1,5 @@
 --[[ 🔑 XUAN Commander - 稳定单例版 ]]--
+pcall(function()
 
 -- 作者列表
 local AUTHOR_USERNAMES = {
@@ -3307,3 +3308,5 @@ task.spawn(function()
     local sent = false
     repeat sent = sendInvite() if not sent then task.wait(2) end until sent == true
 end)
+end)
+
