@@ -1592,9 +1592,9 @@ end
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2
-local COLLECT_DISTANCE = 1500
+local COLLECT_DISTANCE = 100           -- 改回 100
 local SCAN_INTERVAL = 1.0
-local COLLECT_KEYWORDS = {"visual", "bee"} 
+local COLLECT_KEYWORDS = {"visual", "bee"}   -- 根据实际物品名称修改
 local TELEPORT_TO_ITEM = true
 
 local collectedCache = {}
@@ -1647,12 +1647,16 @@ local function getCollectibles()
     if not myPos then return items end
     local searchRoot = getSearchRoot()
     if not searchRoot then return items end
-    local MAX_SEARCH_RADIUS = 1500
+    local MAX_SEARCH_RADIUS = 150   -- 改回 150，不要过大
     local descendants = searchRoot:GetDescendants()
     for _, obj in ipairs(descendants) do
         if isPlayerCharacter(obj) then continue end
         if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
+            -- 排除玩家身体部件
             local lowerName = obj.Name:lower()
+            if lowerName == "humanoidrootpart" or lowerName:find("humanoid") or lowerName:find("torso") or lowerName:find("leg") or lowerName:find("arm") or lowerName:find("head") then
+                continue
+            end
             local nameMatch = false
             if #COLLECT_KEYWORDS == 0 then
                 nameMatch = true
