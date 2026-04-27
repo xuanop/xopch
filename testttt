@@ -3067,13 +3067,13 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（性能优化版） ====================
+-- ==================== 自动收集物品（性能优化版，添加调试） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2          -- 拾取后冷却（秒）
-local COLLECT_DISTANCE = 100          -- 搜索距离（格）
-local SCAN_INTERVAL = 1.0             -- 扫描间隔（秒），原为0.3，降低CPU占用
-local COLLECT_KEYWORDS = {"visual"}, {"Bee"}
+local COLLECT_DISTANCE = 500          -- 搜索距离（格），临时放大以便扫描远处物体
+local SCAN_INTERVAL = 1.0             -- 扫描间隔（秒）
+local COLLECT_KEYWORDS = {}           -- 临时设为空，匹配所有物体（用于调试）
 local TELEPORT_TO_ITEM = true
 
 local collectedCache = {}
@@ -3086,15 +3086,15 @@ local searchRootCache = nil
 local searchRootCacheTime = 0
 local function getSearchRoot()
     local now = os.clock()
-    -- 每5秒刷新一次搜索根（适应地图变化）
     if searchRootCache and (now - searchRootCacheTime) < 5 then
         return searchRootCache
     end
-    -- 可能的物品容器优先顺序
+    -- 增加可能的容器路径
     local candidates = {
-        workspace:FindFirstChild("Game"),          -- Evade 常用
+        workspace:FindFirstChild("Game"),
         workspace:FindFirstChild("Items"),
         workspace:FindFirstChild("Drops"),
+        workspace:FindFirstChild("Map"),
         workspace
     }
     for _, root in ipairs(candidates) do
@@ -3130,20 +3130,23 @@ local function getCollectibles()
     local searchRoot = getSearchRoot()
     if not searchRoot then return items end
     
-    local MAX_SEARCH_RADIUS = 150
-    -- 仅遍历搜索根下的后代，而非全 workspace
+    local MAX_SEARCH_RADIUS = 500   -- 临时扩大半径
+    -- 仅遍历搜索根下的后代
     local descendants = searchRoot:GetDescendants()
     
     for _, obj in ipairs(descendants) do
         if isPlayerCharacter(obj) then continue end
-        -- 只关心 BasePart 或没有 Humanoid 的 Model
         if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
             local lowerName = obj.Name:lower()
             local nameMatch = false
-            for _, kw in ipairs(COLLECT_KEYWORDS) do
-                if lowerName:find(kw) then
-                    nameMatch = true
-                    break
+            if #COLLECT_KEYWORDS == 0 then
+                nameMatch = true   -- 空关键词匹配所有
+            else
+                for _, kw in ipairs(COLLECT_KEYWORDS) do
+                    if lowerName:find(kw) then
+                        nameMatch = true
+                        break
+                    end
                 end
             end
             if not nameMatch then continue end
@@ -3187,7 +3190,7 @@ end
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
     
-    -- 优先级1：救助优先
+    -- 救助优先
     if autoRescueEnabled and activeRescueTarget ~= nil then
         return
     end
@@ -3201,17 +3204,23 @@ local function autoCollectLoop()
     nextScanTime = now + SCAN_INTERVAL
 
     local items = getCollectibles()
-    hasCollectibleItems = (#items > 0)   -- 更新全局标志
-    print("[调试] 扫描到物品数量:", #items)
-    if #items == 0 then
-        if autoFarmEnabled then
-            teleportToSky()
+    hasCollectibleItems = (#items > 0)
+    
+    -- 调试：打印所有扫描到的物体名称（如果关键词为空）
+    if #COLLECT_KEYWORDS == 0 then
+        for _, it in ipairs(items) do
+            print("[调试] 发现物体: " .. it.obj.Name .. " 距离: " .. it.distance)
         end
+    end
+    
+    if #items == 0 then
+        -- 无物品，直接返回，让挂机处理
         return
     end
-    -- ... 以下为原有拾取逻辑 ...
+
     local myPos = getPlayerPosition()
     if not myPos then return end
+
     local bestItem = nil
     local bestDist = COLLECT_DISTANCE
     for _, item in ipairs(items) do
@@ -3254,7 +3263,7 @@ function startAutoCollect()
             autoCollectLoop()
         end
     end)
-    print("[自动收集] 已启动（性能优化版，扫描间隔 " .. SCAN_INTERVAL .. " 秒）")
+    print("[自动收集] 已启动（调试模式，扫描所有物体）")
 end
 
 function stopAutoCollect()
@@ -3269,7 +3278,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（优化性能）", true)
+        showNotice("💰 自动收集已开启（调试模式）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
