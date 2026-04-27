@@ -1719,20 +1719,22 @@ local function performCollect(targetItem)
 
     if TELEPORT_TO_ITEM then
         hrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
-        task.wait(0.15)   -- 等待服务器响应拾取
+        task.wait(0.15)   -- 等待拾取判定
     else
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         if humanoid then humanoid:MoveTo(targetItem.position) end
         task.wait(0.3)
     end
 
-    -- 检测物品是否仍然存在且位置未变（拾取成功通常会导致物品消失或移动）
+    -- 成功检测：物品消失 或 位置发生明显变化（被移动/拾取）
     local stillExists = itemObj and itemObj.Parent and itemObj.Parent == originalParent
     local posChanged = stillExists and (itemObj.Position - originalPos).Magnitude > 0.1
     if not stillExists or posChanged then
-        return true   -- 物品消失或移动，认为拾取成功
+        return true   -- 拾取成功
     else
-        return false  -- 物品仍在原地，拾取失败
+        -- 可选：输出调试信息（方便确认失败是否被正确检测）
+        -- print("[自动收集] 拾取失败，物品仍在原处:", itemObj.Name)
+        return false  -- 失败，触发失败计数
     end
 end
 
