@@ -1592,23 +1592,23 @@ end
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.4
-local COLLECT_DISTANCE = 1250                     -- 拾取距离（格）
+local COLLECT_DISTANCE = 1250
 local SCAN_INTERVAL = 1.0
-local COLLECT_KEYWORDS = {"visual", "bee"}        -- 至少2个关键词（不区分大小写）
+local COLLECT_KEYWORDS = {"visual", "bee"}
 local TELEPORT_TO_ITEM = true
 
-hasCollectibleItems = false   -- 全局标志
+hasCollectibleItems = false
 
-local collectedCache = {}          -- 成功拾取缓存（防止短时间内重复拾取）
-local failCountCache = {}          -- 失败次数缓存
-local FAILED_THRESHOLD = 6         -- 失败6次后永久忽略
-local permanentlyIgnored = {}      -- 永久忽略的物品对象集合
+local collectedCache = {}
+local failCountCache = {}
+local FAILED_THRESHOLD = 6
+local permanentlyIgnored = {}
 
 local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
 
--- 缓存搜索根容器（避免每帧重复查找）
+-- 搜索根容器缓存
 local searchRootCache = nil
 local searchRootCacheTime = 0
 local function getSearchRoot()
@@ -1652,24 +1652,17 @@ local function getCollectibles()
     local items = {}
     local myPos = getPlayerPosition()
     if not myPos then return items end
-
     local searchRoot = getSearchRoot()
     if not searchRoot then return items end
-
     local MAX_SEARCH_RADIUS = 1500
     local descendants = searchRoot:GetDescendants()
-
     for _, obj in ipairs(descendants) do
         if isPlayerCharacter(obj) then continue end
         if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
             local lowerName = obj.Name:lower()
-
-            -- 排除玩家身体部件
             if lowerName == "humanoidrootpart" or lowerName:find("humanoid") or lowerName:find("torso") or lowerName:find("leg") or lowerName:find("arm") or lowerName:find("head") then
                 continue
             end
-
-            -- 关键词匹配
             local nameMatch = false
             if #COLLECT_KEYWORDS == 0 then
                 nameMatch = true
@@ -1682,8 +1675,6 @@ local function getCollectibles()
                 end
             end
             if not nameMatch then continue end
-
-            -- 获取位置
             local pos = nil
             if obj:IsA("BasePart") then
                 pos = obj.Position
@@ -1696,7 +1687,6 @@ local function getCollectibles()
             else
                 continue
             end
-
             local dist = (myPos - pos).Magnitude
             if dist > MAX_SEARCH_RADIUS then continue end
             table.insert(items, {obj = obj, position = pos, distance = dist})
@@ -1705,43 +1695,28 @@ local function getCollectibles()
     return items
 end
 
--- 核心收集函数：传送角色到物品上方，平台跟随，等待物品消失
 local function performCollect(targetItem)
     if not targetItem or not targetItem.obj or not targetItem.obj.Parent then
         return false
     end
     local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then
-        warn("[收集] 没有 HumanoidRootPart，无法传送")
-        return false
-    end
+    if not hrp then return false end
 
     if TELEPORT_TO_ITEM then
         local itemPos = targetItem.position
-
-        -- 如果存在高空平台，先将平台移动到物品正下方（垫脚）
         if skyPlatform and skyPlatform.Parent then
             skyPlatform.CFrame = CFrame.new(itemPos + Vector3.new(0, -3, 0))
         end
-
-        -- 传送角色到物品上方 2 格（更容易触碰）
         hrp.CFrame = CFrame.new(itemPos + Vector3.new(0, 2, 0))
-        print("[收集] 已传送到物品上方: " .. tostring(itemPos))
-
-        -- 等待物品消失（被捡起）
         local start = os.clock()
         while (os.clock() - start) < 0.8 do
             task.wait(0.05)
             if not targetItem.obj.Parent then
-                print("[收集] 物品已消失，拾取成功")
                 return true
             end
         end
-
-        warn("[收集] 物品未消失，可能无法自动拾取")
         return false
     else
-        -- 步行方案
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         if humanoid then
             humanoid:MoveTo(targetItem.position)
@@ -1752,7 +1727,6 @@ local function performCollect(targetItem)
     return false
 end
 
--- 主循环
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
@@ -1771,14 +1745,11 @@ local function autoCollectLoop()
     local myPos = getPlayerPosition()
     if not myPos then return end
 
-    -- 筛选有效物品
     local validItems = {}
     for _, item in ipairs(items) do
         local obj = item.obj
         if collectedCache[obj] and now - collectedCache[obj] < 10 then
-            -- 冷却中
         elseif permanentlyIgnored[obj] then
-            -- 永久忽略
         else
             local failCount = failCountCache[obj] or 0
             if failCount < FAILED_THRESHOLD then
@@ -1786,7 +1757,6 @@ local function autoCollectLoop()
             else
                 if not permanentlyIgnored[obj] then
                     permanentlyIgnored[obj] = true
-                    print("[自动收集] 永久忽略物品: " .. obj.Name .. "（失败次数已达 " .. FAILED_THRESHOLD .. "）")
                 end
             end
         end
@@ -1796,17 +1766,48 @@ local function autoCollectLoop()
         if autoFarmEnabled then teleportToSky() end
         return
     end
+
+    local bestItem = nil
+    local bestDist = COLLECT_DISTANCE
+    for _, item in ipairs(validItems) do
+        local dist = item.distance or (myPos - item.position).Magnitude
+        if dist < bestDist then
+            bestDist = dist
+            bestItem = item
+        end
+    end
+
+    if bestItem then
+        currentCollecting = true
+        local success = performCollect(bestItem)
+        if success then
+            failCountCache[bestItem.obj] = nil
+            collectedCache[bestItem.obj] = now
+            lastCollectTime = now
+            nextScanTime = now + 0.05
+            if autoFarmEnabled then
+                teleportToSky()
+            end
+        else
+            local currentFail = (failCountCache[bestItem.obj] or 0) + 1
+            failCountCache[bestItem.obj] = currentFail
+            if currentFail >= FAILED_THRESHOLD then
+                permanentlyIgnored[bestItem.obj] = true
+            end
+            lastCollectTime = now
+            nextScanTime = now + 0.5
+        end
+        currentCollecting = false
+    else
+        if autoFarmEnabled then teleportToSky() end
+    end
 end
 
--- 启动/停止
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
     collectHeartbeatConnection = RunService.Heartbeat:Connect(function()
-        if autoCollectEnabled then
-            autoCollectLoop()
-        end
+        if autoCollectEnabled then autoCollectLoop() end
     end)
-    print("[自动收集] 已启动（平台跟随模式）")
 end
 
 function stopAutoCollect()
@@ -1816,21 +1817,18 @@ function stopAutoCollect()
     permanentlyIgnored = {}
     nextScanTime = 0
     lastCollectTime = 0
-    print("[自动收集] 已停止，所有缓存已清空")
 end
 
 function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（平台跟随）", true)
     else
         stopAutoCollect()
-        showNotice("💤 自动收集已关闭", true)
     end
     updateAntiAFK()
     refreshPanelButtons()
-
+    -- 刷新按钮文本
     local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
     if panel then
         local other2Cont = panel:FindFirstChild("其他 2Container")
@@ -1847,6 +1845,8 @@ function toggleAutoCollect()
 end
 
 -- ==================== 自动救助倒地队友（前置定义） ====================
+local simpleRescueEnabled = false
+local simpleRescueConnection = nil
 local autoRescueEnabled = false
 local isRescuing = false
 local rescueConnection = nil
