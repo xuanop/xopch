@@ -1718,17 +1718,19 @@ local function performCollect(targetItem)
 
     if TELEPORT_TO_ITEM then
         local itemPos = targetItem.position
-        local platformOffset = Vector3.new(0, -3, 0)   -- 平台放在物品下方
-        local charOffset = Vector3.new(0, 3, 0)        -- 角色瞬移到物品上方 3 格（更显眼）
 
-        -- 传送角色到物品上方
-        local targetPosition = itemPos + charOffset
-        hrp.CFrame = CFrame.new(targetPosition)
-        print(string.format("[收集] 传送角色到 %s (物品位置 %s)", tostring(targetPosition), tostring(itemPos)))
+        -- 如果存在高空平台，先将平台移动到物品正下方（垫脚）
+        if skyPlatform and skyPlatform.Parent then
+            skyPlatform.CFrame = CFrame.new(itemPos + Vector3.new(0, -3, 0))
+        end
 
-        -- 等待物品消失（被拾取）
+        -- 传送角色到物品上方 2 格（更容易触碰）
+        hrp.CFrame = CFrame.new(itemPos + Vector3.new(0, 2, 0))
+        print("[收集] 已传送到物品上方: " .. tostring(itemPos))
+
+        -- 等待物品消失（捡起）
         local start = os.clock()
-        while (os.clock() - start) < 0.6 do
+        while (os.clock() - start) < 0.8 do
             task.wait(0.05)
             if not targetItem.obj.Parent then
                 print("[收集] 物品已消失，拾取成功")
@@ -1736,11 +1738,9 @@ local function performCollect(targetItem)
             end
         end
 
-        -- 超时后仍未消失
         warn("[收集] 物品未消失，可能无法自动拾取")
         return false
     else
-        -- 步行方案
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         if humanoid then
             humanoid:MoveTo(targetItem.position)
@@ -1769,15 +1769,13 @@ local function autoCollectLoop()
     local myPos = getPlayerPosition()
     if not myPos then return end
 
-    -- 筛选可拾取的物品（排除已成功缓存、失败超过阈值、永久忽略的物品）
     local validItems = {}
     for _, item in ipairs(items) do
         local obj = item.obj
-        -- 如果已成功拾取且在缓存期内，跳过
         if collectedCache[obj] and now - collectedCache[obj] < 10 then
-            -- 仍在冷却中
+            -- skip
         elseif permanentlyIgnored[obj] then
-            -- 已永久忽略
+            -- skip
         else
             local failCount = failCountCache[obj] or 0
             if failCount < FAILED_THRESHOLD then
@@ -1792,10 +1790,52 @@ local function autoCollectLoop()
     end
 
     if #validItems == 0 then
-        -- 无可拾取的有效物品，若高空挂机开启则返回高空
         if autoFarmEnabled then teleportToSky() end
         return
     end
+
+    local bestItem = nil
+    local bestDist = COLLECT_DISTANCE
+    for _, item in ipairs(validItems) do
+        local dist = item.distance or (myPos - item.position).Magnitude
+        if dist < bestDist then
+            bestDist = dist
+            bestItem = item
+        end
+    end
+
+    if bestItem then
+        currentCollecting = true
+        local success = performCollect(bestItem)
+
+        if success then
+            failCountCache[bestItem.obj] = nil
+            collectedCache[bestItem.obj] = now
+            lastCollectTime = now
+            nextScanTime = now + 0.05
+            print("[自动收集] 已拾取 " .. bestItem.obj.Name)
+
+            -- 收集成功后，若开启高空挂机，返回天空平台
+            if autoFarmEnabled then
+                teleportToSky()
+            end
+        else
+            local currentFail = (failCountCache[bestItem.obj] or 0) + 1
+            failCountCache[bestItem.obj] = currentFail
+            if currentFail >= FAILED_THRESHOLD then
+                print("[自动收集] 物品 " .. bestItem.obj.Name .. " 失败次数已达阈值，永久忽略")
+                permanentlyIgnored[bestItem.obj] = true
+            else
+                print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
+            end
+            lastCollectTime = now
+            nextScanTime = now + 0.5
+        end
+        currentCollecting = false
+    else
+        if autoFarmEnabled then teleportToSky() end
+    end
+end
 
     -- 找出最近的有效物品
     local bestItem = nil
