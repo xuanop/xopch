@@ -1673,6 +1673,8 @@ local function getCollectibles()
                 end
             end
             if not nameMatch then continue end
+if not nameMatch then continue end
+print("[收集] 扫描到物品: " .. obj:GetFullName())  -- 临时查看所有匹配项
 
             -- 获取位置
             local pos = nil
