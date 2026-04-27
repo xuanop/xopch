@@ -1593,20 +1593,22 @@ end
 -- ==================== 自动收集物品（极速优化版） ====================
 local autoCollectEnabled = false
 local collectConnection = nil
-local COLLECT_COOLDOWN = 0.25       -- 两次拾取最小间隔（秒），原 0.12 → 0.25
-local COLLECT_DISTANCE = 1250
-local SCAN_INTERVAL = 0.8           -- 扫描新物品间隔（秒），原 0.5 → 0.8
-local COLLECT_KEYWORDS = {"visual", "bee"}  -- 根据游戏修改
-local TELEPORT_TO_ITEM = true
-local TELEPORT_WAIT = 0.2           -- 传送后等待时间（秒），原 0.1 → 0.2
-local FAILED_THRESHOLD = 6          -- 失败6次加入黑名单
 
-hasCollectibleItems = false         -- 全局标志，供高空挂机判断
+-- 可调参数（适中偏稳定）
+local COLLECT_COOLDOWN = 0.25      -- 两次拾取最小间隔（秒）
+local SCAN_INTERVAL = 0.6          -- 扫描新物品间隔（秒）
+local TELEPORT_WAIT = 0.15         -- 传送后等待时间（秒）
+local COLLECT_DISTANCE = 1250
+local FAILED_THRESHOLD = 6
+local COLLECT_KEYWORDS = {"visual", "bee"}   -- 根据游戏修改
+local TELEPORT_TO_ITEM = true
+
+hasCollectibleItems = false
 
 -- 缓存表
-local collectedCache = {}           -- 成功拾取缓存（10秒内不重复）
-local failCountCache = {}           -- 失败次数累计
-local permanentlyIgnored = {}       -- 永久黑名单
+local collectedCache = {}          -- 成功拾取缓存（10秒内不重复）
+local failCountCache = {}          -- 失败次数累计
+local permanentlyIgnored = {}      -- 永久黑名单
 local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
@@ -1630,7 +1632,7 @@ local function getPlayerPosition()
     return cachedHrp and cachedHrp.Position or nil
 end
 
--- 缓存搜索根容器（避免每帧全量搜索）
+-- 缓存搜索根容器
 local searchRootCache = nil
 local searchRootCacheTime = 0
 local function getSearchRoot()
@@ -1664,7 +1666,7 @@ local function isPlayerCharacter(obj)
     return false
 end
 
--- 快速获取可拾取物品列表（带距离剪枝）
+-- 获取可拾取物品列表（优化性能）
 local function getCollectibles()
     local items = {}
     local myPos = getPlayerPosition()
@@ -1675,8 +1677,7 @@ local function getCollectibles()
 
     local MAX_RADIUS = 1500
     local descendants = searchRoot:GetDescendants()
-    local kwCount = #COLLECT_KEYWORDS
-    local useKw = kwCount > 0
+    local useKw = #COLLECT_KEYWORDS > 0
 
     for i = 1, #descendants do
         local obj = descendants[i]
@@ -1686,13 +1687,15 @@ local function getCollectibles()
         local isModel = obj:IsA("Model")
         if not (isBasePart or (isModel and not obj:FindFirstChild("Humanoid"))) then goto skip end
 
-        local lowerName = obj.Name:lower()
-        -- 排除玩家身体部件
+        local name = obj.Name
+        local lowerName = name:lower()
+        -- 快速排除身体部件
         if lowerName == "humanoidrootpart" or lowerName:find("humanoid") or lowerName:find("torso") or
            lowerName:find("leg") or lowerName:find("arm") or lowerName:find("head") then
             goto skip
         end
 
+        -- 关键词匹配
         if useKw then
             local matched = false
             for _, kw in ipairs(COLLECT_KEYWORDS) do
@@ -1704,7 +1707,8 @@ local function getCollectibles()
             if not matched then goto skip end
         end
 
-        local pos = nil
+        -- 获取位置
+        local pos
         if isBasePart then
             pos = obj.Position
         elseif isModel then
@@ -1712,9 +1716,9 @@ local function getCollectibles()
             if primary then
                 pos = primary.Position
             else
-                local hrp = obj:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    pos = hrp.Position
+                local hrpPart = obj:FindFirstChild("HumanoidRootPart")
+                if hrpPart then
+                    pos = hrpPart.Position
                 else
                     local anyPart = obj:FindFirstChildOfClass("BasePart")
                     if anyPart then pos = anyPart.Position end
@@ -1733,7 +1737,7 @@ local function getCollectibles()
     return items
 end
 
--- 执行拾取（带一次快速重试）
+-- 执行拾取（带成功检测 + 一次重试）
 local function performCollect(targetItem)
     if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
     updateCachedCharacter()
@@ -1743,24 +1747,25 @@ local function performCollect(targetItem)
     local originalParent = itemObj.Parent
     local originalPos = itemObj.Position
 
+    -- 传送或移动
     if TELEPORT_TO_ITEM then
         cachedHrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
         task.wait(TELEPORT_WAIT)
     else
-        local humanoid = cachedCharacter:FindFirstChild("Humanoid")
+        local humanoid = cachedCharacter and cachedCharacter:FindFirstChild("Humanoid")
         if humanoid then humanoid:MoveTo(targetItem.position) end
-        task.wait(0.2)
+        task.wait(0.25)
     end
 
-    -- 成功检测：物品消失或位置明显变化
+    -- 成功检测：物品消失 或 位置变化超过阈值
     local stillExists = itemObj and itemObj.Parent and itemObj.Parent == originalParent
-    local posChanged = stillExists and (itemObj.Position - originalPos).Magnitude > 0.1
+    local posChanged = stillExists and (itemObj.Position - originalPos).Magnitude > 0.15
     if not stillExists or posChanged then
         return true
     end
 
     -- 快速重试一次（轻微延迟）
-    task.wait(0.03)
+    task.wait(0.05)
     stillExists = itemObj and itemObj.Parent and itemObj.Parent == originalParent
     if not stillExists then
         return true
@@ -1768,7 +1773,7 @@ local function performCollect(targetItem)
     return false
 end
 
--- 主循环（使用 Stepped 保持平滑）
+-- 主循环
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
@@ -1793,9 +1798,9 @@ local function autoCollectLoop()
         local obj = item.obj
         local cacheTime = collectedCache[obj]
         if cacheTime and now - cacheTime < 10 then
-            -- 还在成功冷却中
+            -- 冷却中
         elseif permanentlyIgnored[obj] then
-            -- 永久黑名单
+            -- 永久忽略
         else
             table.insert(validItems, item)
         end
@@ -1806,13 +1811,12 @@ local function autoCollectLoop()
         return
     end
 
-    -- 找最近的物品
+    -- 找最近物品
     local bestItem = nil
     local bestDist = COLLECT_DISTANCE
     for _, item in ipairs(validItems) do
-        local dist = item.distance
-        if dist < bestDist then
-            bestDist = dist
+        if item.distance < bestDist then
+            bestDist = item.distance
             bestItem = item
         end
     end
@@ -1826,17 +1830,15 @@ local function autoCollectLoop()
     local success = performCollect(bestItem)
 
     if success then
-        -- 拾取成功
         failCountCache[bestItem.obj] = nil
         permanentlyIgnored[bestItem.obj] = nil
         collectedCache[bestItem.obj] = now
         lastCollectTime = now
-        nextScanTime = now + 0.03    -- 成功后快速开始下一轮
+        nextScanTime = now + 0.05      -- 成功后快速准备下一次
         if autoFarmEnabled then teleportToSky() end
-        -- 若觉得打印过多可注释下面这行
+        -- 如需减少控制台输出，可注释下一行
         print("[自动收集] 拾取 " .. bestItem.obj.Name)
     else
-        -- 拾取失败
         local currentFail = (failCountCache[bestItem.obj] or 0) + 1
         failCountCache[bestItem.obj] = currentFail
         if currentFail >= FAILED_THRESHOLD then
@@ -1846,7 +1848,7 @@ local function autoCollectLoop()
             print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
         end
         lastCollectTime = now
-        nextScanTime = now + 0.3      -- 失败后稍长冷却
+        nextScanTime = now + 0.4       -- 失败后稍长冷却
     end
     currentCollecting = false
 end
@@ -1878,7 +1880,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（极速稳定模式）", true)
+        showNotice("💰 自动收集已开启（优化稳定版）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
