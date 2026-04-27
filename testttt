@@ -1592,18 +1592,23 @@ end
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2
-local COLLECT_DISTANCE = 1250
+local COLLECT_DISTANCE = 1250                     -- 拾取距离（格）
 local SCAN_INTERVAL = 1.0
-local COLLECT_KEYWORDS = {"visual", "bee"}  -- 可临时改为 {} 调试
+local COLLECT_KEYWORDS = {"visual", "bee"}        -- 至少2个关键词（不区分大小写）
 local TELEPORT_TO_ITEM = true
 
 hasCollectibleItems = false   -- 全局标志
 
-local collectedCache = {}
+local collectedCache = {}          -- 成功拾取缓存（防止短时间内重复拾取）
+local failCountCache = {}          -- 失败次数缓存
+local FAILED_THRESHOLD = 6         -- 失败6次后永久忽略
+local permanentlyIgnored = {}      -- 永久忽略的物品对象集合
+
 local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
 
+-- 缓存搜索根容器（避免每帧重复查找）
 local searchRootCache = nil
 local searchRootCacheTime = 0
 local function getSearchRoot()
@@ -1664,7 +1669,7 @@ local function getCollectibles()
                 continue
             end
 
-            -- 关键词匹配（调试时可将 nameMatch 直接设为 true）
+            -- 关键词匹配
             local nameMatch = false
             if #COLLECT_KEYWORDS == 0 then
                 nameMatch = true
@@ -1695,11 +1700,6 @@ local function getCollectibles()
             local dist = (myPos - pos).Magnitude
             if dist > MAX_SEARCH_RADIUS then continue end
             table.insert(items, {obj = obj, position = pos, distance = dist})
-            
-            -- 调试输出：打印所有匹配的物体（仅当关键词为空或匹配时）
-            if #COLLECT_KEYWORDS == 0 then
-                print("[调试] 发现物体:", obj.Name, "距离:", math.floor(dist))
-            end
         end
     end
     return items
@@ -1733,22 +1733,48 @@ local function autoCollectLoop()
 
     local items = getCollectibles()
     hasCollectibleItems = (#items > 0)
-    print("[调试] 扫描到物品数量:", #items)   -- 关键输出
     if #items == 0 then return end
 
     local myPos = getPlayerPosition()
     if not myPos then return end
 
+    -- 筛选可拾取的物品（排除已成功缓存、失败超过阈值、永久忽略的物品）
+    local validItems = {}
+    for _, item in ipairs(items) do
+        local obj = item.obj
+        -- 如果已成功拾取且在缓存期内，跳过
+        if collectedCache[obj] and now - collectedCache[obj] < 10 then
+            -- 仍在冷却中
+        elseif permanentlyIgnored[obj] then
+            -- 已永久忽略
+        else
+            local failCount = failCountCache[obj] or 0
+            if failCount < FAILED_THRESHOLD then
+                table.insert(validItems, item)
+            else
+                -- 失败次数已达阈值，标记为永久忽略（仅首次打印）
+                if not permanentlyIgnored[obj] then
+                    permanentlyIgnored[obj] = true
+                    print("[自动收集] 永久忽略物品: " .. obj.Name .. "（失败次数已达 " .. FAILED_THRESHOLD .. "）")
+                end
+            end
+        end
+    end
+
+    if #validItems == 0 then
+        -- 无可拾取的有效物品，若高空挂机开启则返回高空
+        if autoFarmEnabled then teleportToSky() end
+        return
+    end
+
+    -- 找出最近的有效物品
     local bestItem = nil
     local bestDist = COLLECT_DISTANCE
-    for _, item in ipairs(items) do
-        if not item.obj or not item.obj.Parent then continue end
+    for _, item in ipairs(validItems) do
         local dist = item.distance or (myPos - item.position).Magnitude
         if dist < bestDist then
-            if not (collectedCache[item.obj] and now - collectedCache[item.obj] < 10) then
-                bestDist = dist
-                bestItem = item
-            end
+            bestDist = dist
+            bestItem = item
         end
     end
 
@@ -1756,13 +1782,26 @@ local function autoCollectLoop()
         currentCollecting = true
         local success = performCollect(bestItem)
         if success then
-            collectedCache[bestItem.obj] = nil
-            lastCollectTime = os.clock()
-            nextScanTime = os.clock() + 0.05
+            -- 拾取成功：清空失败计数，并记录到成功缓存
+            failCountCache[bestItem.obj] = nil
+            collectedCache[bestItem.obj] = now
+            lastCollectTime = now
+            nextScanTime = now + 0.05
             print("[自动收集] 拾取 " .. bestItem.obj.Name)
             if autoFarmEnabled then teleportToSky() end
         else
-            collectedCache[bestItem.obj] = os.clock()
+            -- 拾取失败：增加失败计数
+            local currentFail = (failCountCache[bestItem.obj] or 0) + 1
+            failCountCache[bestItem.obj] = currentFail
+            if currentFail >= FAILED_THRESHOLD then
+                print("[自动收集] 物品 " .. bestItem.obj.Name .. " 失败次数已达 " .. FAILED_THRESHOLD .. "，将永久忽略")
+                permanentlyIgnored[bestItem.obj] = true
+            else
+                print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
+            end
+            -- 失败后也稍微冷却一下，避免疯狂重试
+            lastCollectTime = now
+            nextScanTime = now + 0.5
         end
         currentCollecting = false
     else
@@ -1777,22 +1816,24 @@ function startAutoCollect()
             autoCollectLoop()
         end
     end)
-    print("[自动收集] 已启动（关键词匹配模式）")
+    print("[自动收集] 已启动（失败计数模式，阈值 " .. FAILED_THRESHOLD .. " 次）")
 end
 
 function stopAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect(); collectHeartbeatConnection = nil end
     collectedCache = {}
+    failCountCache = {}
+    permanentlyIgnored = {}
     nextScanTime = 0
     lastCollectTime = 0
-    print("[自动收集] 已停止")
+    print("[自动收集] 已停止，所有缓存已清空")
 end
 
 function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启", true)
+        showNotice("💰 自动收集已开启（失败计数模式）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
