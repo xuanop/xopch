@@ -1604,9 +1604,8 @@ hasCollectibleItems = false   -- 全局标志
 -- 缓存表
 local collectedCache = {}          -- 成功拾取缓存（短时间内避免重复拾取）
 local failCountCache = {}          -- 失败次数缓存
-local permanentlyIgnored = {}      -- 永久黑名单（拾取失败次数 ≥ 6）
 local FAILED_THRESHOLD = 6         -- 失败6次后永久忽略
-
+local permanentlyIgnored = {}      -- 永久黑名单（拾取失败次数 ≥ 6）
 local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
