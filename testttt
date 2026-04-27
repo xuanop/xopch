@@ -1833,7 +1833,7 @@ local function autoCollectLoop()
         permanentlyIgnored[bestItem.obj] = nil
         collectedCache[bestItem.obj] = now
         lastCollectTime = now
-        nextScanTime = now + 0.02      -- 极速重新扫描
+        nextScanTime = now + 0.03      -- 极速重新扫描
         if autoFarmEnabled then teleportToSky() end
         -- 可选静默模式：去掉逐条打印以减少控制台开销
         -- print("[自动收集] 拾取 " .. bestItem.obj.Name)
@@ -1847,7 +1847,7 @@ local function autoCollectLoop()
             print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
         end
         lastCollectTime = now
-        nextScanTime = now + 0.2       -- 失败后短暂冷却
+        nextScanTime = now + 0.3       -- 失败后短暂冷却
     end
     currentCollecting = false
 end
