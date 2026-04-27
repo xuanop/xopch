@@ -1604,7 +1604,7 @@ hasCollectibleItems = false
 
 local collectedCache = {}
 local failCountCache = {}
-local FAILED_THRESHOLD = 6
+local FAILED_THRESHOLD = 3
 local permanentlyIgnored = {}
 
 local lastCollectTime = 0
