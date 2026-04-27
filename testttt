@@ -1,4 +1,3 @@
---[[ 🔑 XUAN Commander - 稳定单例版 ]]--
 pcall(function()
 
 -- 作者列表
