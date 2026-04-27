@@ -1590,320 +1590,7 @@ if not respawnHandlerAdded then
     end)
 end
 
--- ==================== 自动收集物品（极速优化版） ====================
-local autoCollectEnabled = false
-local collectConnection = nil
-
--- 可调参数（适中偏稳定）
-local COLLECT_COOLDOWN = 0.25      -- 两次拾取最小间隔（秒）
-local SCAN_INTERVAL = 0.6          -- 扫描新物品间隔（秒）
-local TELEPORT_WAIT = 0.15         -- 传送后等待时间（秒）
-local COLLECT_DISTANCE = 1250
-local FAILED_THRESHOLD = 6
-local COLLECT_KEYWORDS = {"visual", "bee"}   -- 根据游戏修改
-local TELEPORT_TO_ITEM = true
-
-hasCollectibleItems = false
-
--- 缓存表
-local collectedCache = {}          -- 成功拾取缓存（10秒内不重复）
-local failCountCache = {}          -- 失败次数累计
-local permanentlyIgnored = {}      -- 永久黑名单
-local lastCollectTime = 0
-local nextScanTime = 0
-local currentCollecting = false
-
--- 性能优化：缓存角色引用
-local cachedCharacter = nil
-local cachedHrp = nil
-local lastCharUpdate = 0
-
-local function updateCachedCharacter()
-    local now = os.clock()
-    if now - lastCharUpdate > 0.5 or not cachedCharacter then
-        cachedCharacter = lp.Character
-        cachedHrp = cachedCharacter and cachedCharacter:FindFirstChild("HumanoidRootPart")
-        lastCharUpdate = now
-    end
-end
-
-local function getPlayerPosition()
-    updateCachedCharacter()
-    return cachedHrp and cachedHrp.Position or nil
-end
-
--- 缓存搜索根容器
-local searchRootCache = nil
-local searchRootCacheTime = 0
-local function getSearchRoot()
-    local now = os.clock()
-    if searchRootCache and (now - searchRootCacheTime) < 5 then
-        return searchRootCache
-    end
-    local candidates = {
-        workspace:FindFirstChild("Game"),
-        workspace:FindFirstChild("Items"),
-        workspace:FindFirstChild("Drops"),
-        workspace:FindFirstChild("Map"),
-        workspace
-    }
-    for _, root in ipairs(candidates) do
-        if root then
-            searchRootCache = root
-            searchRootCacheTime = now
-            return root
-        end
-    end
-    searchRootCache = workspace
-    searchRootCacheTime = now
-    return workspace
-end
-
-local function isPlayerCharacter(obj)
-    if obj:FindFirstChild("Humanoid") then return true end
-    if Players:GetPlayerFromCharacter(obj) then return true end
-    if obj == cachedCharacter then return true end
-    return false
-end
-
--- 获取可拾取物品列表（优化性能）
-local function getCollectibles()
-    local items = {}
-    local myPos = getPlayerPosition()
-    if not myPos then return items end
-
-    local searchRoot = getSearchRoot()
-    if not searchRoot then return items end
-
-    local MAX_RADIUS = 1500
-    local descendants = searchRoot:GetDescendants()
-    local useKw = #COLLECT_KEYWORDS > 0
-
-    for i = 1, #descendants do
-        local obj = descendants[i]
-        if isPlayerCharacter(obj) then goto skip end
-
-        local isBasePart = obj:IsA("BasePart")
-        local isModel = obj:IsA("Model")
-        if not (isBasePart or (isModel and not obj:FindFirstChild("Humanoid"))) then goto skip end
-
-        local name = obj.Name
-        local lowerName = name:lower()
-        -- 快速排除身体部件
-        if lowerName == "humanoidrootpart" or lowerName:find("humanoid") or lowerName:find("torso") or
-           lowerName:find("leg") or lowerName:find("arm") or lowerName:find("head") then
-            goto skip
-        end
-
-        -- 关键词匹配
-        if useKw then
-            local matched = false
-            for _, kw in ipairs(COLLECT_KEYWORDS) do
-                if lowerName:find(kw) then
-                    matched = true
-                    break
-                end
-            end
-            if not matched then goto skip end
-        end
-
-        -- 获取位置
-        local pos
-        if isBasePart then
-            pos = obj.Position
-        elseif isModel then
-            local primary = obj.PrimaryPart
-            if primary then
-                pos = primary.Position
-            else
-                local hrpPart = obj:FindFirstChild("HumanoidRootPart")
-                if hrpPart then
-                    pos = hrpPart.Position
-                else
-                    local anyPart = obj:FindFirstChildOfClass("BasePart")
-                    if anyPart then pos = anyPart.Position end
-                end
-            end
-        end
-        if not pos then goto skip end
-
-        local dist = (myPos - pos).Magnitude
-        if dist <= MAX_RADIUS then
-            table.insert(items, {obj = obj, position = pos, distance = dist})
-        end
-
-        ::skip::
-    end
-    return items
-end
-
--- 执行拾取（带成功检测 + 一次重试）
-local function performCollect(targetItem)
-    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
-    updateCachedCharacter()
-    if not cachedHrp then return false end
-
-    local itemObj = targetItem.obj
-    local originalParent = itemObj.Parent
-    local originalPos = itemObj.Position
-
-    -- 传送或移动
-    if TELEPORT_TO_ITEM then
-        cachedHrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
-        task.wait(TELEPORT_WAIT)
-    else
-        local humanoid = cachedCharacter and cachedCharacter:FindFirstChild("Humanoid")
-        if humanoid then humanoid:MoveTo(targetItem.position) end
-        task.wait(0.25)
-    end
-
-    -- 成功检测：物品消失 或 位置变化超过阈值
-    local stillExists = itemObj and itemObj.Parent and itemObj.Parent == originalParent
-    local posChanged = stillExists and (itemObj.Position - originalPos).Magnitude > 0.15
-    if not stillExists or posChanged then
-        return true
-    end
-
-    -- 快速重试一次（轻微延迟）
-    task.wait(0.05)
-    stillExists = itemObj and itemObj.Parent and itemObj.Parent == originalParent
-    if not stillExists then
-        return true
-    end
-    return false
-end
-
--- 主循环
-local function autoCollectLoop()
-    if not autoCollectEnabled then return end
-    if autoRescueEnabled and activeRescueTarget ~= nil then return end
-    if currentCollecting then return end
-    if not getPlayerPosition() then return end
-
-    local now = os.clock()
-    if now - lastCollectTime < COLLECT_COOLDOWN then return end
-    if now < nextScanTime then return end
-    nextScanTime = now + SCAN_INTERVAL
-
-    local items = getCollectibles()
-    hasCollectibleItems = (#items > 0)
-    if #items == 0 then
-        if autoFarmEnabled then teleportToSky() end
-        return
-    end
-
-    -- 过滤缓存和黑名单
-    local validItems = {}
-    for _, item in ipairs(items) do
-        local obj = item.obj
-        local cacheTime = collectedCache[obj]
-        if cacheTime and now - cacheTime < 10 then
-            -- 冷却中
-        elseif permanentlyIgnored[obj] then
-            -- 永久忽略
-        else
-            table.insert(validItems, item)
-        end
-    end
-
-    if #validItems == 0 then
-        if autoFarmEnabled then teleportToSky() end
-        return
-    end
-
-    -- 找最近物品
-    local bestItem = nil
-    local bestDist = COLLECT_DISTANCE
-    for _, item in ipairs(validItems) do
-        if item.distance < bestDist then
-            bestDist = item.distance
-            bestItem = item
-        end
-    end
-
-    if not bestItem then
-        if autoFarmEnabled then teleportToSky() end
-        return
-    end
-
-    currentCollecting = true
-    local success = performCollect(bestItem)
-
-    if success then
-        failCountCache[bestItem.obj] = nil
-        permanentlyIgnored[bestItem.obj] = nil
-        collectedCache[bestItem.obj] = now
-        lastCollectTime = now
-        nextScanTime = now + 0.05      -- 成功后快速准备下一次
-        if autoFarmEnabled then teleportToSky() end
-        -- 如需减少控制台输出，可注释下一行
-        print("[自动收集] 拾取 " .. bestItem.obj.Name)
-    else
-        local currentFail = (failCountCache[bestItem.obj] or 0) + 1
-        failCountCache[bestItem.obj] = currentFail
-        if currentFail >= FAILED_THRESHOLD then
-            permanentlyIgnored[bestItem.obj] = true
-            print("[自动收集] 物品 " .. bestItem.obj.Name .. " 失败次数已达 " .. FAILED_THRESHOLD .. "，加入黑名单")
-        else
-            print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
-        end
-        lastCollectTime = now
-        nextScanTime = now + 0.4       -- 失败后稍长冷却
-    end
-    currentCollecting = false
-end
-
-function startAutoCollect()
-    if collectConnection then collectConnection:Disconnect() end
-    collectConnection = RunService.Stepped:Connect(function()
-        if autoCollectEnabled then
-            autoCollectLoop()
-        end
-    end)
-    print("[自动收集] 已启动（失败黑名单阈值 " .. FAILED_THRESHOLD .. "）")
-end
-
-function stopAutoCollect()
-    if collectConnection then
-        collectConnection:Disconnect()
-        collectConnection = nil
-    end
-    collectedCache = {}
-    failCountCache = {}
-    permanentlyIgnored = {}
-    nextScanTime = 0
-    lastCollectTime = 0
-    print("[自动收集] 已停止，所有缓存已清空")
-end
-
-function toggleAutoCollect()
-    autoCollectEnabled = not autoCollectEnabled
-    if autoCollectEnabled then
-        startAutoCollect()
-        showNotice("💰 自动收集已开启（优化稳定版）", true)
-    else
-        stopAutoCollect()
-        showNotice("💤 自动收集已关闭", true)
-    end
-    updateAntiAFK()
-    refreshPanelButtons()
-
-    local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
-    if panel then
-        local other2Cont = panel:FindFirstChild("其他 2Container")
-        if other2Cont then
-            for _, btn in ipairs(other2Cont:GetChildren()) do
-                if btn:IsA("TextButton") and (btn.Text:find("自动收集") or btn.Text:find("💰")) then
-                    btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
-                    btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
-                    break
-                end
-            end
-        end
-    end
-end
-
--- ==================== 自动救助倒地队友（前置定义） ====================
+-- ==================== 自动收集物品（性能优化版，添加调试） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2
@@ -1917,8 +1604,9 @@ hasCollectibleItems = false   -- 全局标志
 -- 缓存表
 local collectedCache = {}          -- 成功拾取缓存（短时间内避免重复拾取）
 local failCountCache = {}          -- 失败次数缓存
-local FAILED_THRESHOLD = 6         -- 失败6次后永久忽略
 local permanentlyIgnored = {}      -- 永久黑名单（拾取失败次数 ≥ 6）
+local FAILED_THRESHOLD = 6         -- 失败6次后永久忽略
+
 local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
@@ -2173,6 +1861,143 @@ function toggleAutoCollect()
             end
         end
     end
+end
+
+-- ==================== 自动救助倒地队友（前置定义） ====================
+local autoRescueEnabled = false
+local isRescuing = false
+local rescueConnection = nil
+
+function getDownedPlayers()
+    local downedList = {}
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return downedList end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == lp then continue end
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            local isDowned = character:GetAttribute("Downed")
+            local state = character:GetAttribute("State")
+            local health = humanoid and humanoid.Health or 100
+            if health <= 0 or isDowned or state == "Downed" then
+                table.insert(downedList, player)
+            end
+        end
+    end
+    return downedList
+end
+
+function findNearestDowned()
+    local nearest = nil
+    local minDist = math.huge
+    local myPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
+    if not myPos then return nil end
+    local gameFolder = workspace:FindFirstChild("Game")
+    local playersFolder = gameFolder and gameFolder:FindFirstChild("Players")
+    if not playersFolder then return nil end
+    for _, player in ipairs(getDownedPlayers()) do
+        local character = playersFolder:FindFirstChild(player.Name) or playersFolder:FindFirstChild(tostring(player.UserId))
+        if character then
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist = (myPos - hrp.Position).Magnitude
+                if dist < minDist then minDist = dist; nearest = player end
+            end
+        end
+    end
+    return nearest
+end
+
+function pressE()
+    pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
+        task.wait(1.5)
+        vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
+    end)
+end
+
+task.spawn(function()
+    task.wait(3)
+    local charEvents = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character")
+    if charEvents then
+        print("=== Character 远程事件列表 ===")
+        for _, ev in ipairs(charEvents:GetChildren()) do
+            if ev:IsA("RemoteEvent") then
+                print("  - " .. ev.Name)
+            end
+        end
+        print("==============================")
+    else
+        warn("找不到 Events.Character")
+    end
+end)
+
+function startAutoRescue()
+    if rescueConnection then rescueConnection:Disconnect() end
+    print("[自动救助] 启动救助监控...")
+    local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
+    rescueConnection = RunService.Heartbeat:Connect(function()
+        if not autoRescueEnabled then return end
+        if isRescuing then return end
+        if not lp.Character then return end
+        local myHumanoid = lp.Character:FindFirstChild("Humanoid")
+        if not myHumanoid then return end
+        if myHumanoid.Health <= 0 then return end
+        local myState = lp.Character:GetAttribute("State") or ""
+        local myDowned = lp.Character:GetAttribute("Downed")
+        if myDowned or myState == "Downed" or myState == "Dead" then return end
+        local downedPlayer = findNearestDowned()
+        if not downedPlayer then return end
+        isRescuing = true
+        task.spawn(function()
+            local targetCharacter = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Players") and (workspace.Game.Players:FindFirstChild(downedPlayer.Name) or workspace.Game.Players:FindFirstChild(tostring(downedPlayer.UserId)))
+            if targetCharacter then
+                local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
+                if targetHRP then
+                    if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                        print("[自动救助] 传送到", downedPlayer.Name, "身边")
+                        lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+                        lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
+                        if interactRemote then
+                            pcall(function()
+                                interactRemote:FireServer("Revive", true, downedPlayer.UserId)
+                            end)
+                            showNotice("✨ 瞬间救助 " .. downedPlayer.Name, true)
+                        else
+                            pressE()
+                            showNotice("🚑 正在救助 " .. downedPlayer.Name, true)
+                        end
+                        task.wait(0.05)
+                    end
+                end
+            end
+            isRescuing = false
+        end)
+    end)
+    print("[自动救助] 监控已启动")
+end
+
+function stopAutoRescue()
+    if rescueConnection then rescueConnection:Disconnect(); rescueConnection = nil; print("[自动救助] 监控已停止") end
+    isRescuing = false
+end
+
+function toggleAutoRescue()
+    autoRescueEnabled = not autoRescueEnabled
+    autoReviveEnabled = autoRescueEnabled
+    print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
+    if autoRescueEnabled then
+        startSimpleRescue()
+        showNotice("✅ 自动救助已开启", true)
+    else
+        stopSimpleRescue()
+        showNotice("❌ 自动救助已关闭", true)
+    end
+    updateAntiAFK()
+    refreshPanelButtons()
 end
 
 -- ==================== 自定义重命名器 ====================
