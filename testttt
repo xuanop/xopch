@@ -3071,7 +3071,7 @@ end
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2          -- 拾取后冷却（秒）
-local COLLECT_DISTANCE = 500          -- 搜索距离（格），临时放大以便扫描远处物体
+local COLLECT_DISTANCE = 1500          -- 搜索距离（格），临时放大以便扫描远处物体
 local SCAN_INTERVAL = 1.0             -- 扫描间隔（秒）
 local COLLECT_KEYWORDS = {}           -- 临时设为空，匹配所有物体（用于调试）
 local TELEPORT_TO_ITEM = true
@@ -3130,7 +3130,7 @@ local function getCollectibles()
     local searchRoot = getSearchRoot()
     if not searchRoot then return items end
     
-    local MAX_SEARCH_RADIUS = 500   -- 临时扩大半径
+    local MAX_SEARCH_RADIUS = 1500   -- 临时扩大半径
     -- 仅遍历搜索根下的后代
     local descendants = searchRoot:GetDescendants()
     
