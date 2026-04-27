@@ -196,7 +196,7 @@ local antiAfkEnabled = false
 local antiAfkConnection = nil
 
 -- 边缘弹射变量 (V7)
-local edgeBoostEnabled = true
+local edgeBoostEnabled = false
 local edgeBoostPower = 100
 local edgeBoostMinYVelocity = 1.0
 local edgeBoostConnection = nil
