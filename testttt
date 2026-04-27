@@ -2400,11 +2400,10 @@ local function createButtonSafe(container, text, callback, color)
 end
 
 -- ==================== 多分页面板 (稳定单例) ====================
-local mainPanel = nil  -- 全局唯一引用
+local mainPanel = nil
 
 local function createAdminPanel()
     if mainPanel then return mainPanel end
-
     return safeCall(function()
         local sg = Instance.new("ScreenGui")
         sg.Name = "MyCommanderPanel"
@@ -2612,46 +2611,31 @@ local function createAdminPanel()
         updateCanvas(otherCont)
 
         -- 其他 2 分页
-local other2Cont = contentContainers["其他 2"]
-if other2Cont then
-    createButtonSafe(other2Cont, "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌"), 
-        function(btn) 
-            toggleAutoFarm()
-            btn.Text = "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌")
-            btn.BackgroundTransparency = autoFarmEnabled and 0.5 or 0.85
-        end, Color3.fromRGB(100, 150, 200))
+        local other2Cont = contentContainers["其他 2"]
+        if other2Cont then
+            createButtonSafe(other2Cont, "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌"), 
+                function(btn) 
+                    toggleAutoFarm()
+                    btn.Text = "☁️ 高空挂机: " .. (autoFarmEnabled and "开启 ✅" or "关闭 ❌")
+                    btn.BackgroundTransparency = autoFarmEnabled and 0.5 or 0.85
+                end, Color3.fromRGB(100, 150, 200))
 
-    createButtonSafe(other2Cont, "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌"), 
-        function(btn) 
-            toggleAutoRescue()
-            btn.Text = "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌")
-            btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
-        end, Color3.fromRGB(200, 100, 100))
-    
-    -- 自动收集按钮（新增）
-createButtonSafe(other2Cont, "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌"), 
-function(btn) 
-    -- 切换状态
-    autoCollectEnabled = not autoCollectEnabled
-    if autoCollectEnabled then
-        startAutoCollect()
-        showNotice("💰 自动收集已开启（优化版）", true)
-    else
-        stopAutoCollect()
-        showNotice("💤 自动收集已关闭", true)
-    end
-    updateAntiAFK()
-    
-    -- 立即更新当前按钮的显示（不依赖 refreshPanelButtons）
-    btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
-    btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
-    
-    -- 可选：同时刷新其他面板按钮（如防AFK和其他开关）
-    refreshPanelButtons()
-end, Color3.fromRGB(100, 200, 150))
-    
-    updateCanvas(other2Cont)
-end
+            createButtonSafe(other2Cont, "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌"), 
+                function(btn) 
+                    toggleAutoRescue()
+                    btn.Text = "🚑 自动救助队友: " .. (autoRescueEnabled and "开启 ✅" or "关闭 ❌")
+                    btn.BackgroundTransparency = autoRescueEnabled and 0.5 or 0.85
+                end, Color3.fromRGB(200, 100, 100))
+
+            createButtonSafe(other2Cont, "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌"), 
+                function(btn) 
+                    toggleAutoCollect()
+                    btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
+                    btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
+                end, Color3.fromRGB(100, 200, 150))
+
+            updateCanvas(other2Cont)
+        end
 
         if contentContainers["主要"] then contentContainers["主要"].Visible = true end
         if tabButtons["主要"] then tabButtons["主要"].BackgroundTransparency = 0.1; tabButtons["主要"].TextColor3 = Color3.new(1,1,1) end
@@ -3169,231 +3153,12 @@ function stopSimpleRescue()
     end
 end
 
--- ==================== 自动收集物品（性能优化版，添加调试） ====================
-local autoCollectEnabled = false
-local collectHeartbeatConnection = nil
-local COLLECT_COOLDOWN = 0.2          -- 拾取后冷却（秒）
-local COLLECT_DISTANCE = 1500          -- 搜索距离（格），临时放大以便扫描远处物体
-local SCAN_INTERVAL = 1.0             -- 扫描间隔（秒）
-local COLLECT_KEYWORDS = {}           -- 临时设为空，匹配所有物体（用于调试）
-local TELEPORT_TO_ITEM = true
-
-local collectedCache = {}
-local lastCollectTime = 0
-local nextScanTime = 0
-local currentCollecting = false
-
--- 缓存搜索根容器（避免每帧重复查找）
-local searchRootCache = nil
-local searchRootCacheTime = 0
-local function getSearchRoot()
-    local now = os.clock()
-    if searchRootCache and (now - searchRootCacheTime) < 5 then
-        return searchRootCache
-    end
-    -- 增加可能的容器路径
-    local candidates = {
-        workspace:FindFirstChild("Game"),
-        workspace:FindFirstChild("Items"),
-        workspace:FindFirstChild("Drops"),
-        workspace:FindFirstChild("Map"),
-        workspace
-    }
-    for _, root in ipairs(candidates) do
-        if root then
-            searchRootCache = root
-            searchRootCacheTime = now
-            return root
-        end
-    end
-    searchRootCache = workspace
-    searchRootCacheTime = now
-    return workspace
-end
-
-local function getPlayerPosition()
-    if not lp or not lp.Character then return nil end
-    local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
-    return hrp and hrp.Position or nil
-end
-
-local function isPlayerCharacter(obj)
-    if obj:FindFirstChild("Humanoid") then return true end
-    if Players:GetPlayerFromCharacter(obj) then return true end
-    if obj == lp.Character then return true end
-    return false
-end
-
-local function getCollectibles()
-    local items = {}
-    local myPos = getPlayerPosition()
-    if not myPos then return items end
-    
-    local searchRoot = getSearchRoot()
-    if not searchRoot then return items end
-    
-    local MAX_SEARCH_RADIUS = 1500   -- 临时扩大半径
-    -- 仅遍历搜索根下的后代
-    local descendants = searchRoot:GetDescendants()
-    
-    for _, obj in ipairs(descendants) do
-        if isPlayerCharacter(obj) then continue end
-        if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
-            local lowerName = obj.Name:lower()
-            local nameMatch = false
-            if #COLLECT_KEYWORDS == 0 then
-                nameMatch = true   -- 空关键词匹配所有
-            else
-                for _, kw in ipairs(COLLECT_KEYWORDS) do
-                    if lowerName:find(kw) then
-                        nameMatch = true
-                        break
-                    end
-                end
-            end
-            if not nameMatch then continue end
-            
-            local pos = nil
-            if obj:IsA("BasePart") then
-                pos = obj.Position
-            elseif obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") then
-                pos = obj.PrimaryPart.Position
-            elseif obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") then
-                pos = obj.HumanoidRootPart.Position
-            elseif obj:IsA("Model") and obj:FindFirstChildOfClass("BasePart") then
-                pos = obj:FindFirstChildOfClass("BasePart").Position
-            else
-                continue
-            end
-            
-            local dist = (myPos - pos).Magnitude
-            if dist > MAX_SEARCH_RADIUS then continue end
-            table.insert(items, {obj = obj, position = pos, distance = dist})
-        end
-    end
-    return items
-end
-
-local function performCollect(targetItem)
-    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
-    local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-    if TELEPORT_TO_ITEM then
-        hrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
-        task.wait(0.05)
-    else
-        local humanoid = lp.Character:FindFirstChild("Humanoid")
-        if humanoid then humanoid:MoveTo(targetItem.position) end
-        task.wait(0.3)
-    end
-    return true
-end
-
-local function autoCollectLoop()
-    if not autoCollectEnabled then return end
-    if autoRescueEnabled and activeRescueTarget ~= nil then return end
-    if currentCollecting then return end
-    if not getPlayerPosition() then return end
-
-    local now = os.clock()
-    if now - lastCollectTime < COLLECT_COOLDOWN then return end
-    if now < nextScanTime then return end
-    nextScanTime = now + SCAN_INTERVAL
-
-    local items = getCollectibles()
-    hasCollectibleItems = (#items > 0)
-    print("[调试] 扫描到物品数量:", #items)
-    if #items == 0 then
-        if autoFarmEnabled then teleportToSky() end
-        return
-    end
-
-    local myPos = getPlayerPosition()
-    if not myPos then return end
-
-    local bestItem = nil
-    local bestDist = COLLECT_DISTANCE
-    for _, item in ipairs(items) do
-        if not item.obj or not item.obj.Parent then continue end
-        local dist = item.distance or (myPos - item.position).Magnitude
-        if dist < bestDist then
-            if not (collectedCache[item.obj] and now - collectedCache[item.obj] < 10) then
-                bestDist = dist
-                bestItem = item
-            end
-        end
-    end
-
-    if bestItem then
-        currentCollecting = true
-        local success = performCollect(bestItem)
-        if success then
-            collectedCache[bestItem.obj] = nil
-            lastCollectTime = os.clock()
-            nextScanTime = os.clock() + 0.05
-            print("[自动收集] 拾取 " .. bestItem.obj.Name)
-            if autoFarmEnabled then teleportToSky() end
-        else
-            collectedCache[bestItem.obj] = os.clock()
-        end
-        currentCollecting = false
-    else
-        if autoFarmEnabled then teleportToSky() end
-    end
-end   -- ✅ 只有一个 end 正确结束
-
-function startAutoCollect()
-    if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
-    collectHeartbeatConnection = RunService.Heartbeat:Connect(function()
-        if autoCollectEnabled then
-            autoCollectLoop()
-        end
-    end)
-    print("[自动收集] 已启动（调试模式，扫描所有物体）")
-end
-
-function stopAutoCollect()
-    if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect(); collectHeartbeatConnection = nil end
-    collectedCache = {}
-    nextScanTime = 0
-    lastCollectTime = 0
-    print("[自动收集] 已停止")
-end
-
-function toggleAutoCollect()
-    autoCollectEnabled = not autoCollectEnabled
-    if autoCollectEnabled then
-        startAutoCollect()
-        showNotice("💰 自动收集已开启（调试模式）", true)
-    else
-        stopAutoCollect()
-        showNotice("💤 自动收集已关闭", true)
-    end
-    updateAntiAFK()
-    refreshPanelButtons()
-
-    local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
-    if panel then
-        local other2Cont = panel:FindFirstChild("其他 2Container")
-        if other2Cont then
-            for _, btn in ipairs(other2Cont:GetChildren()) do
-                if btn:IsA("TextButton") and (btn.Text:find("自动收集") or btn.Text:find("💰")) then
-                    btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
-                    btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
-                    break
-                end
-            end
-        end
-    end
-end
-
 -- ==================== 强制覆盖纠正外部脚本错误 ====================
 task.spawn(function()
-    task.wait(5)  -- 等待外部脚本加载完成
-    -- 重新定义正确的 toggleAutoRescue（覆盖错误的 toggle AutoRescue）
+    task.wait(5)
     toggleAutoRescue = function()
         autoRescueEnabled = not autoRescueEnabled
-        autoReviveEnabled = autoRescueEnabled  -- 联动复活
+        autoReviveEnabled = autoRescueEnabled
         print("[自动救助] 状态切换为:", autoRescueEnabled and "开启" or "关闭")
         if autoRescueEnabled then
             startSimpleRescue()
