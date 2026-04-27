@@ -1608,7 +1608,6 @@ local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
 
--- 缓存搜索根容器
 local searchRootCache = nil
 local searchRootCacheTime = 0
 local function getSearchRoot()
@@ -1695,7 +1694,6 @@ local function getCollectibles()
     return items
 end
 
--- 核心收集函数：传送角色到物品上方，平台跟随，等待物品消失
 local function performCollect(targetItem)
     if not targetItem or not targetItem.obj or not targetItem.obj.Parent then
         return false
@@ -1705,13 +1703,10 @@ local function performCollect(targetItem)
 
     if TELEPORT_TO_ITEM then
         local itemPos = targetItem.position
-        -- 如果存在高空平台，先将平台移动到物品正下方（垫脚）
         if skyPlatform and skyPlatform.Parent then
             skyPlatform.CFrame = CFrame.new(itemPos + Vector3.new(0, -3, 0))
         end
-        -- 传送角色到物品上方 2 格
         hrp.CFrame = CFrame.new(itemPos + Vector3.new(0, 2, 0))
-        -- 等待物品消失（捡起）
         local start = os.clock()
         while (os.clock() - start) < 0.8 do
             task.wait(0.05)
@@ -1731,7 +1726,6 @@ local function performCollect(targetItem)
     return false
 end
 
--- 主循环
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
@@ -1750,14 +1744,11 @@ local function autoCollectLoop()
     local myPos = getPlayerPosition()
     if not myPos then return end
 
-    -- 筛选有效物品
     local validItems = {}
     for _, item in ipairs(items) do
         local obj = item.obj
         if collectedCache[obj] and now - collectedCache[obj] < 10 then
-            -- skip
         elseif permanentlyIgnored[obj] then
-            -- skip
         else
             local failCount = failCountCache[obj] or 0
             if failCount < FAILED_THRESHOLD then
@@ -1775,7 +1766,6 @@ local function autoCollectLoop()
         return
     end
 
-    -- 找最近物品
     local bestItem = nil
     local bestDist = COLLECT_DISTANCE
     for _, item in ipairs(validItems) do
@@ -1794,7 +1784,6 @@ local function autoCollectLoop()
             collectedCache[bestItem.obj] = now
             lastCollectTime = now
             nextScanTime = now + 0.05
-            -- 收集成功后，若开启高空挂机，返回天空平台
             if autoFarmEnabled then
                 teleportToSky()
             end
@@ -1813,13 +1802,10 @@ local function autoCollectLoop()
     end
 end
 
--- 启动/停止
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
     collectHeartbeatConnection = RunService.Heartbeat:Connect(function()
-        if autoCollectEnabled then
-            autoCollectLoop()
-        end
+        if autoCollectEnabled then autoCollectLoop() end
     end)
 end
 
@@ -1841,8 +1827,6 @@ function toggleAutoCollect()
     end
     updateAntiAFK()
     refreshPanelButtons()
-
-    -- 刷新界面按钮文字
     local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
     if panel then
         local other2Cont = panel:FindFirstChild("其他 2Container")
