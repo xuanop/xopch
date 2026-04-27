@@ -148,14 +148,11 @@ end
 -- 启动定时上报（每 10 秒先获取 GAS 玩家列表，再上报自身状态）
 task.spawn(function()
     while true do
-        -- 先从 GAS 获取在线玩家列表
         fetchGasData()
-        -- 然后上报自身状态
         sendToGoogleSheet()
         task.wait(10)
     end
 end)
-
 
 -- TASS 調適
 task.spawn(function()
@@ -257,16 +254,11 @@ local broadcastGui = nil
 
 -- ==================== 独立广播系统（最终稳定版） ====================
 print("[广播] 初始化...")
-
--- 🔧 配置：请替换为您的独立广播 GAS URL
 local GAS_BROADCAST_URL = "https://script.google.com/macros/s/AKfycby61AaDfZaz24_QPIIs9sV1H7JFMKd_o6K4SrIrEow7qN3O3xpHQBQ6s9tSE2D_Mn1s/exec"
-
--- 依赖检查
 if not HttpService then warn("[广播] ❌ HttpService 未定义"); return end
 if not lp then warn("[广播] ❌ lp 未定义"); return end
 if not showNotice then warn("[广播] ⚠️ showNotice 未定义，通知将无法显示") end
 
--- 内置 HTTP 请求函数
 local function broadcastHttpRequest(method, url, body)
     local req = syn and syn.request or http_request or request or (http and http.request)
     if not req then warn("[广播] 找不到 HTTP 请求函数"); return nil end
@@ -296,7 +288,6 @@ local function broadcastHttpRequest(method, url, body)
     else warn("[广播] HTTP 请求失败:", result); return nil end
 end
 
--- 内置 URL 编码
 local function urlEncode(s)
     local result = ""
     for i = 1, #s do
@@ -313,7 +304,6 @@ end
 
 _G.lastBroadcast = _G.lastBroadcast or ""
 
--- 发送广播（全局函数，供面板调用）
 function sendBroadcast(message)
     if message == "" then
         if showNotice then showNotice("⚠️ 消息不能为空", true) end
@@ -325,7 +315,6 @@ function sendBroadcast(message)
     if res then
         print("[广播] 响应码:", res.StatusCode)
         print("[广播] 原始响应体:", res.Body)
-        -- 终极宽容判断：只要响应码为 200，就视为成功
         if res.StatusCode == 200 then
             if showNotice then showNotice("✅ 广播已发送", true) end
         else
@@ -336,7 +325,6 @@ function sendBroadcast(message)
     end
 end
 
--- 接收广播轮询
 task.spawn(function()
     task.wait(2)
     local res = broadcastHttpRequest("GET", GAS_BROADCAST_URL .. "?action=getBroadcast")
@@ -368,7 +356,6 @@ task.spawn(function()
         task.wait(0.5)
     end
 end)
-
 print("[广播] 初始化完成")
 
 -- ==================== 发送广播窗口 ====================
@@ -601,10 +588,7 @@ local function createTimeControlWindow()
     end
     initSlider()
 
-    knob.MouseButton1Down:Connect(function()
-        dragging = true
-    end)
-
+    knob.MouseButton1Down:Connect(function() dragging = true end)
     track.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
@@ -612,19 +596,12 @@ local function createTimeControlWindow()
             updateSlider({Position = mousePos})
         end
     end)
-
     UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
     end)
-
     UIS.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            updateSlider(input)
-        end
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then updateSlider(input) end
     end)
-
     restoreBtn.MouseButton1Click:Connect(function()
         if _G.OriginalClockTime then
             Lighting.ClockTime = _G.OriginalClockTime
@@ -1116,7 +1093,6 @@ end
 local function updateAntiAFK()
     local needAntiAFK = autoFarmEnabled or autoRescueEnabled or autoCollectEnabled
     if needAntiAFK and not antiAfkEnabled then
-        -- 需要且未开启，则开启防AFK
         if antiAfkConnection then antiAfkConnection:Disconnect() end
         antiAfkEnabled = true
         task.spawn(function()
@@ -1129,7 +1105,6 @@ local function updateAntiAFK()
                 task.wait(60)
             end
         end)
-        -- 更新面板按钮（如果有）
         local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
         if panel then
             local mainCont = panel:FindFirstChild("主要Container")
@@ -1145,10 +1120,7 @@ local function updateAntiAFK()
         end
         print("[防AFK] 自动开启")
     elseif not needAntiAFK and antiAfkEnabled then
-        -- 不需要且已开启，则关闭防AFK
         antiAfkEnabled = false
-        -- 注意：原toggleAntiAFK中的while循环依靠 antiAfkEnabled 变量退出，无需额外操作
-        -- 更新面板按钮
         local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
         if panel then
             local mainCont = panel:FindFirstChild("主要Container")
@@ -1166,23 +1138,15 @@ local function updateAntiAFK()
     end
 end
 
--- 强制刷新面板中所有自动化功能按钮的状态
--- 强制刷新面板中所有自动化功能按钮的状态
 local function refreshPanelButtons()
-    -- 尝试多个可能的父级容器
     local possibleParents = { PlayerGui, game:GetService("CoreGui") }
-    if gethui then
-        table.insert(possibleParents, gethui())
-    end
-    
+    if gethui then table.insert(possibleParents, gethui()) end
     local panel = nil
     for _, parent in ipairs(possibleParents) do
         panel = parent:FindFirstChild("MyCommanderPanel")
         if panel then break end
     end
     if not panel then return end
-    
-    -- 刷新“其他 2”分页中的按钮
     local other2Cont = panel:FindFirstChild("其他 2Container")
     if other2Cont then
         for _, btn in ipairs(other2Cont:GetChildren()) do
@@ -1201,8 +1165,6 @@ local function refreshPanelButtons()
             end
         end
     end
-    
-    -- 刷新“主要”分页中的防AFK按钮
     local mainCont = panel:FindFirstChild("主要Container")
     if mainCont then
         for _, btn in ipairs(mainCont:GetChildren()) do
@@ -1263,10 +1225,7 @@ local function applyEdgeBoost()
 end
 
 local function refreshEdgeBoostConnection()
-    if edgeBoostConnection then
-        edgeBoostConnection:Disconnect()
-        edgeBoostConnection = nil
-    end
+    if edgeBoostConnection then edgeBoostConnection:Disconnect(); edgeBoostConnection = nil end
     if edgeBoostEnabled then
         edgeBoostConnection = RunService.Stepped:Connect(applyEdgeBoost)
     end
@@ -1283,7 +1242,6 @@ local function toggleEdgeBoost(btn)
 end
 
 refreshEdgeBoostConnection()
-
 edgeBoostInputConnection = UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.U then
@@ -1303,7 +1261,6 @@ edgeBoostInputConnection = UIS.InputBegan:Connect(function(input, gameProcessed)
         end
     end
 end)
-
 lp.CharacterAdded:Connect(function()
     task.wait(0.5)
     refreshEdgeBoostConnection()
@@ -1414,7 +1371,6 @@ local function createTeleportWindow()
                 if plr ~= lp then table.insert(players, plr) end
             end
             table.sort(players, function(a,b) return a.Name < b.Name end)
-
             listFrame.CanvasSize = UDim2.new(0, 0, 0, #players * 35)
 
             for _, plr in ipairs(players) do
@@ -1462,38 +1418,18 @@ local function createTeleportWindow()
         Instance.new("UICorner", bringBtn).CornerRadius = UDim.new(0, 8)
 
         goToBtn.MouseButton1Click:Connect(function()
-            if not selectedPlayer then
-                showNotice("⚠️ 请先选择玩家", true)
-                return
-            end
-            if not selectedPlayer.Character or not selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                showNotice("⚠️ 目标玩家不存在或没有角色", true)
-                return
-            end
-            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
-                showNotice("⚠️ 你当前没有角色", true)
-                return
-            end
-
+            if not selectedPlayer then showNotice("⚠️ 请先选择玩家", true) return end
+            if not selectedPlayer.Character or not selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then showNotice("⚠️ 目标玩家不存在或没有角色", true) return end
+            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then showNotice("⚠️ 你当前没有角色", true) return end
             local targetPos = selectedPlayer.Character.HumanoidRootPart.Position
             lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos)
             showNotice("✅ 已传送到 " .. selectedPlayer.Name, true)
         end)
 
         bringBtn.MouseButton1Click:Connect(function()
-            if not selectedPlayer then
-                showNotice("⚠️ 请先选择玩家", true)
-                return
-            end
-            if not selectedPlayer.Character or not selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                showNotice("⚠️ 目标玩家不存在或没有角色", true)
-                return
-            end
-            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
-                showNotice("⚠️ 你当前没有角色", true)
-                return
-            end
-
+            if not selectedPlayer then showNotice("⚠️ 请先选择玩家", true) return end
+            if not selectedPlayer.Character or not selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then showNotice("⚠️ 目标玩家不存在或没有角色", true) return end
+            if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then showNotice("⚠️ 你当前没有角色", true) return end
             local myPos = lp.Character.HumanoidRootPart.Position
             selectedPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(myPos)
             showNotice("✅ 已将 " .. selectedPlayer.Name .. " 拉过来", true)
@@ -1506,23 +1442,18 @@ local function createTeleportWindow()
 end
 
 -- ==================== 高空挂机优化版（前置定义） ====================
--- 固定高空坐标（可根据需要修改）
-local SKY_X = 0          -- X轴坐标
-local SKY_Y = 500        -- Y轴高度（建议 300~800）
-local SKY_Z = 0          -- Z轴坐标
-local PLATFORM_SIZE = 12 -- 平台边长（格）
+local SKY_X = 0
+local SKY_Y = 500
+local SKY_Z = 0
+local PLATFORM_SIZE = 12
 
-local skyPlatform = nil          -- 平台实例引用
-local savedGroundPosition = nil  -- 开启挂机时保存的地面位置
-local respawnHandlerAdded = false -- 防止重复添加重生归位事件
+local skyPlatform = nil
+local savedGroundPosition = nil
+local respawnHandlerAdded = false
 
--- 创建脚下平台
 local function createSkyPlatform()
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return nil end
-    if skyPlatform and skyPlatform.Parent then
-        skyPlatform:Destroy()
-        skyPlatform = nil
-    end
+    if skyPlatform and skyPlatform.Parent then skyPlatform:Destroy(); skyPlatform = nil end
     local hrp = lp.Character.HumanoidRootPart
     local platformPos = hrp.Position - Vector3.new(0, 2.5, 0)
     local platform = Instance.new("Part")
@@ -1538,7 +1469,6 @@ local function createSkyPlatform()
     return platform
 end
 
--- 销毁平台
 local function destroySkyPlatform()
     if skyPlatform and skyPlatform.Parent then
         skyPlatform:Destroy()
@@ -1546,8 +1476,7 @@ local function destroySkyPlatform()
     end
 end
 
--- 传送至固定高空坐标
-local function teleportToSky()
+function teleportToSky()
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
     lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos)
@@ -1560,18 +1489,12 @@ local function teleportToSky()
     end
 end
 
--- 尝试获取地图重生点
 local function getSpawnPosition()
     local spawn = workspace:FindFirstChild("SpawnLocation")
-    if spawn and spawn:IsA("SpawnLocation") then
-        return spawn.Position
-    end
+    if spawn and spawn:IsA("SpawnLocation") then return spawn.Position end
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("SpawnLocation") then
-            return obj.Position
-        end
+        if obj:IsA("SpawnLocation") then return obj.Position end
     end
-    -- 回退：取地图最高点上方 10 格
     local highestY = 100
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") and obj.Position.Y > highestY then
@@ -1581,7 +1504,6 @@ local function getSpawnPosition()
     return Vector3.new(0, highestY + 10, 0)
 end
 
--- 返回地面（关闭挂机时调用）
 local function returnToGround()
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local target = savedGroundPosition or getSpawnPosition()
@@ -1590,21 +1512,12 @@ local function returnToGround()
     showNotice("已返回地面", true)
 end
 
--- 挂机心跳逻辑
--- 添加一个全局标志，在自动收集循环中更新（是否有可收集物品）
 local hasCollectibleItems = false
 
--- 修改 autoFarmHeartbeat
 local function autoFarmHeartbeat()
     if not autoFarmEnabled then return end
-    -- 救助优先
-    if autoRescueEnabled and activeRescueTarget ~= nil then
-        return
-    end
-    -- 如果自动收集开启，且当前有可收集物品，则挂机让位
-    if autoCollectEnabled and hasCollectibleItems then
-        return
-    end
+    if autoRescueEnabled and activeRescueTarget ~= nil then return end
+    if autoCollectEnabled and hasCollectibleItems then return end
     
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = lp.Character.HumanoidRootPart
@@ -1625,7 +1538,6 @@ end
 
 function startAutoFarm()
     if farmConnection then farmConnection:Disconnect() end
-    -- 保存当前地面位置（用于关闭时返回）
     if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
         savedGroundPosition = lp.Character.HumanoidRootPart.Position
     else
@@ -1638,7 +1550,7 @@ end
 function stopAutoFarm()
     if farmConnection then farmConnection:Disconnect(); farmConnection = nil end
     destroySkyPlatform()
-    task.spawn(returnToGround)  -- 异步返回，避免冲突
+    task.spawn(returnToGround)
 end
 
 function toggleAutoFarm()
@@ -1654,18 +1566,16 @@ function toggleAutoFarm()
     refreshPanelButtons()
 end
 
--- ==================== 重生后自动归位（整合到高空挂机模块） ====================
 if not respawnHandlerAdded then
     respawnHandlerAdded = true
     lp.CharacterAdded:Connect(function(character)
-        task.wait(0.5)  -- 等待角色稳定
+        task.wait(0.5)
         if autoFarmEnabled then
             local hrp = character:FindFirstChild("HumanoidRootPart")
             if hrp then
                 local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
                 hrp.CFrame = CFrame.new(targetPos)
                 task.wait(0.1)
-                -- 重新创建或更新平台
                 if not skyPlatform or not skyPlatform.Parent then
                     skyPlatform = createSkyPlatform()
                 else
@@ -1676,6 +1586,216 @@ if not respawnHandlerAdded then
             end
         end
     end)
+end
+
+-- ==================== 自动收集物品（性能优化版，添加调试） ====================
+local autoCollectEnabled = false
+local collectHeartbeatConnection = nil
+local COLLECT_COOLDOWN = 0.2
+local COLLECT_DISTANCE = 1500
+local SCAN_INTERVAL = 1.0
+local COLLECT_KEYWORDS = {}
+local TELEPORT_TO_ITEM = true
+
+local collectedCache = {}
+local lastCollectTime = 0
+local nextScanTime = 0
+local currentCollecting = false
+
+local searchRootCache = nil
+local searchRootCacheTime = 0
+local function getSearchRoot()
+    local now = os.clock()
+    if searchRootCache and (now - searchRootCacheTime) < 5 then
+        return searchRootCache
+    end
+    local candidates = {
+        workspace:FindFirstChild("Game"),
+        workspace:FindFirstChild("Items"),
+        workspace:FindFirstChild("Drops"),
+        workspace:FindFirstChild("Map"),
+        workspace
+    }
+    for _, root in ipairs(candidates) do
+        if root then
+            searchRootCache = root
+            searchRootCacheTime = now
+            return root
+        end
+    end
+    searchRootCache = workspace
+    searchRootCacheTime = now
+    return workspace
+end
+
+local function getPlayerPosition()
+    if not lp or not lp.Character then return nil end
+    local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
+    return hrp and hrp.Position or nil
+end
+
+local function isPlayerCharacter(obj)
+    if obj:FindFirstChild("Humanoid") then return true end
+    if Players:GetPlayerFromCharacter(obj) then return true end
+    if obj == lp.Character then return true end
+    return false
+end
+
+local function getCollectibles()
+    local items = {}
+    local myPos = getPlayerPosition()
+    if not myPos then return items end
+    local searchRoot = getSearchRoot()
+    if not searchRoot then return items end
+    local MAX_SEARCH_RADIUS = 1500
+    local descendants = searchRoot:GetDescendants()
+    for _, obj in ipairs(descendants) do
+        if isPlayerCharacter(obj) then continue end
+        if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
+            local lowerName = obj.Name:lower()
+            local nameMatch = false
+            if #COLLECT_KEYWORDS == 0 then
+                nameMatch = true
+            else
+                for _, kw in ipairs(COLLECT_KEYWORDS) do
+                    if lowerName:find(kw) then
+                        nameMatch = true
+                        break
+                    end
+                end
+            end
+            if not nameMatch then continue end
+            local pos = nil
+            if obj:IsA("BasePart") then
+                pos = obj.Position
+            elseif obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") then
+                pos = obj.PrimaryPart.Position
+            elseif obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") then
+                pos = obj.HumanoidRootPart.Position
+            elseif obj:IsA("Model") and obj:FindFirstChildOfClass("BasePart") then
+                pos = obj:FindFirstChildOfClass("BasePart").Position
+            else
+                continue
+            end
+            local dist = (myPos - pos).Magnitude
+            if dist > MAX_SEARCH_RADIUS then continue end
+            table.insert(items, {obj = obj, position = pos, distance = dist})
+        end
+    end
+    return items
+end
+
+local function performCollect(targetItem)
+    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
+    local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    if TELEPORT_TO_ITEM then
+        hrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
+        task.wait(0.05)
+    else
+        local humanoid = lp.Character:FindFirstChild("Humanoid")
+        if humanoid then humanoid:MoveTo(targetItem.position) end
+        task.wait(0.3)
+    end
+    return true
+end
+
+local function autoCollectLoop()
+    if not autoCollectEnabled then return end
+    if autoRescueEnabled and activeRescueTarget ~= nil then return end
+    if currentCollecting then return end
+    if not getPlayerPosition() then return end
+
+    local now = os.clock()
+    if now - lastCollectTime < COLLECT_COOLDOWN then return end
+    if now < nextScanTime then return end
+    nextScanTime = now + SCAN_INTERVAL
+
+    local items = getCollectibles()
+    hasCollectibleItems = (#items > 0)
+    print("[调试] 扫描到物品数量:", #items)
+    if #items == 0 then
+        if autoFarmEnabled then teleportToSky() end
+        return
+    end
+
+    local myPos = getPlayerPosition()
+    if not myPos then return end
+
+    local bestItem = nil
+    local bestDist = COLLECT_DISTANCE
+    for _, item in ipairs(items) do
+        if not item.obj or not item.obj.Parent then continue end
+        local dist = item.distance or (myPos - item.position).Magnitude
+        if dist < bestDist then
+            if not (collectedCache[item.obj] and now - collectedCache[item.obj] < 10) then
+                bestDist = dist
+                bestItem = item
+            end
+        end
+    end
+
+    if bestItem then
+        currentCollecting = true
+        local success = performCollect(bestItem)
+        if success then
+            collectedCache[bestItem.obj] = nil
+            lastCollectTime = os.clock()
+            nextScanTime = os.clock() + 0.05
+            print("[自动收集] 拾取 " .. bestItem.obj.Name)
+            if autoFarmEnabled then teleportToSky() end
+        else
+            collectedCache[bestItem.obj] = os.clock()
+        end
+        currentCollecting = false
+    else
+        if autoFarmEnabled then teleportToSky() end
+    end
+end   -- 只有一个 end
+
+function startAutoCollect()
+    if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
+    collectHeartbeatConnection = RunService.Heartbeat:Connect(function()
+        if autoCollectEnabled then
+            autoCollectLoop()
+        end
+    end)
+    print("[自动收集] 已启动（调试模式，扫描所有物体）")
+end
+
+function stopAutoCollect()
+    if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect(); collectHeartbeatConnection = nil end
+    collectedCache = {}
+    nextScanTime = 0
+    lastCollectTime = 0
+    print("[自动收集] 已停止")
+end
+
+function toggleAutoCollect()
+    autoCollectEnabled = not autoCollectEnabled
+    if autoCollectEnabled then
+        startAutoCollect()
+        showNotice("💰 自动收集已开启（调试模式）", true)
+    else
+        stopAutoCollect()
+        showNotice("💤 自动收集已关闭", true)
+    end
+    updateAntiAFK()
+    refreshPanelButtons()
+
+    local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
+    if panel then
+        local other2Cont = panel:FindFirstChild("其他 2Container")
+        if other2Cont then
+            for _, btn in ipairs(other2Cont:GetChildren()) do
+                if btn:IsA("TextButton") and (btn.Text:find("自动收集") or btn.Text:find("💰")) then
+                    btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
+                    btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
+                    break
+                end
+            end
+        end
+    end
 end
 
 -- ==================== 自动救助倒地队友（前置定义） ====================
@@ -1729,12 +1849,11 @@ function pressE()
     pcall(function()
         local vim = game:GetService("VirtualInputManager")
         vim:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
-        task.wait(1.5)   -- 仅等一帧
+        task.wait(1.5)
         vim:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
     end)
 end
 
--- 🔍 调试：列出 Character 下的所有远程事件
 task.spawn(function()
     task.wait(3)
     local charEvents = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character")
@@ -1754,15 +1873,10 @@ end)
 function startAutoRescue()
     if rescueConnection then rescueConnection:Disconnect() end
     print("[自动救助] 启动救助监控...")
-    
-    -- 预先获取交互远程事件
     local interactRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Character") and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
-    
     rescueConnection = RunService.Heartbeat:Connect(function()
         if not autoRescueEnabled then return end
         if isRescuing then return end
-
-        -- 自身状态检查
         if not lp.Character then return end
         local myHumanoid = lp.Character:FindFirstChild("Humanoid")
         if not myHumanoid then return end
@@ -1770,11 +1884,8 @@ function startAutoRescue()
         local myState = lp.Character:GetAttribute("State") or ""
         local myDowned = lp.Character:GetAttribute("Downed")
         if myDowned or myState == "Downed" or myState == "Dead" then return end
-
         local downedPlayer = findNearestDowned()
-        if downedPlayer then print("[自动救助] 发现倒地玩家:", downedPlayer.Name) end
         if not downedPlayer then return end
-
         isRescuing = true
         task.spawn(function()
             local targetCharacter = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Players") and (workspace.Game.Players:FindFirstChild(downedPlayer.Name) or workspace.Game.Players:FindFirstChild(tostring(downedPlayer.UserId)))
@@ -1785,25 +1896,16 @@ function startAutoRescue()
                         print("[自动救助] 传送到", downedPlayer.Name, "身边")
                         lp.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
                         lp.Character.HumanoidRootPart.CFrame = CFrame.lookAt(lp.Character.HumanoidRootPart.Position, targetHRP.Position)
-
-                        -- 🚀 使用已验证的远程事件瞬间救助
                         if interactRemote then
                             pcall(function()
-                               interactRemote:FireServer("Revive", true, player.UserId)   -- 使用 UserId
-                               -- 或 
-                               interactRemote:FireServer("Revive", player)                -- 无需 true
-                               -- 或
-                               interactRemote:FireServer("Revive", true, character)       -- 使用角色对象
+                                interactRemote:FireServer("Revive", true, downedPlayer.UserId)
                             end)
                             showNotice("✨ 瞬间救助 " .. downedPlayer.Name, true)
                         else
-                            -- 若事件不存在，回退到模拟按键（通常不会发生）
-                            print("[自动救助] 远程事件不存在，回退到模拟按键")
                             pressE()
                             showNotice("🚑 正在救助 " .. downedPlayer.Name, true)
                         end
-
-                        task.wait(0.05)  -- 极短冷却，防重复
+                        task.wait(0.05)
                     end
                 end
             end
