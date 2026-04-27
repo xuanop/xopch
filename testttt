@@ -1712,15 +1712,28 @@ local function performCollect(targetItem)
     if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
     local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
+
+    local itemObj = targetItem.obj
+    local originalParent = itemObj.Parent
+    local originalPos = itemObj.Position
+
     if TELEPORT_TO_ITEM then
         hrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
-        task.wait(0.05)
+        task.wait(0.15)   -- 等待服务器响应拾取
     else
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         if humanoid then humanoid:MoveTo(targetItem.position) end
         task.wait(0.3)
     end
-    return true
+
+    -- 检测物品是否仍然存在且位置未变（拾取成功通常会导致物品消失或移动）
+    local stillExists = itemObj and itemObj.Parent and itemObj.Parent == originalParent
+    local posChanged = stillExists and (itemObj.Position - originalPos).Magnitude > 0.1
+    if not stillExists or posChanged then
+        return true   -- 物品消失或移动，认为拾取成功
+    else
+        return false  -- 物品仍在原地，拾取失败
+    end
 end
 
 local function autoCollectLoop()
