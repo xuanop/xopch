@@ -1685,6 +1685,18 @@ local function getCollectibles()
     return items
 end
 
+-- 排除玩家身体部位
+local forbiddenNames = {"humanoidrootpart", "head", "torso", "left leg", "right leg", "left arm", "right arm"}
+local lowerName = obj.Name:lower()
+local isForbidden = false
+for _, fn in ipairs(forbiddenNames) do
+    if lowerName == fn or lowerName:find(fn) then
+        isForbidden = true
+        break
+    end
+end
+if isForbidden then continue end
+
 local function performCollect(targetItem)
     if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
     local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
