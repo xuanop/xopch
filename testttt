@@ -3073,7 +3073,7 @@ local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2          -- 拾取后冷却（秒）
 local COLLECT_DISTANCE = 100          -- 搜索距离（格）
 local SCAN_INTERVAL = 1.0             -- 扫描间隔（秒），原为0.3，降低CPU占用
-local COLLECT_KEYWORDS = {"visual"}
+local COLLECT_KEYWORDS = {"visual"}, {"Bee"}
 local TELEPORT_TO_ITEM = true
 
 local collectedCache = {}
