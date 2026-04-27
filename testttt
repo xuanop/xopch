@@ -19,7 +19,7 @@ local function safeCall(func, ...)
     if not success then
         warn("[MyCommander] 错误:", result)
     end
-    return result
+    return result    local bestItem = nil
 end
 
 print("[MyCommander] 脚本正在加载...")
@@ -1795,49 +1795,6 @@ local function autoCollectLoop()
     if #validItems == 0 then
         if autoFarmEnabled then teleportToSky() end
         return
-    end
-
-    -- 找最近物品
-    local bestItem = nil
-    local bestDist = COLLECT_DISTANCE
-    for _, item in ipairs(validItems) do
-        local dist = item.distance or (myPos - item.position).Magnitude
-        if dist < bestDist then
-            bestDist = dist
-            bestItem = item
-        end
-    end
-
-    if bestItem then
-        currentCollecting = true
-        local success = performCollect(bestItem)
-
-        if success then
-            failCountCache[bestItem.obj] = nil
-            collectedCache[bestItem.obj] = now
-            lastCollectTime = now
-            nextScanTime = now + 0.05
-            print("[自动收集] 已拾取 " .. bestItem.obj.Name)
-
-            -- 收集成功后，若高空挂机开启，则返回天空平台
-            if autoFarmEnabled then
-                teleportToSky()
-            end
-        else
-            local currentFail = (failCountCache[bestItem.obj] or 0) + 1
-            failCountCache[bestItem.obj] = currentFail
-            if currentFail >= FAILED_THRESHOLD then
-                print("[自动收集] 物品 " .. bestItem.obj.Name .. " 失败次数已达阈值，永久忽略")
-                permanentlyIgnored[bestItem.obj] = true
-            else
-                print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
-            end
-            lastCollectTime = now
-            nextScanTime = now + 0.5
-        end
-        currentCollecting = false
-    else
-        if autoFarmEnabled then teleportToSky() end
     end
 end
 
