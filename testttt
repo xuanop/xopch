@@ -1808,38 +1808,38 @@ local function autoCollectLoop()
         end
     end
 
-    if bestItem then
-    currentCollecting = true
-    local success = performCollect(bestItem)
+        if bestItem then
+        currentCollecting = true
+        local success = performCollect(bestItem)
 
-    if success then
-        failCountCache[bestItem.obj] = nil
-        collectedCache[bestItem.obj] = now
-        lastCollectTime = now
-        nextScanTime = now + 0.05
-        print("[自动收集] 已拾取 " .. bestItem.obj.Name)
+        if success then
+            failCountCache[bestItem.obj] = nil
+            collectedCache[bestItem.obj] = now
+            lastCollectTime = now
+            nextScanTime = now + 0.05
+            print("[自动收集] 已拾取 " .. bestItem.obj.Name)
 
-        -- ✅ 收集成功后，若开启了高空挂机，将角色和平台移回高空
-        if autoFarmEnabled then
-            teleportToSky()
-        end
-    else
-        -- 拾取失败，累计失败次数
-        local currentFail = (failCountCache[bestItem.obj] or 0) + 1
-        failCountCache[bestItem.obj] = currentFail
-        if currentFail >= FAILED_THRESHOLD then
-            print("[自动收集] 物品 " .. bestItem.obj.Name .. " 失败次数已达阈值，永久忽略")
-            permanentlyIgnored[bestItem.obj] = true
+            -- ✅ 收集成功后，若高空挂机开启，才将角色和平台移回高空
+            if autoFarmEnabled then
+                teleportToSky()
+            end
         else
-            print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
+            -- 拾取失败处理
+            local currentFail = (failCountCache[bestItem.obj] or 0) + 1
+            failCountCache[bestItem.obj] = currentFail
+            if currentFail >= FAILED_THRESHOLD then
+                print("[自动收集] 物品 " .. bestItem.obj.Name .. " 失败次数已达阈值，永久忽略")
+                permanentlyIgnored[bestItem.obj] = true
+            else
+                print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
+            end
+            lastCollectTime = now
+            nextScanTime = now + 0.5
         end
-        lastCollectTime = now
-        nextScanTime = now + 0.5
+        currentCollecting = false
+    else
+        if autoFarmEnabled then teleportToSky() end
     end
-    currentCollecting = false
-else
-    if autoFarmEnabled then teleportToSky() end
-end
 
 -- 启动/停止函数略微调整（保证与优化兼容）
 function startAutoCollect()
