@@ -1592,9 +1592,9 @@ end
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2
-local COLLECT_DISTANCE = 1250                     -- 拾取距离（格）
+local COLLECT_DISTANCE = 1250
 local SCAN_INTERVAL = 1.0
-local COLLECT_KEYWORDS = {"visual", "bee"}  -- 至少2个关键词（不区分大小写）
+local COLLECT_KEYWORDS = {"visual", "bee"}  -- 可临时改为 {} 调试
 local TELEPORT_TO_ITEM = true
 
 hasCollectibleItems = false   -- 全局标志
@@ -1604,7 +1604,6 @@ local lastCollectTime = 0
 local nextScanTime = 0
 local currentCollecting = false
 
--- 缓存搜索根容器（避免每帧重复查找）
 local searchRootCache = nil
 local searchRootCacheTime = 0
 local function getSearchRoot()
@@ -1612,7 +1611,6 @@ local function getSearchRoot()
     if searchRootCache and (now - searchRootCacheTime) < 5 then
         return searchRootCache
     end
-    -- 可能的物品容器优先顺序
     local candidates = {
         workspace:FindFirstChild("Game"),
         workspace:FindFirstChild("Items"),
@@ -1653,7 +1651,7 @@ local function getCollectibles()
     local searchRoot = getSearchRoot()
     if not searchRoot then return items end
 
-    local MAX_SEARCH_RADIUS = 1500   -- 搜索半径（格）
+    local MAX_SEARCH_RADIUS = 1500
     local descendants = searchRoot:GetDescendants()
 
     for _, obj in ipairs(descendants) do
@@ -1661,15 +1659,15 @@ local function getCollectibles()
         if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
             local lowerName = obj.Name:lower()
 
-            -- 排除玩家身体部件（防止误拾取）
+            -- 排除玩家身体部件
             if lowerName == "humanoidrootpart" or lowerName:find("humanoid") or lowerName:find("torso") or lowerName:find("leg") or lowerName:find("arm") or lowerName:find("head") then
                 continue
             end
 
-            -- 关键词匹配
+            -- 关键词匹配（调试时可将 nameMatch 直接设为 true）
             local nameMatch = false
             if #COLLECT_KEYWORDS == 0 then
-                nameMatch = true  -- 调试模式：匹配所有物体
+                nameMatch = true
             else
                 for _, kw in ipairs(COLLECT_KEYWORDS) do
                     if lowerName:find(kw) then
@@ -1680,7 +1678,7 @@ local function getCollectibles()
             end
             if not nameMatch then continue end
 
-            -- 获取物体位置
+            -- 获取位置
             local pos = nil
             if obj:IsA("BasePart") then
                 pos = obj.Position
@@ -1697,6 +1695,11 @@ local function getCollectibles()
             local dist = (myPos - pos).Magnitude
             if dist > MAX_SEARCH_RADIUS then continue end
             table.insert(items, {obj = obj, position = pos, distance = dist})
+            
+            -- 调试输出：打印所有匹配的物体（仅当关键词为空或匹配时）
+            if #COLLECT_KEYWORDS == 0 then
+                print("[调试] 发现物体:", obj.Name, "距离:", math.floor(dist))
+            end
         end
     end
     return items
@@ -1719,12 +1722,7 @@ end
 
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
-
-    -- 救助优先
-    if autoRescueEnabled and activeRescueTarget ~= nil then
-        return
-    end
-
+    if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if currentCollecting then return end
     if not getPlayerPosition() then return end
 
@@ -1734,11 +1732,9 @@ local function autoCollectLoop()
     nextScanTime = now + SCAN_INTERVAL
 
     local items = getCollectibles()
-    hasCollectibleItems = (#items > 0)   -- 全局标志，用于高空挂机优先级
-    if #items == 0 then
-        -- 无物品，让挂机处理（不主动传送）
-        return
-    end
+    hasCollectibleItems = (#items > 0)
+    print("[调试] 扫描到物品数量:", #items)   -- 关键输出
+    if #items == 0 then return end
 
     local myPos = getPlayerPosition()
     if not myPos then return end
@@ -1762,19 +1758,15 @@ local function autoCollectLoop()
         if success then
             collectedCache[bestItem.obj] = nil
             lastCollectTime = os.clock()
-            nextScanTime = os.clock() + 0.05   -- 拾取后快速再扫描
+            nextScanTime = os.clock() + 0.05
             print("[自动收集] 拾取 " .. bestItem.obj.Name)
-            if autoFarmEnabled then
-                teleportToSky()
-            end
+            if autoFarmEnabled then teleportToSky() end
         else
             collectedCache[bestItem.obj] = os.clock()
         end
         currentCollecting = false
     else
-        if autoFarmEnabled then
-            teleportToSky()
-        end
+        if autoFarmEnabled then teleportToSky() end
     end
 end
 
