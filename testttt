@@ -1614,27 +1614,7 @@ local currentCollecting = false
 local searchRootCache = nil
 local searchRootCacheTime = 0
 local function getSearchRoot()
-    local now = os.clock()
-    if searchRootCache and (now - searchRootCacheTime) < 5 then
-        return searchRootCache
-    end
-    local candidates = {
-        workspace:FindFirstChild("Game"),
-        workspace:FindFirstChild("Items"),
-        workspace:FindFirstChild("Drops"),
-        workspace:FindFirstChild("Map"),
-        workspace
-    }
-    for _, root in ipairs(candidates) do
-        if root then
-            searchRootCache = root
-            searchRootCacheTime = now
-            return root
-        end
-    end
-    searchRootCache = workspace
-    searchRootCacheTime = now
-    return workspace
+    return workspace  -- 直接全局扫描，物品必定在 Workspace 下
 end
 
 local function getPlayerPosition()
@@ -1643,10 +1623,21 @@ local function getPlayerPosition()
     return hrp and hrp.Position or nil
 end
 
-local function isPlayerCharacter(obj)
-    if obj:FindFirstChild("Humanoid") then return true end
-    if Players:GetPlayerFromCharacter(obj) then return true end
-    if obj == lp.Character then return true end
+-- 判断一个对象是否属于任何玩家角色（包括零件、模型）
+local function isPartOfPlayerCharacter(obj)
+    if not obj then return false end
+    -- 如果本身就是 Model 且是玩家角色
+    if obj:IsA("Model") then
+        return Players:GetPlayerFromCharacter(obj) ~= nil
+    end
+    -- 向上查找父 Model
+    local parent = obj
+    while parent and not parent:IsA("Model") do
+        parent = parent.Parent
+    end
+    if parent and parent:IsA("Model") then
+        return Players:GetPlayerFromCharacter(parent) ~= nil
+    end
     return false
 end
 
@@ -1659,12 +1650,17 @@ local function getCollectibles()
     local MAX_SEARCH_RADIUS = 1500
     local descendants = searchRoot:GetDescendants()
     for _, obj in ipairs(descendants) do
-        if isPlayerCharacter(obj) then continue end
+        -- 跳过任何属于玩家的零件或模型
+        if isPartOfPlayerCharacter(obj) then continue end
         if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
             local lowerName = obj.Name:lower()
-            if lowerName == "humanoidrootpart" or lowerName:find("humanoid") or lowerName:find("torso") or lowerName:find("leg") or lowerName:find("arm") or lowerName:find("head") then
+
+            -- 仅排除极其明确的玩家身体件（如 HumanoidRootPart），不再使用模糊的 find
+            if lowerName == "humanoidrootpart" then
                 continue
             end
+
+            -- 关键词匹配
             local nameMatch = false
             if #COLLECT_KEYWORDS == 0 then
                 nameMatch = true
@@ -1677,6 +1673,8 @@ local function getCollectibles()
                 end
             end
             if not nameMatch then continue end
+
+            -- 获取位置
             local pos = nil
             if obj:IsA("BasePart") then
                 pos = obj.Position
@@ -1689,6 +1687,7 @@ local function getCollectibles()
             else
                 continue
             end
+
             local dist = (myPos - pos).Magnitude
             if dist > MAX_SEARCH_RADIUS then continue end
             table.insert(items, {obj = obj, position = pos, distance = dist})
