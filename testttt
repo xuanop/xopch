@@ -1705,36 +1705,42 @@ local function getCollectibles()
     return items
 end
 
--- 核心优化：收集时移动平台跟随，收集后平台回到高空
+-- 核心优化：收集时移动平台跟随，收集后平台回到高空（含调试版）
 local function performCollect(targetItem)
-    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
+    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then
+        return false
+    end
     local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
+    if not hrp then
+        warn("[收集] 没有 HumanoidRootPart，无法传送")
+        return false
+    end
 
     if TELEPORT_TO_ITEM then
-        -- 如果高空平台存在，先将其移到物品正下方（给角色垫脚）
-        if skyPlatform and skyPlatform.Parent then
-            skyPlatform.CFrame = CFrame.new(targetItem.position + Vector3.new(0, -3, 0))
-        end
+        local itemPos = targetItem.position
+        local platformOffset = Vector3.new(0, -3, 0)   -- 平台放在物品下方
+        local charOffset = Vector3.new(0, 3, 0)        -- 角色瞬移到物品上方 3 格（更显眼）
 
-        -- 传送到物品正上方 0.5 格，确保身体与物品碰撞
-        hrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 0.5, 0))
+        -- 传送角色到物品上方
+        local targetPosition = itemPos + charOffset
+        hrp.CFrame = CFrame.new(targetPosition)
+        print(string.format("[收集] 传送角色到 %s (物品位置 %s)", tostring(targetPosition), tostring(itemPos)))
 
-        -- 等待接触检测（物品被捡起后会消失）
+        -- 等待物品消失（被拾取）
         local start = os.clock()
         while (os.clock() - start) < 0.6 do
             task.wait(0.05)
             if not targetItem.obj.Parent then
-                -- 物品消失，拾取成功
+                print("[收集] 物品已消失，拾取成功")
                 return true
             end
         end
 
-        -- 超时后物品仍存在，视为失败
+        -- 超时后仍未消失
+        warn("[收集] 物品未消失，可能无法自动拾取")
         return false
-
     else
-        -- 走路过去（备用方案）
+        -- 步行方案
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         if humanoid then
             humanoid:MoveTo(targetItem.position)
