@@ -1591,10 +1591,21 @@ local function returnToGround()
 end
 
 -- 挂机心跳逻辑
+-- 添加一个全局标志，在自动收集循环中更新（是否有可收集物品）
+local hasCollectibleItems = false
+
+-- 修改 autoFarmHeartbeat
 local function autoFarmHeartbeat()
     if not autoFarmEnabled then return end
-    -- 救助优先：如果自动救助已开启且有活跃救助目标，则暂停挂机
-    if (autoRescueEnabled and activeRescueTarget ~= nil) or autoCollectEnabled then return end
+    -- 救助优先
+    if autoRescueEnabled and activeRescueTarget ~= nil then
+        return
+    end
+    -- 如果自动收集开启，且当前有可收集物品，则挂机让位
+    if autoCollectEnabled and hasCollectibleItems then
+        return
+    end
+    
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = lp.Character.HumanoidRootPart
     local currentPos = hrp.Position
@@ -3190,16 +3201,17 @@ local function autoCollectLoop()
     nextScanTime = now + SCAN_INTERVAL
 
     local items = getCollectibles()
+    hasCollectibleItems = (#items > 0)   -- 更新全局标志
+    print("[调试] 扫描到物品数量:", #items)
     if #items == 0 then
         if autoFarmEnabled then
             teleportToSky()
         end
         return
     end
-
+    -- ... 以下为原有拾取逻辑 ...
     local myPos = getPlayerPosition()
     if not myPos then return end
-
     local bestItem = nil
     local bestDist = COLLECT_DISTANCE
     for _, item in ipairs(items) do
@@ -3233,7 +3245,7 @@ local function autoCollectLoop()
             teleportToSky()
         end
     end
-end   -- 注意：这里只有一个 end，函数结束
+end
 
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
