@@ -1589,6 +1589,7 @@ if not respawnHandlerAdded then
 end
 
 -- ==================== 自动收集物品（性能优化版，添加调试） ====================
+-- ==================== 自动收集物品（性能优化版，带平台跟随） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 local COLLECT_COOLDOWN = 0.2
@@ -1705,12 +1706,21 @@ local function getCollectibles()
     return items
 end
 
+-- 核心优化：收集时移动平台跟随，收集后平台回到高空
 local function performCollect(targetItem)
     if not targetItem or not targetItem.obj or not targetItem.obj.Parent then return false end
     local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
+
     if TELEPORT_TO_ITEM then
-        hrp.CFrame = CFrame.new(targetItem.position + Vector3.new(0, 2, 0))
+        local offset = Vector3.new(0, 2, 0)   -- 角色站在物品上方2格
+        -- 如果存在高空挂机平台，则先将平台移动到物品脚下
+        if skyPlatform and skyPlatform.Parent then
+            -- 将平台放到物品下方3格处，作为角色的落脚点
+            skyPlatform.CFrame = CFrame.new(targetItem.position + Vector3.new(0, -3, 0))
+        end
+        -- 传送角色到物品上方
+        hrp.CFrame = CFrame.new(targetItem.position + offset)
         task.wait(0.05)
     else
         local humanoid = lp.Character:FindFirstChild("Humanoid")
@@ -1752,7 +1762,6 @@ local function autoCollectLoop()
             if failCount < FAILED_THRESHOLD then
                 table.insert(validItems, item)
             else
-                -- 失败次数已达阈值，标记为永久忽略（仅首次打印）
                 if not permanentlyIgnored[obj] then
                     permanentlyIgnored[obj] = true
                     print("[自动收集] 永久忽略物品: " .. obj.Name .. "（失败次数已达 " .. FAILED_THRESHOLD .. "）")
@@ -1782,15 +1791,14 @@ local function autoCollectLoop()
         currentCollecting = true
         local success = performCollect(bestItem)
         if success then
-            -- 拾取成功：清空失败计数，并记录到成功缓存
             failCountCache[bestItem.obj] = nil
             collectedCache[bestItem.obj] = now
             lastCollectTime = now
             nextScanTime = now + 0.05
             print("[自动收集] 拾取 " .. bestItem.obj.Name)
+            -- 收集完成后，若高空挂机开启，则角色与平台一同返回高空
             if autoFarmEnabled then teleportToSky() end
         else
-            -- 拾取失败：增加失败计数
             local currentFail = (failCountCache[bestItem.obj] or 0) + 1
             failCountCache[bestItem.obj] = currentFail
             if currentFail >= FAILED_THRESHOLD then
@@ -1799,7 +1807,6 @@ local function autoCollectLoop()
             else
                 print("[自动收集] 拾取失败 (" .. currentFail .. "/" .. FAILED_THRESHOLD .. "): " .. bestItem.obj.Name)
             end
-            -- 失败后也稍微冷却一下，避免疯狂重试
             lastCollectTime = now
             nextScanTime = now + 0.5
         end
@@ -1809,6 +1816,7 @@ local function autoCollectLoop()
     end
 end
 
+-- 启动/停止函数略微调整（保证与优化兼容）
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
     collectHeartbeatConnection = RunService.Heartbeat:Connect(function()
@@ -1816,7 +1824,7 @@ function startAutoCollect()
             autoCollectLoop()
         end
     end)
-    print("[自动收集] 已启动（失败计数模式，阈值 " .. FAILED_THRESHOLD .. " 次）")
+    print("[自动收集] 已启动（平台跟随模式）")
 end
 
 function stopAutoCollect()
@@ -1833,7 +1841,7 @@ function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
     if autoCollectEnabled then
         startAutoCollect()
-        showNotice("💰 自动收集已开启（失败计数模式）", true)
+        showNotice("💰 自动收集已开启（平台跟随）", true)
     else
         stopAutoCollect()
         showNotice("💤 自动收集已关闭", true)
