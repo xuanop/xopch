@@ -1593,12 +1593,12 @@ end
 -- ==================== 自动收集物品（极速优化版） ====================
 local autoCollectEnabled = false
 local collectConnection = nil
-local COLLECT_COOLDOWN = 0.05      -- 原 0.2，大幅提高拾取频率
+local COLLECT_COOLDOWN = 0.12      -- 原 0.2，大幅提高拾取频率
 local COLLECT_DISTANCE = 1250
-local SCAN_INTERVAL = 0.25         -- 原 1.0，更快扫描新物品
+local SCAN_INTERVAL = 0.5         -- 原 1.0，更快扫描新物品
 local COLLECT_KEYWORDS = {"visual", "bee"}
 local TELEPORT_TO_ITEM = true
-local TELEPORT_WAIT = 0.05         -- 原 0.15，缩短传送等待
+local TELEPORT_WAIT = 0.1         -- 原 0.15，缩短传送等待
 local FAILED_THRESHOLD = 6
 
 hasCollectibleItems = false
