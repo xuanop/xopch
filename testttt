@@ -1707,7 +1707,7 @@ local function performCollect(targetItem)
 
     if TELEPORT_TO_ITEM then
         local teleportInterval = 0.06
-        local maxTryTime = 15
+        local maxTryTime = 3
         local startTime = os.clock()
 
         while (os.clock() - startTime) < maxTryTime do
