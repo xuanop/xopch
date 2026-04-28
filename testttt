@@ -1729,6 +1729,9 @@ end
 
 -- 主循环
 local function autoCollectLoop()
+    -- 无论任何条件，每次心跳都输出一次，用于确认循环是否运行
+    warn("[收集] 心跳检测 - 已开启: " .. tostring(autoCollectEnabled) .. " | 正在收集: " .. tostring(currentCollecting))
+    
     if not autoCollectEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if currentCollecting then return end
@@ -1736,13 +1739,15 @@ local function autoCollectLoop()
     local now = os.clock()
     if now < nextScanTime then return end
 
-    -- 动态扫描间隔：最近物品越近，扫描越快
+    -- 动态扫描间隔
     local scanInterval = SCAN_INTERVAL_BASE
     local item = findNearestItem()
     if item and item.dist then
+        warn("[收集] 发现物品: " .. item.obj.Name .. " 距离: " .. math.floor(item.dist))
         scanInterval = math.max(SCAN_INTERVAL_MIN, SCAN_INTERVAL_BASE * (item.dist / MAX_SCAN_RADIUS))
         hasCollectibleItems = true
     else
+        warn("[收集] 未发现目标物品")
         hasCollectibleItems = false
     end
 
@@ -1753,22 +1758,20 @@ local function autoCollectLoop()
         return
     end
 
-    -- 收集冷却检查
     if now - lastCollectTime < COLLECT_COOLDOWN then return end
 
     currentCollecting = true
     local success = collectItem(item)
     if success then
         lastCollectTime = now
-        nextScanTime = now + 0.1 -- 成功后快速重扫
-        if DEBUG_MODE then
-            print("[收集] 成功拾取: " .. item.obj.Name)
-        end
+        nextScanTime = now + 0.1
+        warn("[收集] 成功拾取: " .. item.obj.Name)
         if autoFarmEnabled then
             teleportToSky()
         end
     else
         nextScanTime = now + 0.5
+        warn("[收集] 拾取失败: " .. item.obj.Name)
     end
     currentCollecting = false
 end
