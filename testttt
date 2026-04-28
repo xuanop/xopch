@@ -1591,263 +1591,99 @@ if not respawnHandlerAdded then
     end)
 end
 
--- ==================== 自动收集物品（性能优化版，带平台跟随） ====================
+-- ==================== 自动收集物品（极简安全版） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
-local COLLECT_COOLDOWN = 0.4
-local COLLECT_DISTANCE = 1250
-local SCAN_INTERVAL = 1.0
-local COLLECT_KEYWORDS = {"visual", "bee head"}
-local TELEPORT_TO_ITEM = true
+local COLLECT_KEYWORDS = {"visual", "bee head"}  -- 只收集这两个
+local TELEPORT_INTERVAL = 0.06
+local MAX_TRY_TIME = 3
 
-hasCollectibleItems = false
-
-local collectedCache = {}
-local failCountCache = {}
-local FAILED_THRESHOLD = 3
-local permanentlyIgnored = {}
-
-local lastCollectTime = 0
-local nextScanTime = 0
-local currentCollecting = false
-
-local searchRootCache = nil
-local searchRootCacheTime = 0
-local function getSearchRoot()
-    return workspace  -- 直接全局扫描，确保覆盖所有物品
-end
-
-local function getPlayerPosition()
-    if not lp or not lp.Character then return nil end
-    local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
-    return hrp and hrp.Position or nil
-end
-
-local function isPartOfPlayerCharacter(obj)
-    if not obj then return false end
-    if obj:IsA("Model") then
-        return Players:GetPlayerFromCharacter(obj) ~= nil
-    end
-    local parent = obj
-    while parent and not parent:IsA("Model") do
-        parent = parent.Parent
-    end
-    if parent and parent:IsA("Model") then
-        return Players:GetPlayerFromCharacter(parent) ~= nil
+local function isCollectible(obj)
+    local name = obj.Name:lower()
+    for _, kw in ipairs(COLLECT_KEYWORDS) do
+        if name == kw:lower() then return true end
     end
     return false
 end
 
-local function getCollectibles()
-    local items = {}
-    local myPos = getPlayerPosition()
-    if not myPos then return items end
-    local searchRoot = getSearchRoot()
-    if not searchRoot then return items end
-    local MAX_SEARCH_RADIUS = 1500
-    local descendants = searchRoot:GetDescendants()
-    for _, obj in ipairs(descendants) do
-        if isPartOfPlayerCharacter(obj) then continue end
-        if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
-            local lowerName = obj.Name:lower()
-            if lowerName == "humanoidrootpart" then
-                continue
-            end
+local function getNearestItem()
+    local character = lp.Character
+    if not character then return nil end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local myPos = root.Position
 
-            -- 仅收集名字完全等于关键词的物品（不区分大小写）
-            local nameMatch = false
-            for _, kw in ipairs(COLLECT_KEYWORDS) do
-                if lowerName == kw then
-                    nameMatch = true
-                    break
+    local nearest = nil
+    local nearestDist = 1500
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") or obj:IsA("Model") then
+            if isCollectible(obj) then
+                local pos = nil
+                if obj:IsA("BasePart") then pos = obj.Position
+                elseif obj:IsA("Model") then
+                    local primary = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")
+                    if primary then pos = primary.Position end
+                end
+                if pos then
+                    local dist = (myPos - pos).Magnitude
+                    if dist < nearestDist then
+                        nearestDist = dist
+                        nearest = {obj = obj, pos = pos}
+                    end
                 end
             end
-            if not nameMatch then continue end
-
-            -- 获取位置
-            local pos = nil
-            if obj:IsA("BasePart") then
-                pos = obj.Position
-            elseif obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") then
-                pos = obj.PrimaryPart.Position
-            elseif obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") then
-                pos = obj.HumanoidRootPart.Position
-            elseif obj:IsA("Model") and obj:FindFirstChildOfClass("BasePart") then
-                pos = obj:FindFirstChildOfClass("BasePart").Position
-            else
-                continue
-            end
-
-            local dist = (myPos - pos).Magnitude
-            if dist > MAX_SEARCH_RADIUS then continue end
-            table.insert(items, {obj = obj, position = pos, distance = dist})
         end
     end
-    return items
+    return nearest
 end
 
-local function performCollect(targetItem)
-    warn("[收集触发] 尝试拾取物品: " .. tostring(targetItem.obj and targetItem.obj.Name))
-    if not targetItem or not targetItem.obj or not targetItem.obj.Parent then
-        return false
-    end
-    local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-
-    if TELEPORT_TO_ITEM then
-        local teleportInterval = 0.06
-        local maxTryTime = 3
-        local startTime = os.clock()
-
-        while (os.clock() - startTime) < maxTryTime do
-            if not targetItem.obj.Parent then
-                return true
-            end
-
-            -- 动态获取物品当前位置
-            local itemPos = nil
-            if targetItem.obj:IsA("BasePart") then
-                itemPos = targetItem.obj.Position
-            elseif targetItem.obj:IsA("Model") then
-                local primary = targetItem.obj.PrimaryPart
-                if primary then
-                    itemPos = primary.Position
-                end
-            end
-
-            if not itemPos then
-                task.wait(teleportInterval)
-                continue
-            end
-
-            -- 平台跟随物品移动
-            if skyPlatform and skyPlatform.Parent then
-                skyPlatform.CFrame = CFrame.new(itemPos + Vector3.new(0, -3, 0))
-            end
-
-            -- 角色传送到物品上方
-            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                lp.Character.HumanoidRootPart.CFrame = CFrame.new(itemPos + Vector3.new(0, 2, 0))
-            else
-                return false
-            end
-
-            task.wait(teleportInterval)
-        end
-
-        return false  -- 超时未拾取
-    else
-        local humanoid = lp.Character:FindFirstChild("Humanoid")
-        if humanoid then
-            humanoid:MoveTo(targetItem.position)
-            task.wait(0.5)
-            return not targetItem.obj.Parent
-        end
+local function collectItem(item)
+    local obj = item.obj
+    local pos = item.pos
+    local startTime = os.clock()
+    while (os.clock() - startTime) < MAX_TRY_TIME do
+        if not obj or not obj.Parent then return true end
+        local character = lp.Character
+        if not character then return false end
+        local root = character:FindFirstChild("HumanoidRootPart")
+        if not root then return false end
+        root.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
+        task.wait(TELEPORT_INTERVAL)
     end
     return false
 end
 
-local function autoCollectLoop()
+local function loop()
     if not autoCollectEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
-    if currentCollecting then return end
-    if not getPlayerPosition() then return end
-
-    local now = os.clock()
-    if now - lastCollectTime < COLLECT_COOLDOWN then return end
-    if now < nextScanTime then return end
-    nextScanTime = now + SCAN_INTERVAL
-
-    local items = getCollectibles()
-    hasCollectibleItems = (#items > 0)
-    if #items == 0 then return end
-
-    local myPos = getPlayerPosition()
-    if not myPos then return end
-
-    local validItems = {}
-    for _, item in ipairs(items) do
-        local obj = item.obj
-        if collectedCache[obj] and now - collectedCache[obj] < 10 then
-        elseif permanentlyIgnored[obj] then
-        else
-            local failCount = failCountCache[obj] or 0
-            if failCount < FAILED_THRESHOLD then
-                table.insert(validItems, item)
-            else
-                if not permanentlyIgnored[obj] then
-                    permanentlyIgnored[obj] = true
-                end
-            end
+    local item = getNearestItem()
+    if item then
+        hasCollectibleItems = true
+        if collectItem(item) then
+            hasCollectibleItems = false
+            if autoFarmEnabled then teleportToSky() end
         end
-    end
-
-    if #validItems == 0 then
-        if autoFarmEnabled then teleportToSky() end
-        return
-    end
-
-    local bestItem = nil
-    local bestDist = COLLECT_DISTANCE
-    for _, item in ipairs(validItems) do
-        local dist = item.distance or (myPos - item.position).Magnitude
-        if dist < bestDist then
-            bestDist = dist
-            bestItem = item
-        end
-    end
-
-    if bestItem then
-        currentCollecting = true
-        local success = performCollect(bestItem)
-        if success then
-            failCountCache[bestItem.obj] = nil
-            collectedCache[bestItem.obj] = now
-            lastCollectTime = now
-            nextScanTime = now + 0.05
-            if autoFarmEnabled then
-                teleportToSky()
-            end
-        else
-            local currentFail = (failCountCache[bestItem.obj] or 0) + 1
-            failCountCache[bestItem.obj] = currentFail
-            if currentFail >= FAILED_THRESHOLD then
-                permanentlyIgnored[bestItem.obj] = true
-            end
-            lastCollectTime = now
-            nextScanTime = now + 0.5
-        end
-        currentCollecting = false
     else
+        hasCollectibleItems = false
         if autoFarmEnabled then teleportToSky() end
     end
 end
 
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
-    collectHeartbeatConnection = RunService.Heartbeat:Connect(function()
-        if autoCollectEnabled then autoCollectLoop() end
-    end)
+    collectHeartbeatConnection = RunService.Heartbeat:Connect(loop)
 end
 
 function stopAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect(); collectHeartbeatConnection = nil end
-    collectedCache = {}
-    failCountCache = {}
-    permanentlyIgnored = {}
-    nextScanTime = 0
-    lastCollectTime = 0
 end
 
 function toggleAutoCollect()
     autoCollectEnabled = not autoCollectEnabled
-    if autoCollectEnabled then
-        startAutoCollect()
-    else
-        stopAutoCollect()
-    end
+    if autoCollectEnabled then startAutoCollect() else stopAutoCollect() end
     updateAntiAFK()
     refreshPanelButtons()
+    -- 更新按钮文字
     local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
     if panel then
         local other2Cont = panel:FindFirstChild("其他 2Container")
