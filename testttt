@@ -1706,35 +1706,48 @@ local function performCollect(targetItem)
     if not hrp then return false end
 
     if TELEPORT_TO_ITEM then
-        local itemPos = targetItem.position
-
-        -- 仅首次传送时移动平台到物品脚下
-        if skyPlatform and skyPlatform.Parent then
-            skyPlatform.CFrame = CFrame.new(itemPos + Vector3.new(0, -3, 0))
-        end
-
-        local teleportInterval = 0.06  -- 高频传送间隔
-        local maxTryTime = 3          -- 最长尝试时间（秒），防止无限循环
+        local teleportInterval = 0.06
+        local maxTryTime = 15
         local startTime = os.clock()
 
         while (os.clock() - startTime) < maxTryTime do
-            -- 如果物品消失，立即返回成功
+            -- 物品消失，拾取成功
             if not targetItem.obj.Parent then
                 return true
             end
 
-            -- 角色可能被移动，重新设置位置到物品上方
+            -- 动态获取物品当前位置
+            local itemPos = nil
+            if targetItem.obj:IsA("BasePart") then
+                itemPos = targetItem.obj.Position
+            elseif targetItem.obj:IsA("Model") then
+                local primary = targetItem.obj.PrimaryPart
+                if primary then
+                    itemPos = primary.Position
+                end
+            end
+
+            if not itemPos then
+                task.wait(teleportInterval)
+                continue
+            end
+
+            -- 平台跟随物品移动（放在物品脚下）
+            if skyPlatform and skyPlatform.Parent then
+                skyPlatform.CFrame = CFrame.new(itemPos + Vector3.new(0, -3, 0))
+            end
+
+            -- 角色传送到物品上方
             if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
                 lp.Character.HumanoidRootPart.CFrame = CFrame.new(itemPos + Vector3.new(0, 2, 0))
             else
-                return false  -- 角色意外消失
+                return false
             end
 
             task.wait(teleportInterval)
         end
 
-        -- 超时仍未消失，视为失败
-        return false
+        return false  -- 超时未拾取
     else
         local humanoid = lp.Character:FindFirstChild("Humanoid")
         if humanoid then
