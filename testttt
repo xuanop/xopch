@@ -1591,187 +1591,103 @@ if not respawnHandlerAdded then
     end)
 end
 
--- ==================== 自动收集物品（最终修复版） ====================
+-- ==================== 自动收集物品（极简安全版） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 
--- 用户可修改参数
 local COLLECT_KEYWORDS = {"visual", "bee head"}
-local COLLECT_COOLDOWN = 0.2
-local SCAN_INTERVAL_BASE = 0.8
-local SCAN_INTERVAL_MIN = 0.3
-local MAX_SCAN_RADIUS = 1500
 local TELEPORT_INTERVAL = 0.06
-local MAX_TRY_TIME = 5                -- 安全上限 30 秒，防止意外无限循环
-local FAILED_THRESHOLD = 3
-local DEBUG_MODE = true
+local MAX_TRY_TIME = 5
 
--- 缓存
-local collectedCache = {}
-local failCountCache = {}
-local ignoredCache = {}
-local lastCollectTime = 0
-local nextScanTime = 0
-local currentCollecting = false
-
--- 辅助函数：获取物品位置
-local function getItemPosition(obj)
-    if not obj then return nil end
+local function getItemPos(obj)
     if obj:IsA("BasePart") then
         return obj.Position
     elseif obj:IsA("Model") then
-        local primary = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart")
-        if primary then return primary.Position end
-        -- 尝试任意 BasePart
-        for _, child in ipairs(obj:GetDescendants()) do
-            if child:IsA("BasePart") then
-                return child.Position
-            end
-        end
+        local p = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildOfClass("BasePart")
+        return p and p.Position
     end
-    return nil
 end
 
--- 关键词匹配（完全匹配，不区分大小写）
-local function matchesKeywords(obj)
-    local nameLower = obj.Name:lower()
+local function matches(obj)
+    local n = obj.Name:lower()
     for _, kw in ipairs(COLLECT_KEYWORDS) do
-        if nameLower == kw:lower() then
-            return true
-        end
+        if n == kw:lower() then return true end
     end
     return false
 end
 
--- 寻找最近物品
-local function findNearestItem()
-    local myPos = nil
-    if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-        myPos = lp.Character.HumanoidRootPart.Position
-    else
-        return nil
-    end
-
-    local nearest = nil
-    local nearestDist = MAX_SCAN_RADIUS
+local function findNearest()
+    local char = lp.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local myPos = root.Position
+    local nearestObj, nearestPos, nearestDist
 
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if not obj:IsA("BasePart") and not obj:IsA("Model") then continue end
-        if not matchesKeywords(obj) then continue end
-
-        -- 跳过忽略和冷却中的物品
-        if ignoredCache[obj] then continue end
-        if collectedCache[obj] and (os.clock() - collectedCache[obj]) < 10 then continue end
-
-        local pos = getItemPosition(obj)
-        if not pos then continue end
-
-        local dist = (myPos - pos).Magnitude
-        if dist < nearestDist then
-            nearestDist = dist
-            nearest = {obj = obj, pos = pos, dist = dist}
+        if (obj:IsA("BasePart") or obj:IsA("Model")) and matches(obj) then
+            local pos = getItemPos(obj)
+            if pos then
+                local dist = (myPos - pos).Magnitude
+                if not nearestDist or dist < nearestDist then
+                    nearestDist = dist
+                    nearestObj = obj
+                    nearestPos = pos
+                end
+            end
         end
     end
-    return nearest
+    if nearestObj then
+        return {obj = nearestObj, pos = nearestPos}
+    end
 end
 
--- 执行收集（无限追随，直到物品消失或达到安全时间上限）
 local function collectItem(item)
     local obj = item.obj
     local pos = item.pos
-    local startTime = os.clock()
-
-    while true do
-        -- 超时安全退出（防止卡死）
-        if os.clock() - startTime > MAX_TRY_TIME then
-            if DEBUG_MODE then warn("[收集] 超时停止: " .. obj.Name) end
-            failCountCache[obj] = (failCountCache[obj] or 0) + 1
-            if failCountCache[obj] >= FAILED_THRESHOLD then ignoredCache[obj] = true end
-            return false
-        end
-
-        -- 物品消失（成功）
-        if not obj or not obj.Parent then
-            if obj then collectedCache[obj] = os.clock() end
-            return true
-        end
-
-        -- 角色检查
-        if not lp.Character then return false end
-        local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return false end
-        local humanoid = lp.Character:FindFirstChild("Humanoid")
-        if humanoid and humanoid.Health <= 0 then return false end
-
-        -- 更新物品实时位置
-        local currentPos = getItemPosition(obj)
-        if currentPos then pos = currentPos end
-
-        -- 平台跟随
+    local start = os.clock()
+    while obj and obj.Parent and (os.clock() - start) < MAX_TRY_TIME do
+        local char = lp.Character
+        if not char then break end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then break end
+        local curPos = getItemPos(obj)
+        if curPos then pos = curPos end
         if skyPlatform and skyPlatform.Parent then
             skyPlatform.CFrame = CFrame.new(pos + Vector3.new(0, -3, 0))
         end
-
-        -- 强制传送到物品上方
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
-
         task.wait(TELEPORT_INTERVAL)
     end
+    return obj and not obj.Parent
 end
 
--- 主循环
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if currentCollecting then return end
-
-    local now = os.clock()
-    if now < nextScanTime then return end
-
-    local item = findNearestItem()
+    local item = findNearest()
     if item then
-        if DEBUG_MODE then print("[收集] 发现: " .. item.obj.Name .. " 距:" .. math.floor(item.dist)) end
         hasCollectibleItems = true
-        -- 根据距离动态调整扫描间隔
-        local scanInterval = math.max(SCAN_INTERVAL_MIN, SCAN_INTERVAL_BASE * (item.dist / MAX_SCAN_RADIUS))
-        nextScanTime = now + scanInterval
+        currentCollecting = true
+        if collectItem(item) then
+            hasCollectibleItems = false
+            if autoFarmEnabled then teleportToSky() end
+        end
+        currentCollecting = false
     else
         hasCollectibleItems = false
-        nextScanTime = now + SCAN_INTERVAL_BASE
         if autoFarmEnabled then teleportToSky() end
-        return
     end
-
-    if now - lastCollectTime < COLLECT_COOLDOWN then return end
-
-    currentCollecting = true
-    local success = collectItem(item)
-    if success then
-        lastCollectTime = now
-        nextScanTime = now + 0.1
-        if DEBUG_MODE then print("[收集] 成功: " .. item.obj.Name) end
-        if autoFarmEnabled then teleportToSky() end
-    else
-        nextScanTime = now + 0.5
-        if DEBUG_MODE then print("[收集] 失败/超时: " .. item.obj.Name) end
-    end
-    currentCollecting = false
 end
 
--- 对外接口
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
     collectHeartbeatConnection = RunService.Heartbeat:Connect(autoCollectLoop)
-    if DEBUG_MODE then print("[收集] 已启动") end
 end
 
 function stopAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect(); collectHeartbeatConnection = nil end
-    collectedCache = {}
-    failCountCache = {}
-    ignoredCache = {}
-    nextScanTime = 0
-    if DEBUG_MODE then print("[收集] 已停止并清空缓存") end
 end
 
 function toggleAutoCollect()
@@ -1781,12 +1697,12 @@ function toggleAutoCollect()
     refreshPanelButtons()
     local panel = PlayerGui:FindFirstChild("MyCommanderPanel")
     if panel then
-        local other2Cont = panel:FindFirstChild("其他 2Container")
-        if other2Cont then
-            for _, btn in ipairs(other2Cont:GetChildren()) do
-                if btn:IsA("TextButton") and (btn.Text:find("自动收集") or btn.Text:find("💰")) then
-                    btn.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
-                    btn.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
+        local c = panel:FindFirstChild("其他 2Container")
+        if c then
+            for _, b in ipairs(c:GetChildren()) do
+                if b:IsA("TextButton") and (b.Text:find("自动收集") or b.Text:find("💰")) then
+                    b.Text = "💰 自动收集: " .. (autoCollectEnabled and "开启 ✅" or "关闭 ❌")
+                    b.BackgroundTransparency = autoCollectEnabled and 0.5 or 0.85
                     break
                 end
             end
