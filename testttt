@@ -1598,8 +1598,8 @@ local collectHeartbeatConnection = nil
 
 -- 大小写精确匹配，只收集这两个物品
 local COLLECT_KEYWORDS = {"Visual", "bee head"}
-local TELEPORT_INTERVAL = 0.06
-local MAX_TRY_TIME = 8
+local TELEPORT_INTERVAL = 0.08
+local MAX_TRY_TIME = 3
 local SCAN_RADIUS = 1200
 
 local currentCollecting = false
