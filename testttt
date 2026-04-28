@@ -1687,11 +1687,11 @@ end
 local function collectItem(item)
     local obj = item.obj
     local pos = item.pos
-    local startTime = os.clock()
-    while (os.clock() - startTime) < MAX_TRY_TIME do
+    -- 无限追随，直到物品消失
+    while true do
         if not obj or not obj.Parent then
             -- 物品已消失，视为成功
-            collectedCache[obj] = os.clock()
+            if obj then collectedCache[obj] = os.clock() end
             return true
         end
 
@@ -1700,19 +1700,23 @@ local function collectItem(item)
         local hrp = character:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
 
-        -- 更新物品位置（针对移动物品）
+        -- 实时更新物品位置（针对移动中的物品）
         local currentPos = getItemPosition(obj)
-        if currentPos then pos = currentPos end
+        if currentPos then
+            pos = currentPos
+        end
 
-        -- 平台跟随
+        -- 平台跟随（如果高空挂机开启）
         if skyPlatform and skyPlatform.Parent then
             skyPlatform.CFrame = CFrame.new(pos + Vector3.new(0, -3, 0))
         end
 
-        -- 角色瞬移到物品上方
+        -- 强制将角色传送到物品上方
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
-        task.wait(TELEPORT_INTERVAL)
+
+        task.wait(TELEPORT_INTERVAL) -- 保持高频传送
     end
+end
 
     -- 超时未拾取，失败计数
     failCountCache[obj] = (failCountCache[obj] or 0) + 1
