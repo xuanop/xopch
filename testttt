@@ -1592,141 +1592,105 @@ if not respawnHandlerAdded then
     end)
 end
 
--- ==================== 自动收集物品（最终修复版） ====================
+-- ==================== 自动收集物品（极速传送版） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 
-local COLLECT_KEYWORDS = {"visual", "bee head"}
+-- 大小写精确匹配，只收集这两个物品
+local COLLECT_KEYWORDS = {"Visual", "bee head"}
 local TELEPORT_INTERVAL = 0.06
-local MAX_TRY_TIME = 5
-local MAX_DISTANCE = 1000
+local MAX_TRY_TIME = 8
+local SCAN_RADIUS = 1200
 
 local currentCollecting = false
-local lastCollectTime = 0
-local recentlyCollected = {}
 
+-- 获取物品位置
 local function getItemPos(obj)
-    if obj:IsA("BasePart") then
-        return obj.Position
-    elseif obj:IsA("Model") then
+    if obj:IsA("BasePart") then return obj.Position end
+    if obj:IsA("Model") then
         local p = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildOfClass("BasePart")
         return p and p.Position
     end
+    return nil
 end
 
+-- 完全匹配关键词（包括大小写）
 local function matches(obj)
-    local name = obj.Name:lower()
     for _, kw in ipairs(COLLECT_KEYWORDS) do
-        if name == kw:lower() then return true end
+        if obj.Name == kw then return true end
     end
     return false
 end
 
-local function isPartOfPlayer(obj)
-    local model = obj
-    while model and not model:IsA("Model") do
-        model = model.Parent
-    end
-    if model and model:IsA("Model") then
-        return Players:GetPlayerFromCharacter(model) ~= nil
-    end
-    return false
-end
-
+-- 寻找最近物品
 local function findNearest()
     local char = lp.Character
     if not char then return nil end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
     local myPos = hrp.Position
-
-    local bestObj, bestPos, bestDist = nil, nil, MAX_DISTANCE
-    local now = os.clock()
+    local bestObj, bestPos, bestDist = nil, nil, SCAN_RADIUS
 
     for _, obj in ipairs(workspace:GetDescendants()) do
         if not (obj:IsA("BasePart") or obj:IsA("Model")) then continue end
         if not matches(obj) then continue end
-        if isPartOfPlayer(obj) then continue end
-        if recentlyCollected[obj] and (now - recentlyCollected[obj] < 5) then continue end
-
         local pos = getItemPos(obj)
         if not pos then continue end
-
         local dist = (myPos - pos).Magnitude
         if dist < bestDist then
+            bestPos = pos
             bestDist = dist
             bestObj = obj
-            bestPos = pos
         end
     end
-
-    if bestObj then
-        return {obj = bestObj, pos = bestPos}
-    end
-    return nil
+    if bestObj then return {obj = bestObj, pos = bestPos} end
 end
 
+-- 收集循环（持续传送直到物品消失）
 local function collectItem(item)
     local obj = item.obj
     local pos = item.pos
-    local startTime = os.clock()
-
+    local start = os.clock()
     while obj and obj.Parent do
-        if os.clock() - startTime > MAX_TRY_TIME then
-            return false
-        end
-
+        if os.clock() - start > MAX_TRY_TIME then return false end
         local char = lp.Character
-        if not char then break end
+        if not char then return false end
         local hrp = char:FindFirstChild("HumanoidRootPart")
-        if not hrp then break end
-        local humanoid = char:FindFirstChild("Humanoid")
-        if humanoid and humanoid.Health <= 0 then break end
-
+        if not hrp then return false end
         local curPos = getItemPos(obj)
         if curPos then pos = curPos end
-
+        -- 平台跟随
         if skyPlatform and skyPlatform.Parent then
             skyPlatform.CFrame = CFrame.new(pos + Vector3.new(0, -3, 0))
         end
-
+        -- 传送角色
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
-        hrp.Velocity = Vector3.zero
         task.wait(TELEPORT_INTERVAL)
     end
-
     return true
 end
 
+-- 主循环（无任何多余条件）
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
-    -- 关键：允许收集即使救助也在进行，但需检查自身状态
     if currentCollecting then return end
-
-    local now = os.clock()
-    if now - lastCollectTime < 0.5 then return end
 
     local item = findNearest()
     if item then
-        warn("[自动收集] 目标: " .. item.obj.Name .. " 位置: " .. tostring(item.pos))
-
-        hasCollectibleItems = true
         currentCollecting = true
-        recentlyCollected[item.obj] = now
-
-        local success = collectItem(item)
-        if success then
-            lastCollectTime = os.clock()
+        hasCollectibleItems = true
+        warn("[收集] 目标: " .. item.obj.Name)
+        if collectItem(item) then
             hasCollectibleItems = false
             if autoFarmEnabled then teleportToSky() end
         end
         currentCollecting = false
     else
         hasCollectibleItems = false
-        if autoFarmEnabled then teleportToSky() end
     end
 end
 
+-- 启动/停止
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
     collectHeartbeatConnection = RunService.Heartbeat:Connect(autoCollectLoop)
@@ -1734,7 +1698,6 @@ end
 
 function stopAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect(); collectHeartbeatConnection = nil end
-    recentlyCollected = {}
 end
 
 function toggleAutoCollect()
