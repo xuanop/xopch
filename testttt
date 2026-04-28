@@ -1660,18 +1660,18 @@ local function getCollectibles()
                 continue
             end
 
-            -- 关键词匹配
+            -- 完全匹配版本（物品名称必须完全等于关键词，不区分大小写）
             local nameMatch = false
-            if #COLLECT_KEYWORDS == 0 then
-                nameMatch = true
-            else
-                for _, kw in ipairs(COLLECT_KEYWORDS) do
-                    if lowerName == kw then
-                        nameMatch = true
-                        break
-                    end
-                end
-            end
+           if #COLLECT_KEYWORDS == 0 then
+               nameMatch = true
+           else
+               for _, kw in ipairs(COLLECT_KEYWORDS) do
+                   if lowerName == kw then  -- 这里改为 ==
+                       nameMatch = true
+                       break
+                   end
+               end
+           end
             if not nameMatch then continue end
 if not nameMatch then continue end
 print("[收集] 扫描到物品: " .. obj:GetFullName())  -- 临时查看所有匹配项
