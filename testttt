@@ -1707,17 +1707,33 @@ local function performCollect(targetItem)
 
     if TELEPORT_TO_ITEM then
         local itemPos = targetItem.position
+
+        -- 仅首次传送时移动平台到物品脚下
         if skyPlatform and skyPlatform.Parent then
             skyPlatform.CFrame = CFrame.new(itemPos + Vector3.new(0, -3, 0))
         end
-        hrp.CFrame = CFrame.new(itemPos + Vector3.new(0, 2, 0))
-        local start = os.clock()
-        while (os.clock() - start) < 0.8 do
-            task.wait(0.05)
+
+        local teleportInterval = 0.06  -- 高频传送间隔
+        local maxTryTime = 15          -- 最长尝试时间（秒），防止无限循环
+        local startTime = os.clock()
+
+        while (os.clock() - startTime) < maxTryTime do
+            -- 如果物品消失，立即返回成功
             if not targetItem.obj.Parent then
                 return true
             end
+
+            -- 角色可能被移动，重新设置位置到物品上方
+            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                lp.Character.HumanoidRootPart.CFrame = CFrame.new(itemPos + Vector3.new(0, 2, 0))
+            else
+                return false  -- 角色意外消失
+            end
+
+            task.wait(teleportInterval)
         end
+
+        -- 超时仍未消失，视为失败
         return false
     else
         local humanoid = lp.Character:FindFirstChild("Humanoid")
