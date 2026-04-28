@@ -1714,7 +1714,7 @@ local function performCollect(targetItem)
         end
 
         local teleportInterval = 0.06  -- 高频传送间隔
-        local maxTryTime = 15          -- 最长尝试时间（秒），防止无限循环
+        local maxTryTime = 3          -- 最长尝试时间（秒），防止无限循环
         local startTime = os.clock()
 
         while (os.clock() - startTime) < maxTryTime do
