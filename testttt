@@ -1659,10 +1659,7 @@ local function collectItem(item)
         if not hrp then return false end
         local curPos = getItemPos(obj)
         if curPos then pos = curPos end
-        -- 平台跟随
-        if skyPlatform and skyPlatform.Parent then
-            skyPlatform.CFrame = CFrame.new(pos + Vector3.new(0, -3, 0))
-        end
+
         -- 传送角色
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
         task.wait(TELEPORT_INTERVAL)
