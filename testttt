@@ -1666,7 +1666,7 @@ local function getCollectibles()
                 nameMatch = true
             else
                 for _, kw in ipairs(COLLECT_KEYWORDS) do
-                    if lowerName:find(kw) then
+                    if lowerName == kw then
                         nameMatch = true
                         break
                     end
