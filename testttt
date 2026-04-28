@@ -1591,13 +1591,15 @@ if not respawnHandlerAdded then
     end)
 end
 
--- ==================== 自动收集物品（极简安全版） ====================
+-- ==================== 自动收集物品（极简安全版·修复） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 
 local COLLECT_KEYWORDS = {"visual", "bee head"}
 local TELEPORT_INTERVAL = 0.06
 local MAX_TRY_TIME = 5
+
+local currentCollecting = false  -- 关键修复：声明局部变量
 
 local function getItemPos(obj)
     if obj:IsA("BasePart") then
@@ -1616,6 +1618,19 @@ local function matches(obj)
     return false
 end
 
+-- 判断对象是否属于玩家角色（防止收集玩家肢体）
+local function isPlayerCharacter(obj)
+    -- 向上查找所属模型并检查是否是某个玩家的角色
+    local model = obj
+    while model and not model:IsA("Model") do
+        model = model.Parent
+    end
+    if model and model:IsA("Model") then
+        return Players:GetPlayerFromCharacter(model) ~= nil
+    end
+    return false
+end
+
 local function findNearest()
     local char = lp.Character
     if not char then return end
@@ -1625,7 +1640,10 @@ local function findNearest()
     local nearestObj, nearestPos, nearestDist
 
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if (obj:IsA("BasePart") or obj:IsA("Model")) and matches(obj) then
+        -- 过滤：只要零件或模型，必须匹配关键词，且不能是玩家角色
+        if (obj:IsA("BasePart") or obj:IsA("Model"))
+            and matches(obj)
+            and not isPlayerCharacter(obj) then
             local pos = getItemPos(obj)
             if pos then
                 local dist = (myPos - pos).Magnitude
@@ -1666,6 +1684,7 @@ local function autoCollectLoop()
     if not autoCollectEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if currentCollecting then return end
+
     local item = findNearest()
     if item then
         hasCollectibleItems = true
