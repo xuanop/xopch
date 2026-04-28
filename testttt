@@ -1614,7 +1614,7 @@ local currentCollecting = false
 local searchRootCache = nil
 local searchRootCacheTime = 0
 local function getSearchRoot()
-    return workspace  -- 直接全局扫描，物品必定在 Workspace 下
+    return workspace  -- 直接全局扫描，确保覆盖所有物品
 end
 
 local function getPlayerPosition()
@@ -1623,14 +1623,11 @@ local function getPlayerPosition()
     return hrp and hrp.Position or nil
 end
 
--- 判断一个对象是否属于任何玩家角色（包括零件、模型）
 local function isPartOfPlayerCharacter(obj)
     if not obj then return false end
-    -- 如果本身就是 Model 且是玩家角色
     if obj:IsA("Model") then
         return Players:GetPlayerFromCharacter(obj) ~= nil
     end
-    -- 向上查找父 Model
     local parent = obj
     while parent and not parent:IsA("Model") do
         parent = parent.Parent
@@ -1650,31 +1647,22 @@ local function getCollectibles()
     local MAX_SEARCH_RADIUS = 1500
     local descendants = searchRoot:GetDescendants()
     for _, obj in ipairs(descendants) do
-        -- 跳过任何属于玩家的零件或模型
         if isPartOfPlayerCharacter(obj) then continue end
         if obj:IsA("BasePart") or (obj:IsA("Model") and not obj:FindFirstChild("Humanoid")) then
             local lowerName = obj.Name:lower()
-
-            -- 仅排除极其明确的玩家身体件（如 HumanoidRootPart），不再使用模糊的 find
             if lowerName == "humanoidrootpart" then
                 continue
             end
 
-            -- 完全匹配版本（物品名称必须完全等于关键词，不区分大小写）
+            -- 仅收集名字完全等于关键词的物品（不区分大小写）
             local nameMatch = false
-           if #COLLECT_KEYWORDS == 0 then
-               nameMatch = true
-           else
-               for _, kw in ipairs(COLLECT_KEYWORDS) do
-                   if lowerName == kw then  -- 这里改为 ==
-                       nameMatch = true
-                       break
-                   end
-               end
-           end
+            for _, kw in ipairs(COLLECT_KEYWORDS) do
+                if lowerName == kw then
+                    nameMatch = true
+                    break
+                end
+            end
             if not nameMatch then continue end
-if not nameMatch then continue end
-print("[收集] 扫描到物品: " .. obj:GetFullName())  -- 临时查看所有匹配项
 
             -- 获取位置
             local pos = nil
@@ -1711,7 +1699,6 @@ local function performCollect(targetItem)
         local startTime = os.clock()
 
         while (os.clock() - startTime) < maxTryTime do
-            -- 物品消失，拾取成功
             if not targetItem.obj.Parent then
                 return true
             end
@@ -1732,7 +1719,7 @@ local function performCollect(targetItem)
                 continue
             end
 
-            -- 平台跟随物品移动（放在物品脚下）
+            -- 平台跟随物品移动
             if skyPlatform and skyPlatform.Parent then
                 skyPlatform.CFrame = CFrame.new(itemPos + Vector3.new(0, -3, 0))
             end
