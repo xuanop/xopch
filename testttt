@@ -1596,18 +1596,15 @@ end
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 
--- 只收集名称完全等于以下字符串的物品
 local COLLECT_KEYWORDS = {"visual", "bee head"}
-local TELEPORT_INTERVAL = 0.06   -- 传送间隔
-local MAX_TRY_TIME = 5           -- 最大尝试秒数
-local MAX_DISTANCE = 1000        -- 只收集1000格以内的物品，避免扫到极远处
+local TELEPORT_INTERVAL = 0.06
+local MAX_TRY_TIME = 5
+local MAX_DISTANCE = 1000
 
--- 状态变量（必须局部）
 local currentCollecting = false
 local lastCollectTime = 0
-local recentlyCollected = {}     -- 防止短时间内重复收集同一物品
+local recentlyCollected = {}
 
--- 获取物品位置
 local function getItemPos(obj)
     if obj:IsA("BasePart") then
         return obj.Position
@@ -1615,21 +1612,16 @@ local function getItemPos(obj)
         local p = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildOfClass("BasePart")
         return p and p.Position
     end
-    return nil
 end
 
--- 严格匹配关键词（不区分大小写，完全相等）
 local function matches(obj)
     local name = obj.Name:lower()
     for _, kw in ipairs(COLLECT_KEYWORDS) do
-        if name == kw:lower() then
-            return true
-        end
+        if name == kw:lower() then return true end
     end
     return false
 end
 
--- 检查对象是否属于任何玩家（防止收集玩家身体部件）
 local function isPartOfPlayer(obj)
     local model = obj
     while model and not model:IsA("Model") do
@@ -1641,7 +1633,6 @@ local function isPartOfPlayer(obj)
     return false
 end
 
--- 寻找最近的符合条件物品
 local function findNearest()
     local char = lp.Character
     if not char then return nil end
@@ -1653,13 +1644,9 @@ local function findNearest()
     local now = os.clock()
 
     for _, obj in ipairs(workspace:GetDescendants()) do
-        -- 只检查零件和模型
         if not (obj:IsA("BasePart") or obj:IsA("Model")) then continue end
-        -- 必须匹配关键词
         if not matches(obj) then continue end
-        -- 排除玩家模型
         if isPartOfPlayer(obj) then continue end
-        -- 排除最近已收集或尝试收集的（5秒缓存）
         if recentlyCollected[obj] and (now - recentlyCollected[obj] < 5) then continue end
 
         local pos = getItemPos(obj)
@@ -1679,14 +1666,12 @@ local function findNearest()
     return nil
 end
 
--- 执行收集（持续传送到物品上方，直到物品消失或超时）
 local function collectItem(item)
     local obj = item.obj
     local pos = item.pos
     local startTime = os.clock()
 
     while obj and obj.Parent do
-        -- 超时退出
         if os.clock() - startTime > MAX_TRY_TIME then
             return false
         end
@@ -1698,38 +1683,31 @@ local function collectItem(item)
         local humanoid = char:FindFirstChild("Humanoid")
         if humanoid and humanoid.Health <= 0 then break end
 
-        -- 更新物品实时位置
         local curPos = getItemPos(obj)
         if curPos then pos = curPos end
 
-        -- 平台跟随
         if skyPlatform and skyPlatform.Parent then
             skyPlatform.CFrame = CFrame.new(pos + Vector3.new(0, -3, 0))
         end
 
-        -- 传送角色到物品上方
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
-        hrp.Velocity = Vector3.zero          -- 增加这一行
+        hrp.Velocity = Vector3.zero
         task.wait(TELEPORT_INTERVAL)
     end
 
-    -- 物品消失，视为成功
     return true
 end
 
--- 主循环
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
-    if autoRescueEnabled and activeRescueTarget ~= nil then return end
+    -- 关键：允许收集即使救助也在进行，但需检查自身状态
     if currentCollecting then return end
 
     local now = os.clock()
-    -- 简单的冷却防止高频触发
     if now - lastCollectTime < 0.5 then return end
 
     local item = findNearest()
     if item then
-        -- 调试输出，可观察到底在收集什么东西
         warn("[自动收集] 目标: " .. item.obj.Name .. " 位置: " .. tostring(item.pos))
 
         hasCollectibleItems = true
@@ -1749,7 +1727,6 @@ local function autoCollectLoop()
     end
 end
 
--- 启动/停止
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
     collectHeartbeatConnection = RunService.Heartbeat:Connect(autoCollectLoop)
