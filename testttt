@@ -1687,6 +1687,7 @@ local function getCollectibles()
 end
 
 local function performCollect(targetItem)
+    warn("[收集触发] 尝试拾取物品: " .. tostring(targetItem.obj and targetItem.obj.Name))
     if not targetItem or not targetItem.obj or not targetItem.obj.Parent then
         return false
     end
