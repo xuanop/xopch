@@ -1518,6 +1518,7 @@ end
 local hasCollectibleItems = false
 
 local function autoFarmHeartbeat()
+    if currentCollecting then return end   -- 加在已有 return 条件之前
     if not autoFarmEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if autoCollectEnabled and hasCollectibleItems then return end
@@ -1708,6 +1709,7 @@ local function collectItem(item)
 
         -- 传送角色到物品上方
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
+        hrp.Velocity = Vector3.zero          -- 增加这一行
         task.wait(TELEPORT_INTERVAL)
     end
 
