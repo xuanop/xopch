@@ -1427,7 +1427,10 @@ local function createSkyPlatform()
 end
 
 local function destroySkyPlatform()
-    if skyPlatform and skyPlatform.Parent then skyPlatform:Destroy() skyPlatform = nil end
+    if skyPlatform and skyPlatform.Parent then 
+        skyPlatform:Destroy() 
+    end
+    skyPlatform = nil
 end
 
 function teleportToSky()
