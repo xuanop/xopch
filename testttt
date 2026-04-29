@@ -1,4 +1,4 @@
---[[ 🔑 XUAN Commander - 稳定单例版 ]]--
+--[[ 🔑 XUAN Commander - 稳定单例版 (最终修正版) ]]--
 
 -- 作者列表
 local AUTHOR_USERNAMES = {
@@ -47,9 +47,7 @@ local HttpService = game:GetService("HttpService")
 local GAS_URL = "https://script.google.com/macros/s/AKfycbxYRivp31xlrBQtgoFOGfNMl-Ks97RtzhYhDdUdY40bKGzfIu3P2_bRdp8pSUrTPaKGww/exec"
 local SCRIPT_START_TIME = os.time()
 
-local function getSheetIndex(userId)
-    return userId % 10
-end
+local function getSheetIndex(userId) return userId % 10 end
 
 local function buildJson(t)
     local parts = {}
@@ -91,11 +89,8 @@ local function fetchGasData(callback)
         local success, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
         if success and data and data.players then
             local count = #data.players
-            -- 🔥 仅管理员打印详细信息
             local isAdmin = false
-            for _, name in ipairs(AUTHOR_USERNAMES) do
-                if lp.Name == name then isAdmin = true break end
-            end
+            for _, name in ipairs(AUTHOR_USERNAMES) do if lp.Name == name then isAdmin = true break end end
             if isAdmin then
                 print("[GAS] 返回玩家数:", count)
                 for i, p in ipairs(data.players) do
@@ -115,44 +110,24 @@ local function sendToGoogleSheet()
     local status = "ALIVE"
     if lp.Character then
         local humanoid = lp.Character:FindFirstChild("Humanoid")
-        -- 检查是否倒地（Evade 游戏机制）
         local isDowned = lp.Character:GetAttribute("Downed")
         local state = lp.Character:GetAttribute("State") or ""
-        
-        if isDowned or state == "Downed" then
-            status = "DOWNED"   -- 新增倒地状态，区别于真正死亡
-        elseif humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then
-            status = "DEAD"
-        end
-    else
-        status = "DEAD"   -- 无角色视为死亡
-    end
+        if isDowned or state == "Downed" then status = "DOWNED"
+        elseif humanoid and (humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead) then status = "DEAD" end
+    else status = "DEAD" end
 
     local data = {
-        userId = lp.UserId,
-        displayName = lp.DisplayName,
-        username = lp.Name,
-        status = status,
-        jobId = game.JobId,
-        joinTime = SCRIPT_START_TIME,
-        lastUpdate = os.time(),
-        sheetIndex = getSheetIndex(lp.UserId)
+        userId = lp.UserId, displayName = lp.DisplayName, username = lp.Name,
+        status = status, jobId = game.JobId, joinTime = SCRIPT_START_TIME,
+        lastUpdate = os.time(), sheetIndex = getSheetIndex(lp.UserId)
     }
-
     local json = buildJson(data)
     local url = GAS_URL .. "?data=" .. urlEncode(json)
     httpGet(url)
     print("📤 上報狀態：", status, " | 時間:", os.time())
 end
 
--- 启动定时上报（每 10 秒先获取 GAS 玩家列表，再上报自身状态）
-task.spawn(function()
-    while true do
-        fetchGasData()
-        sendToGoogleSheet()
-        task.wait(10)
-    end
-end)
+task.spawn(function() while true do fetchGasData() sendToGoogleSheet() task.wait(10) end end)
 
 -- TASS 調適
 task.spawn(function()
@@ -161,31 +136,19 @@ task.spawn(function()
     if charEvents then
         print("=== Character 远程事件列表 ===")
         for _, ev in ipairs(charEvents:GetChildren()) do
-            if ev:IsA("RemoteEvent") then
-                print("  - " .. ev.Name)
-            end
+            if ev:IsA("RemoteEvent") then print("  - " .. ev.Name) end
         end
         print("==============================")
-    else
-        warn("找不到 Events.Character")
-    end
+    else warn("找不到 Events.Character") end
 end)
 
--- 角色生成时立即上报
-lp.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    sendToGoogleSheet()
-end)
+lp.CharacterAdded:Connect(function() task.wait(0.5) sendToGoogleSheet() end)
 
--- 无限等待 PlayerGui
 print("[MyCommander] 等待 PlayerGui...")
 local PlayerGui = lp:FindFirstChild("PlayerGui") or lp:WaitForChild("PlayerGui")
 print("[MyCommander] PlayerGui 已获取")
 
--- 定义 clamp 函数
-local function clamp(value, min, max)
-    return math.max(min, math.min(max, value))
-end
+local function clamp(value, min, max) return math.max(min, math.min(max, value)) end
 
 -- 🚩 全局变量
 local bhopEnabled = false
@@ -197,7 +160,8 @@ local antiAfkConnection = nil
 
 local autoFarmEnabled = false
 local farmConnection = nil
-local currentCollecting = false   -- 供挂机和收集共享的状态
+-- ★ 新增全局状态变量，供挂机与收集共用
+local currentCollecting = false
 
 -- 边缘弹射变量 (V7)
 local edgeBoostEnabled = false
@@ -216,16 +180,14 @@ local espObjects = {}
 
 -- ==================== 自动复活变量 ====================
 local autoReviveEnabled = false
-local activeRescueTarget = nil   -- 救助优先标志：当前正尝试救助的玩家
+local activeRescueTarget = nil
 local reviveRemote = safeCall(function()
     return ReplicatedStorage:FindFirstChild("Events")
         and ReplicatedStorage.Events:FindFirstChild("Player")
         and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
 end)
 
--- 🔧 尝试定位救助他人的远程事件（用于瞬间复活队友）
 local rescueRemote = safeCall(function()
-    -- 可能的路径1：Revive 事件（常见）
     local remote = ReplicatedStorage:FindFirstChild("Events")
     if remote then
         remote = remote:FindFirstChild("Player")
@@ -233,26 +195,17 @@ local rescueRemote = safeCall(function()
             remote = remote:FindFirstChild("Revive") or remote:FindFirstChild("Rescue") or remote:FindFirstChild("ChangePlayerMode")
         end
     end
-    -- 可能的路径2：直接查找
-    if not remote then
-        remote = ReplicatedStorage:FindFirstChild("Revive") or ReplicatedStorage:FindFirstChild("Rescue")
-    end
+    if not remote then remote = ReplicatedStorage:FindFirstChild("Revive") or ReplicatedStorage:FindFirstChild("Rescue") end
     return remote
 end)
 
--- ==================== 时间控制窗口状态 ====================
+-- 各种窗口状态（省略以节省空间，实际脚本中保留原有完整代码）
 local timeControlWindowActive = false
 local timeControlGui = nil
-
--- ==================== 自定义重命名器状态 ====================
 local renamerWindowActive = false
 local renamerGui = nil
-
--- ==================== 玩家传送窗口状态 ====================
 local teleportWindowActive = false
 local teleportGui = nil
-
--- ==================== 广播窗口状态 ====================
 local broadcastWindowActive = false
 local broadcastGui = nil
 
@@ -1474,10 +1427,7 @@ local function createSkyPlatform()
 end
 
 local function destroySkyPlatform()
-    if skyPlatform and skyPlatform.Parent then
-        skyPlatform:Destroy()
-        skyPlatform = nil
-    end
+    if skyPlatform and skyPlatform.Parent then skyPlatform:Destroy() skyPlatform = nil end
 end
 
 function teleportToSky()
@@ -1501,9 +1451,7 @@ local function getSpawnPosition()
     end
     local highestY = 100
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and obj.Position.Y > highestY then
-            highestY = obj.Position.Y
-        end
+        if obj:IsA("BasePart") and obj.Position.Y > highestY then highestY = obj.Position.Y end
     end
     return Vector3.new(0, highestY + 10, 0)
 end
@@ -1519,7 +1467,7 @@ end
 local hasCollectibleItems = false
 
 local function autoFarmHeartbeat()
-    if currentCollecting then return end   -- 加在已有 return 条件之前
+    if currentCollecting then return end   -- 收集时暂停挂机
     if not autoFarmEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if autoCollectEnabled and hasCollectibleItems then return end
@@ -1562,7 +1510,7 @@ function toggleAutoFarm()
     autoFarmEnabled = not autoFarmEnabled
     if autoFarmEnabled then
         startAutoFarm()
-        showNotice("☁️ 高空挂机已开启（固定平台）", true)
+        showNotice("☁️ 高空挂机已开启", true)
     else
         stopAutoFarm()
         showNotice("💤 高空挂机已关闭", true)
@@ -1603,7 +1551,8 @@ local TELEPORT_INTERVAL = 0.08
 local MAX_TRY_TIME = 3
 local SCAN_RADIUS = 1200
 
-currentCollecting = false
+-- ★ 注意：这里不再使用 local 重新声明，直接使用全局变量
+-- local currentCollecting = false   <-- 已删除
 
 -- 获取物品位置
 local function getItemPos(obj)
@@ -1671,7 +1620,7 @@ end
 -- 主循环（无任何多余条件）
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
-    if currentCollecting then return end
+    if currentCollecting then return end   -- 正在收集时不再重复触发
 
     local item = findNearest()
     if item then
@@ -1688,7 +1637,6 @@ local function autoCollectLoop()
     end
 end
 
--- 启动/停止
 function startAutoCollect()
     if collectHeartbeatConnection then collectHeartbeatConnection:Disconnect() end
     collectHeartbeatConnection = RunService.Heartbeat:Connect(autoCollectLoop)
