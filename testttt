@@ -1597,29 +1597,45 @@ local function findNearest()
 end
 
 -- 收集循环（调试增强版）
+-- 收集循环（绝对安全版 + 调试增强）
 local function collectItem(item)
     local obj = item.obj
+    local objName = obj and obj.Name or "未知"
+    local objFullName = obj and obj:GetFullName() or "未知"   -- ★ 完整路径，方便辨认
     local pos = item.pos
     local start = os.clock()
-    print("[收集] 🔵 开始追随: " .. obj.Name .. " 初始位置: " .. tostring(pos))  -- ★ 新增
+    warn("[收集] 开始追随: " .. objFullName .. " 初始坐标: " .. tostring(pos))
     while obj and obj.Parent do
-        if os.clock() - start > MAX_TRY_TIME then return false end
+        if os.clock() - start > MAX_TRY_TIME then
+            warn("[收集] 超时停止: " .. objFullName)
+            return false
+        end
         local char = lp.Character
         if not char then return false end
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
+
+        -- ★ 重新获取位置前，先确保对象没变
+        if obj ~= item.obj then
+            warn("[收集] ❌ 物品引用变更！原对象已被替换，强制终止。")
+            return false
+        end
+
         local curPos = getItemPos(obj)
         if curPos then
             pos = curPos
-            print("[收集] 📍 更新位置: " .. tostring(pos))  -- ★ 每次更新都打印
+            print("[收集] 📍 当前目标: " .. objFullName .. " 位置: " .. tostring(pos))
         else
-            warn("[收集] ⚠️ 无法获取物品位置！")
+            warn("[收集] ⚠️ 无法获取物品位置，跳过本次传送")
+            task.wait(TELEPORT_INTERVAL)
+            continue
         end
-        -- 传送角色到物品上方
+
+        -- 传送角色
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
         task.wait(TELEPORT_INTERVAL)
     end
-    print("[收集] 🟢 追随结束（物品消失）: " .. (obj and obj.Name or "nil"))
+    warn("[收集] ✅ 成功拾取: " .. objFullName)
     return true
 end
 
