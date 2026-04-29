@@ -1596,11 +1596,12 @@ local function findNearest()
     if bestObj then return {obj = bestObj, pos = bestPos} end
 end
 
--- 持续传送直到物品消失
+-- 收集循环（调试增强版）
 local function collectItem(item)
     local obj = item.obj
     local pos = item.pos
     local start = os.clock()
+    print("[收集] 🔵 开始追随: " .. obj.Name .. " 初始位置: " .. tostring(pos))  -- ★ 新增
     while obj and obj.Parent do
         if os.clock() - start > MAX_TRY_TIME then return false end
         local char = lp.Character
@@ -1608,11 +1609,17 @@ local function collectItem(item)
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
         local curPos = getItemPos(obj)
-        if curPos then pos = curPos end
+        if curPos then
+            pos = curPos
+            print("[收集] 📍 更新位置: " .. tostring(pos))  -- ★ 每次更新都打印
+        else
+            warn("[收集] ⚠️ 无法获取物品位置！")
+        end
         -- 传送角色到物品上方
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
         task.wait(TELEPORT_INTERVAL)
     end
+    print("[收集] 🟢 追随结束（物品消失）: " .. (obj and obj.Name or "nil"))
     return true
 end
 
