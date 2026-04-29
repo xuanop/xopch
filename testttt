@@ -197,6 +197,7 @@ local antiAfkConnection = nil
 
 local autoFarmEnabled = false
 local farmConnection = nil
+local currentCollecting = false   -- 供挂机和收集共享的状态
 
 -- 边缘弹射变量 (V7)
 local edgeBoostEnabled = false
@@ -1601,8 +1602,6 @@ local COLLECT_KEYWORDS = {"Visual", "bee head"}
 local TELEPORT_INTERVAL = 0.08
 local MAX_TRY_TIME = 3
 local SCAN_RADIUS = 1200
-
-local currentCollecting = false
 
 -- 获取物品位置
 local function getItemPos(obj)
