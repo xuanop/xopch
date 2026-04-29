@@ -1603,6 +1603,8 @@ local TELEPORT_INTERVAL = 0.08
 local MAX_TRY_TIME = 3
 local SCAN_RADIUS = 1200
 
+currentCollecting = false
+
 -- 获取物品位置
 local function getItemPos(obj)
     if obj:IsA("BasePart") then return obj.Position end
