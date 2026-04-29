@@ -1544,15 +1544,17 @@ if not respawnHandlerAdded then
     end)
 end
 
--- ==================== 自动收集物品（绝对安全版） ====================
+-- ==================== 自动收集物品（绝对纯净版） ====================
 local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 
-local COLLECT_KEYWORDS = {"Visual", "bee head"}   -- 只收集这两个
+-- ★ 只收集这两个物品
+local COLLECT_KEYWORDS = {"Visual", "bee head"}
 local TELEPORT_INTERVAL = 0.08
 local MAX_TRY_TIME = 5
 local SCAN_RADIUS = 1500
 
+-- 获取物品位置
 local function getItemPos(obj)
     if obj:IsA("BasePart") then return obj.Position end
     if obj:IsA("Model") then
@@ -1562,6 +1564,7 @@ local function getItemPos(obj)
     return nil
 end
 
+-- 精准匹配名称
 local function matches(obj)
     for _, kw in ipairs(COLLECT_KEYWORDS) do
         if obj.Name == kw then return true end
@@ -1569,53 +1572,65 @@ local function matches(obj)
     return false
 end
 
+-- 寻找最近目标
 local function findNearest()
     local char = lp.Character
     if not char then return nil end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return nil end
-    local myPos = root.Position
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local myPos = hrp.Position
     local bestObj, bestPos, bestDist = nil, nil, SCAN_RADIUS
+
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if not obj:IsA("BasePart") and not obj:IsA("Model") then continue end
+        if not (obj:IsA("BasePart") or obj:IsA("Model")) then continue end
         if not matches(obj) then continue end
         local pos = getItemPos(obj)
         if not pos then continue end
         local dist = (myPos - pos).Magnitude
         if dist < bestDist then
-            bestObj, bestPos, bestDist = obj, pos, dist
+            bestPos = pos
+            bestDist = dist
+            bestObj = obj
         end
     end
     if bestObj then return {obj = bestObj, pos = bestPos} end
-    return nil
 end
 
+-- 持续传送直到物品消失
 local function collectItem(item)
     local obj = item.obj
     local pos = item.pos
-    local startTime = os.clock()
+    local start = os.clock()
     while obj and obj.Parent do
-        if os.clock() - startTime > MAX_TRY_TIME then return false end
+        if os.clock() - start > MAX_TRY_TIME then return false end
         local char = lp.Character
         if not char then return false end
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
         local curPos = getItemPos(obj)
         if curPos then pos = curPos end
+        -- 传送角色到物品上方
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
         task.wait(TELEPORT_INTERVAL)
     end
     return true
 end
 
+-- 主循环
 local function autoCollectLoop()
     if not autoCollectEnabled then return end
+    if currentCollecting then return end
+
     local item = findNearest()
     if item then
+        currentCollecting = true
         hasCollectibleItems = true
-        collectItem(item)
-        hasCollectibleItems = false
-        if autoFarmEnabled then teleportToSky() end
+        warn("[收集] 目标: " .. item.obj.Name)
+        if collectItem(item) then
+            hasCollectibleItems = false
+            if autoFarmEnabled then teleportToSky() end
+        end
+        currentCollecting = false
     else
         hasCollectibleItems = false
     end
