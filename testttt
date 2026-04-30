@@ -3070,20 +3070,6 @@ for _, player in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(setupHeadlessForPlayer)
 
--- 启动脚本时自动开启以下功能
-task.spawn(function()
-    task.wait(2)  -- 等待2秒确保角色和界面加载完成
-    if not bhopEnabled then
-        toggleBhop()            -- 自动开启连跳
-    end
-    if not autoFarmEnabled then
-        toggleAutoFarm()        -- 自动开启高空挂机
-    end
-    if not autoCollectEnabled then
-        toggleAutoCollect()      -- 自动开启自动收集
-    end
-end)
-
 print("[MyCommander] 脚本初始化完成")
 showNotice("✅ 脚本已启动！按 P 打开面板", true)
 
