@@ -1550,7 +1550,7 @@ local collectHeartbeatConnection = nil
 
 -- ★ 只收集这两个物品
 local COLLECT_KEYWORDS = {"Hexagons", "bee head"}
-local TELEPORT_INTERVAL = 0.4
+local TELEPORT_INTERVAL = 0.2
 local MAX_TRY_TIME = 5
 local SCAN_RADIUS = 1500
 
@@ -1597,7 +1597,6 @@ local function findNearest()
 end
 
 -- 收集循环（调试增强版）
--- 收集循环（绝对安全版 + 调试增强）
 local function collectItem(item)
     local obj = item.obj
     local objName = obj and obj.Name or "未知"
