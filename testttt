@@ -1550,7 +1550,7 @@ local collectHeartbeatConnection = nil
 
 -- ★ 只收集这两个物品
 local COLLECT_KEYWORDS = {"Hexagons", "bee head"}
-local TELEPORT_INTERVAL = 1
+local TELEPORT_INTERVAL = 0.4
 local MAX_TRY_TIME = 5
 local SCAN_RADIUS = 1500
 
