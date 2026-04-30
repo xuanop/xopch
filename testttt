@@ -1398,12 +1398,14 @@ local function createTeleportWindow()
     end)
 end
 
--- ==================== 高空挂机优化版（前置定义） ====================
+-- ==================== 高空挂机优化版（圆周移动 + 平台跟随） ====================
 local SKY_X = 0
 local SKY_Y = 500
 local SKY_Z = 0
+local RADIUS = 200         -- 绕圈半径，越大越靠地图边缘
+local ROTATE_SPEED = 0.8   -- 角速度，越大绕得越快
 local PLATFORM_SIZE = 12
-
+local angle = 0            -- 当前角度
 local skyPlatform = nil
 local savedGroundPosition = nil
 local respawnHandlerAdded = false
@@ -1434,6 +1436,7 @@ local function destroySkyPlatform()
 end
 
 function teleportToSky()
+    -- 初始化角色到高空（之后由 Heartbeat 接管移动）
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
     lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos)
@@ -1469,27 +1472,34 @@ end
 
 local hasCollectibleItems = false
 
-local function autoFarmHeartbeat()
-    if currentCollecting then return end   -- 收集时暂停挂机
+local function autoFarmHeartbeat(deltaTime)
+    if currentCollecting then return end
     if not autoFarmEnabled then return end
     if autoRescueEnabled and activeRescueTarget ~= nil then return end
     if autoCollectEnabled and hasCollectibleItems then return end
-    
+
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = lp.Character.HumanoidRootPart
-    local currentPos = hrp.Position
-    local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
-    if math.abs(currentPos.Y - targetPos.Y) > 10 then
-        teleportToSky()
+
+    -- 匀速圆周
+    angle = angle + ROTATE_SPEED * deltaTime
+    local newPos = Vector3.new(
+        math.cos(angle) * RADIUS,
+        SKY_Y,
+        math.sin(angle) * RADIUS
+    )
+    hrp.CFrame = CFrame.new(newPos)
+
+    -- 平台始终保持在脚下
+    if not skyPlatform or not skyPlatform.Parent then
+        skyPlatform = createSkyPlatform()
     else
-        hrp.Velocity = Vector3.new(math.random(-3,3), math.random(-1,1), math.random(-3,3))
-        if not skyPlatform or not skyPlatform.Parent then
-            skyPlatform = createSkyPlatform()
-        else
-            local newPos = hrp.Position - Vector3.new(0, 2.5, 0)
-            skyPlatform.Position = newPos
-        end
+        skyPlatform.Position = newPos - Vector3.new(0, 2.5, 0)
     end
+
+    -- 给角色一个切线速度（防检测，非必须）
+    local tangent = Vector3.new(-math.sin(angle), 0, math.cos(angle))
+    hrp.Velocity = tangent * (RADIUS * ROTATE_SPEED)
 end
 
 function startAutoFarm()
@@ -1499,8 +1509,17 @@ function startAutoFarm()
     else
         savedGroundPosition = nil
     end
-    teleportToSky()
-    farmConnection = RunService.Heartbeat:Connect(autoFarmHeartbeat)
+    -- 根据当前角色位置反算初始角度
+    if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        local pos = lp.Character.HumanoidRootPart.Position
+        angle = math.atan2(pos.Z, pos.X)
+    else
+        angle = 0
+    end
+    teleportToSky()   -- 先飞到高空（heartbeat 启动后会立刻推到圆周上）
+    farmConnection = RunService.Heartbeat:Connect(function(dt)
+        autoFarmHeartbeat(dt)
+    end)
 end
 
 function stopAutoFarm()
@@ -1527,19 +1546,9 @@ if not respawnHandlerAdded then
     lp.CharacterAdded:Connect(function(character)
         task.wait(0.5)
         if autoFarmEnabled then
-            local hrp = character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local targetPos = Vector3.new(SKY_X, SKY_Y, SKY_Z)
-                hrp.CFrame = CFrame.new(targetPos)
-                task.wait(0.1)
-                if not skyPlatform or not skyPlatform.Parent then
-                    skyPlatform = createSkyPlatform()
-                else
-                    local newPos = hrp.Position - Vector3.new(0, 2.5, 0)
-                    skyPlatform.Position = newPos
-                end
-                print("[高空挂机] 重生后已自动返回高空平台")
-            end
+            -- 重生后直接飞到高空，heartbeat 会立即接管圆周
+            teleportToSky()
+            print("[高空挂机] 重生后已自动返回高空平台")
         end
     end)
 end
