@@ -1552,7 +1552,7 @@ local collectHeartbeatConnection = nil
 local COLLECT_KEYWORDS = {"Hexagons", "bee head"}
 local TELEPORT_INTERVAL = 0.05
 local MAX_TRY_TIME = 5
-local SCAN_RADIUS = 1500
+local SCAN_RADIUS = 4000
 
 -- 获取物品位置
 local function getItemPos(obj)
