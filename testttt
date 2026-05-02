@@ -1402,7 +1402,7 @@ end
 local SKY_X = 0
 local SKY_Y = 500
 local SKY_Z = 0
-local RADIUS = 200         -- 绕圈半径，越大越靠地图边缘
+local RADIUS = 1200         -- 绕圈半径，越大越靠地图边缘
 local ROTATE_SPEED = 0.8   -- 角速度，越大绕得越快
 local PLATFORM_SIZE = 12
 local angle = 0            -- 当前角度
