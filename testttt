@@ -2729,7 +2729,6 @@ task.spawn(function()
         { "Broom", "Apose" },
         { "RockinStride", "Stride" },
         { "SnowmobileCruise", "BumperKart" }, 
-        { "ZombieStride", "SwagWalk" }, 
     }
 
     repeat task.wait() until game:IsLoaded()
@@ -2797,6 +2796,75 @@ task.spawn(function()
     end
 
     print("[MyCommander] 自动改名流程结束")
+end)
+
+-- ==================== 专用：安全执行 ZombieStride → SwagWalk（dup 备份） ====================
+task.spawn(function()
+    repeat task.wait() until game:IsLoaded()
+    task.wait(8)  -- 给其他初始化留出足够时间
+
+    local S = ReplicatedStorage:WaitForChild("Items")
+    if not S or not S:FindFirstChild("Emotes") then
+        warn("[SwagWalk] Emotes 文件夹未找到，跳过")
+        return
+    end
+
+    local function dup(folder, old, new)
+        local i = folder:FindFirstChild(old)
+        if i then
+            print("//// CLONE //// " .. old .. " ===>>> " .. new)
+            i:Clone().Parent = folder
+            i.Name = new
+            return i
+        end
+        return nil
+    end
+
+    local emote = dup(S.Emotes, "ZombieStride", "SwagWalk")
+
+    if emote then
+        -- 清理原模块
+        local oldModule = emote:FindFirstChild("EmoteModuleClassic")
+        if oldModule then oldModule:Destroy() end
+
+        -- 确保动画容器
+        local container = emote:FindFirstChild("AnimationClassic")
+        if not container then
+            container = Instance.new("Animation")
+            container.Name = "AnimationClassic"
+            container.Parent = emote
+        end
+
+        -- 提取 A, B, C 动画 ID
+        local anims = {}
+        local options = emote:FindFirstChild("PossibleOptionsClassic")
+        if options then
+            for _, n in ipairs({"A", "B", "C"}) do
+                local f = options:FindFirstChild(n)
+                local a = f and f:FindFirstChildOfClass("Animation")
+                if a then table.insert(anims, a.AnimationId) end
+            end
+        end
+
+        -- 服务器时间同步循环
+        if #anims > 0 then
+            task.spawn(function()
+                local interval = 2
+                while emote.Parent do
+                    local totalTime = workspace:GetServerTimeNow()
+                    local index = (math.floor(totalTime / interval) % #anims) + 1
+                    if container.AnimationId ~= anims[index] then
+                        container.AnimationId = anims[index]
+                    end
+                    task.wait(0)
+                end
+            end)
+            print("[SwagWalk] 动画同步已启动")
+        end
+        print("[SwagWalk] 改名成功，原始备份已保留")
+    else
+        warn("[SwagWalk] ZombieStride 未找到，可能已被改名")
+    end
 end)
 
 local reviveRemote2 = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Player") and ReplicatedStorage.Events.Player:FindFirstChild("ChangePlayerMode")
