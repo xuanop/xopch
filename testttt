@@ -2663,10 +2663,10 @@ end
 -- ==================== 自动改名 (多组 + 重试) ====================
 task.spawn(function()
     local RENAME_PAIRS = {
-        { "Broom", "SwagWalk" },
+        { "Broom", "Apose" },
         { "RockinStride", "Stride" },
         { "SnowmobileCruise", "BumperKart" }, 
-        { "ZombieStride", "SlavicDance" }, 
+        { "ZombieStride", "SwagWalk" }, 
     }
 
     repeat task.wait() until game:IsLoaded()
