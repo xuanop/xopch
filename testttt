@@ -1907,6 +1907,10 @@ local function createRenamerWindow()
             Cosmetics = ITEMS_FOLDER and ITEMS_FOLDER:FindFirstChild("Cosmetics")
         }
 
+        -- 先声明列表变量（重要！）
+        local leftList = nil
+        local rightList = nil
+
         local function createDropdown(parent, posY, defaultText)
             local btn = Instance.new("TextButton", main)
             btn.Size = UDim2.new(0.44, 0, 0, 45)
@@ -1934,10 +1938,10 @@ local function createRenamerWindow()
 
             btn.MouseButton1Click:Connect(function()
                 listFrame.Visible = not listFrame.Visible
-                if parent == "left" then
-                    if rightList then rightList.Visible = false end
-                else
-                    if leftList then leftList.Visible = false end
+                if parent == "left" and rightList then
+                    rightList.Visible = false
+               elseif parent == "right" and leftList then
+                    leftList.Visible = false
                 end
             end)
 
