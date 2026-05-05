@@ -1835,7 +1835,7 @@ function toggleAutoRescue()
     refreshPanelButtons()
 end
 
--- ==================== 自定义重命名器 ====================
+-- ==================== 自定义重命名器 (Bug 修复版，UI 不变) ====================
 local function createRenamerWindow()
     safeCall(function()
         if renamerWindowActive and renamerGui and renamerGui.Parent then
@@ -1907,7 +1907,7 @@ local function createRenamerWindow()
             Cosmetics = ITEMS_FOLDER and ITEMS_FOLDER:FindFirstChild("Cosmetics")
         }
 
-        -- 先声明列表变量（重要！）
+        -- ★ 提前声明 leftList / rightList，避免 createDropdown 内引用时尚未赋值
         local leftList = nil
         local rightList = nil
 
@@ -1938,16 +1938,18 @@ local function createRenamerWindow()
 
             btn.MouseButton1Click:Connect(function()
                 listFrame.Visible = not listFrame.Visible
-                if parent == "left" and rightList then
-                    rightList.Visible = false
-               elseif parent == "right" and leftList then
-                    leftList.Visible = false
+                -- 互斥：关闭对侧列表（此时 leftList/rightList 已被赋值）
+                if parent == "left" then
+                    if rightList then rightList.Visible = false end
+                else
+                    if leftList then leftList.Visible = false end
                 end
             end)
 
             return btn, listFrame
         end
 
+        -- ★ 赋值时去掉 local（使用外部已声明的变量）
         local leftBtn, leftList = createDropdown("left", 0.28, "选择目标")
         local rightBtn, rightList = createDropdown("right", 0.28, "选择新名称")
 
