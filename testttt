@@ -2666,6 +2666,7 @@ task.spawn(function()
         { "Broom", "SwagWalk" },
         { "RockinStride", "Stride" },
         { "SnowmobileCruise", "BumperKart" }, 
+        { "ZombieStride", "Moonwalk" }, 
     }
 
     repeat task.wait() until game:IsLoaded()
