@@ -2132,34 +2132,91 @@ local function createRenamerWindow()
         cosmeticTab.MouseButton1Click:Connect(function() switchTab("Cosmetics") end)
 
         applyBtn.MouseButton1Click:Connect(function()
-            if not targetItem then
-                statusLabel.Text = "请选择目标物品!"
-                statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
-                return
-            end
-            if not sourceName then
-                statusLabel.Text = "请选择新名称!"
-                statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
-                return
+    if not targetItem then
+        statusLabel.Text = "请选择目标物品!"
+        statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
+        return
+    end
+    if not sourceName then
+        statusLabel.Text = "请选择新名称!"
+        statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
+        return
+    end
+
+    local oldName = targetItem.Name
+    local folder = targetItem.Parent
+    local newName = sourceName
+
+    -- 核心 dupe：克隆备份，再将原对象改名
+    local function dupRename(folder, old, new)
+        local item = folder:FindFirstChild(old)
+        if not item then return nil end
+        print("[Renamer] CLONE BACKUP: " .. old)
+        local backup = item:Clone()
+        backup.Parent = folder
+        item.Name = new
+        return item
+    end
+
+    local success, err = pcall(function()
+        local newItem = dupRename(folder, oldName, newName)
+        if not newItem then error("找不到原物品") end
+
+        -- 通用清理：删除可能干扰的旧模块
+        local moduleToRemove = newItem:FindFirstChild("EmoteModuleClassic")
+        if moduleToRemove then
+            moduleToRemove:Destroy()
+            print("[Renamer] 已删除 EmoteModuleClassic")
+        end
+
+        -- 特殊同步：如果物品包含经典多动画，则启动实时同步
+        local animOptions = newItem:FindFirstChild("PossibleOptionsClassic")
+        if animOptions then
+            local animContainer = newItem:FindFirstChild("AnimationClassic")
+            if not animContainer then
+                animContainer = Instance.new("Animation")
+                animContainer.Name = "AnimationClassic"
+                animContainer.Parent = newItem
             end
 
-            local success, err = pcall(function()
-                targetItem.Name = sourceName
-            end)
-
-            if success then
-                statusLabel.Text = "✅ 改名成功!"
-                statusLabel.TextColor3 = Color3.new(0.3, 1, 0.3)
-                refreshLists()
-                leftBtn.Text = sourceName
-                updatePreview()
-            else
-                statusLabel.Text = "❌ 改名失败 (权限不足)"
-                statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
-                warn("[Renamer]", err)
+            local anims = {}
+            for _, key in ipairs({"A", "B", "C"}) do
+                local opt = animOptions:FindFirstChild(key)
+                local anim = opt and opt:FindFirstChildOfClass("Animation")
+                if anim then
+                    table.insert(anims, anim.AnimationId)
+                end
             end
-        end)
 
+            if #anims > 0 then
+                task.spawn(function()
+                    local interval = 2
+                    while newItem.Parent do
+                        local totalTime = workspace:GetServerTimeNow()
+                        local index = (math.floor(totalTime / interval) % #anims) + 1
+                        if animContainer.AnimationId ~= anims[index] then
+                            animContainer.AnimationId = anims[index]
+                        end
+                        task.wait(0)
+                    end
+                end)
+                print("[Renamer] 已启动动画同步循环")
+            end
+        end
+    end)
+
+    if success then
+        statusLabel.Text = "✅ 改名成功!"
+        statusLabel.TextColor3 = Color3.new(0.3, 1, 0.3)
+        refreshLists()
+        leftBtn.Text = sourceName
+        updatePreview()
+    else
+        statusLabel.Text = "❌ 改名失败"
+        statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
+        warn("[Renamer] 错误: " .. tostring(err))
+    end
+end)
         switchTab("Emotes")
         renamerWindowActive = true
         renamerGui = sg
