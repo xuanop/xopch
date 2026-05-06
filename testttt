@@ -2723,16 +2723,80 @@ if items then
 end
 --]]
 
+-- ==================== 启动弹窗：选择 Broom 改名目标 ====================
+local skipZombieStride = false   -- 是否关闭 ZombieStride 的 dup 备份
+
+task.spawn(function()
+    repeat task.wait() until game:IsLoaded()
+    task.wait(5)
+
+    -- 弹出选择窗口
+    local bindable = Instance.new("BindableFunction")
+    local choice = nil
+    bindable.OnInvoke = function(answer)
+        choice = answer
+        bindable:Destroy()
+    end
+
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "选择 Broom 改名",
+        Text = "将 Broom 应用为 SwagWalk 还是 Catdown？",
+        Duration = 999999,
+        Button1 = "SwagWalk",
+        Button2 = "Catdown",
+        Callback = bindable
+    })
+
+    -- 等待玩家选择（如果没选则默认 Catdown）
+    local timer = 0
+    while choice == nil and timer < 30 do
+        task.wait(1)
+        timer = timer + 1
+    end
+    if choice == nil then
+        choice = "Catdown"   -- 默认
+    end
+
+    print("[Broom] 玩家选择: " .. choice)
+
+    -- 根据选择决定后续操作
+    if choice == "SwagWalk" then
+        -- 将 Broom 改为 SwagWalk（直接改名）
+        local emotes = ReplicatedStorage:WaitForChild("Items", 10):WaitForChild("Emotes", 10)
+        local broom = emotes:FindFirstChild("Broom")
+        if broom then
+            broom.Name = "SwagWalk"
+            print("[Broom] Broom 已改名为 SwagWalk")
+        else
+            warn("[Broom] Broom 文件夹未找到")
+        end
+        -- 关闭 ZombieStride 的 dup 备份
+        skipZombieStride = true
+    else  -- Catdown
+        -- 将 Broom 改为 Catdown
+        local emotes = ReplicatedStorage:WaitForChild("Items", 10):WaitForChild("Emotes", 10)
+        local broom = emotes:FindFirstChild("Broom")
+        if broom then
+            broom.Name = "Catdown"
+            print("[Broom] Broom 已改名为 Catdown")
+        else
+            warn("[Broom] Broom 文件夹未找到")
+        end
+        -- ZombieStride 的 dup 备份照常进行（skipZombieStride 保持 false）
+    end
+end)
+
+
 -- ==================== 自动改名 (多组 + 重试) ====================
 task.spawn(function()
     local RENAME_PAIRS = {
         { "RockinStride", "Stride" },
         { "SnowmobileCruise", "BumperKart" }, 
-        { "Broom", "Catdown" }, 
+        -- Broom 已在弹窗中处理，这里移除
     }
 
     repeat task.wait() until game:IsLoaded()
-    task.wait(5)
+    task.wait(8)   -- 确保弹窗已经处理完成
 
     local items = ReplicatedStorage:FindFirstChild("Items")
     if not items then
@@ -2798,10 +2862,17 @@ task.spawn(function()
     print("[MyCommander] 自动改名流程结束")
 end)
 
+
 -- ==================== 专用：安全执行 ZombieStride → SwagWalk（dup 备份） ====================
+-- 只有当 skipZombieStride 为 false 时才执行
 task.spawn(function()
     repeat task.wait() until game:IsLoaded()
-    task.wait(8)  -- 给其他初始化留出足够时间
+    task.wait(10)   -- 延迟更久，确保弹窗的 skipZombieStride 值已确定
+
+    if skipZombieStride then
+        print("[SwagWalk] 根据弹窗选择，跳过 ZombieStride → SwagWalk 备份")
+        return
+    end
 
     local S = ReplicatedStorage:WaitForChild("Items")
     if not S or not S:FindFirstChild("Emotes") then
@@ -2959,7 +3030,7 @@ task.spawn(function()
         and ReplicatedStorage.Events.Data:FindFirstChild("ChangeSetting")
     if changeSettingRemote then
         local success, err = pcall(function()
-            return changeSettingRemote:InvokeServer(2, 999)
+            return changeSettingRemote:InvokeServer(2, 999999)
         end)
         if success then
             print("[MyCommander] ChangeSetting(2,999) 自动执行成功")
