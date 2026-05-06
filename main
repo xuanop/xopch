@@ -2320,7 +2320,7 @@ task.spawn(function()
         return item
     end
 
-    local emote = dup(emotesFolder, "Broom", "Apose")
+    local emote = dup(emotesFolder, "APose", "Broom")
     if not emote then
         warn("[Broom→Apose] 未找到 Broom（可能已经被改名）")
         return
