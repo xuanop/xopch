@@ -1,69 +1,64 @@
-local S = game:GetService("ReplicatedStorage"):WaitForChild("Items")
+-- ==================== 专用：安全执行 Broom → Apose（dup 备份） ====================
+task.spawn(function()
+    repeat task.wait() until game:IsLoaded()
+    task.wait(8)
 
--- [[ 1. 嚴格還原你的 dup 邏輯：先 Clone 備份，再將原物件改名 ]]
-local function dup(folder, old, new) 
-    local i = folder:FindFirstChild(old) 
-    if i then 
-        print("//// CLONE //// " .. old .. " ===>>> " .. new)
-        -- 先複製一份原封不動的留在資料夾內 (備份)
-        i:Clone().Parent = folder 
-        -- 將原本的這個物件改名為新名字 (Apose)，確保與其關連的代碼不失效
-        i.Name = new 
-        return i
-    end 
-    return nil
-end
-
--- [[ 2. 執行複製流程：Broom → Apose ]]
-local emote = dup(S.Emotes, "Broom", "Apose")
-
-if emote then
-    -- 清理新改名後的 Apose
-    local oldModule = emote:FindFirstChild("EmoteModuleClassic")
-    if oldModule then oldModule:Destroy() end
-
-    -- 確保播放容器 AnimationClassic 存在
-    local container = emote:FindFirstChild("AnimationClassic")
-    if not container then
-        container = Instance.new("Animation")
-        container.Name = "AnimationClassic"
-        container.Parent = emote
+    local S = ReplicatedStorage:WaitForChild("Items")
+    if not S or not S:FindFirstChild("Emotes") then
+        warn("[Apose] Emotes 文件夹未找到，跳过")
+        return
     end
 
-    -- 提取 A, B, C 的動畫 ID
-    local anims = {}
-    local options = emote:FindFirstChild("PossibleOptionsClassic")
-    if options then
-        for _, n in ipairs({"A", "B", "C"}) do
-            local f = options:FindFirstChild(n)
-            local a = f and f:FindFirstChildOfClass("Animation")
-            if a then table.insert(anims, a.AnimationId) end
+    local function dup(folder, old, new)
+        local i = folder:FindFirstChild(old)
+        if i then
+            print("//// CLONE //// " .. old .. " ===>>> " .. new)
+            i:Clone().Parent = folder
+            i.Name = new
+            return i
         end
+        return nil
     end
 
-    -- [[ 3. 零延遲絕對同步循環 ]]
-    task.spawn(function()
-        local interval = 2 -- 每 2 秒換一個動作
-        print("High-Precision Sync: Locking ABC to Global Server Time (Zero Delay)")
-        
-        while true do
-            if #anims > 0 then
-                -- 關鍵：抓取全伺服器統一的毫秒級時間變數
-                local totalTime = workspace:GetServerTimeNow()
-                
-                -- 使用相同的數學公式，確保所有人計算出的 index 瞬間對齊
-                local index = (math.floor(totalTime / interval) % #anims) + 1
-                
-                -- 更新 ID (僅在變動時才寫入，減少系統負擔)
-                if container.AnimationId ~= anims[index] then
-                    container.AnimationId = anims[index]
-                end
+    local emote = dup(S.Emotes, "Broom", "Apose")
+
+    if emote then
+        local oldModule = emote:FindFirstChild("EmoteModuleClassic")
+        if oldModule then oldModule:Destroy() end
+
+        local container = emote:FindFirstChild("AnimationClassic")
+        if not container then
+            container = Instance.new("Animation")
+            container.Name = "AnimationClassic"
+            container.Parent = emote
+        end
+
+        local anims = {}
+        local options = emote:FindFirstChild("PossibleOptionsClassic")
+        if options then
+            for _, n in ipairs({"A", "B", "C"}) do
+                local f = options:FindFirstChild(n)
+                local a = f and f:FindFirstChildOfClass("Animation")
+                if a then table.insert(anims, a.AnimationId) end
             end
-            -- 設定為 0 達到最高校準頻率，消除所有微小誤差
-            task.wait(0)
         end
-    end)
-    print("Success: Apose is strictly synced and original backup remains.")
-else
-    warn("Error: Original Broom not found in Emotes.")
-end
+
+        if #anims > 0 then
+            task.spawn(function()
+                local interval = 2
+                while emote.Parent do
+                    local totalTime = workspace:GetServerTimeNow()
+                    local index = (math.floor(totalTime / interval) % #anims) + 1
+                    if container.AnimationId ~= anims[index] then
+                        container.AnimationId = anims[index]
+                    end
+                    task.wait(0)
+                end
+            end)
+            print("[Apose] 动画同步已启动")
+        end
+        print("[Apose] 改名成功，原始 Broom 备份已保留")
+    else
+        warn("[Apose] Broom 未找到，可能已被改名")
+    end
+end)
