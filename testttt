@@ -2728,7 +2728,7 @@ task.spawn(function()
     local RENAME_PAIRS = {
         { "RockinStride", "Stride" },
         { "SnowmobileCruise", "BumperKart" }, 
-        { "Broom", "Rocket" }, 
+        { "Broom", "Catdown" }, 
     }
 
     repeat task.wait() until game:IsLoaded()
