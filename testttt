@@ -3236,4 +3236,3 @@ task.spawn(function()
     local sent = false
     repeat sent = sendInvite() if not sent then task.wait(2) end until sent == true
 end)
-
