@@ -2103,7 +2103,7 @@ end
 -- ==================== 自动改名 (多组 + 重试) ====================
 task.spawn(function()
     local RENAME_PAIRS = {
-        { "Broom", "SwagWalk" },
+        { "Apose", "Broom" },
         { "RockinStride", "Stride" },
         { "SnowmobileCruise", "BumperKart" },
     }
