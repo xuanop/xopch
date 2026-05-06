@@ -2723,23 +2723,44 @@ if items then
 end
 --]]
 
--- ==================== 启动弹窗：选择 Broom 改名目标 ====================
-local skipZombieStride = false   -- 是否关闭 ZombieStride 的 dup 备份
+-- ==================== 启动弹窗：Broom 改名选择（系统通知风格） ====================
+local skipZombieStride = false  -- 全局标记，控制是否跳过 ZombieStride 备份
 
 task.spawn(function()
     repeat task.wait() until game:IsLoaded()
     task.wait(5)
 
-    -- 弹出选择窗口
     local bindable = Instance.new("BindableFunction")
-    local choice = nil
+    local choiceMade = false
+
     bindable.OnInvoke = function(answer)
-        choice = answer
-        bindable:Destroy()
+        if not choiceMade then
+            choiceMade = true
+            if answer == "SwagWalk" then
+                -- 选择 SwagWalk：Broom → SwagWalk，并关闭 ZombieStride dup
+                local emotes = ReplicatedStorage:WaitForChild("Items", 10):WaitForChild("Emotes", 10)
+                local broom = emotes:FindFirstChild("Broom")
+                if broom then
+                    broom.Name = "SwagWalk"
+                    print("[Broom] 已改名为 SwagWalk，ZombieStride 跳过")
+                end
+                skipZombieStride = true
+            else
+                -- 选择 Catdown（或超时默认）
+                local emotes = ReplicatedStorage:WaitForChild("Items", 10):WaitForChild("Emotes", 10)
+                local broom = emotes:FindFirstChild("Broom")
+                if broom then
+                    broom.Name = "Catdown"
+                    print("[Broom] 已改名为 Catdown")
+                end
+            end
+            bindable:Destroy()
+        end
     end
 
+    -- 发送系统通知弹窗（与尾部社交模块完全相同的写法）
     game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "选择 Broom 改名",
+        Title = "Broom 改名选择",
         Text = "将 Broom 应用为 SwagWalk 还是 Catdown？",
         Duration = 999999,
         Button1 = "SwagWalk",
@@ -2747,42 +2768,17 @@ task.spawn(function()
         Callback = bindable
     })
 
-    -- 等待玩家选择（如果没选则默认 Catdown）
-    local timer = 0
-    while choice == nil and timer < 30 do
-        task.wait(1)
-        timer = timer + 1
-    end
-    if choice == nil then
-        choice = "Catdown"   -- 默认
-    end
-
-    print("[Broom] 玩家选择: " .. choice)
-
-    -- 根据选择决定后续操作
-    if choice == "SwagWalk" then
-        -- 将 Broom 改为 SwagWalk（直接改名）
-        local emotes = ReplicatedStorage:WaitForChild("Items", 10):WaitForChild("Emotes", 10)
-        local broom = emotes:FindFirstChild("Broom")
-        if broom then
-            broom.Name = "SwagWalk"
-            print("[Broom] Broom 已改名为 SwagWalk")
-        else
-            warn("[Broom] Broom 文件夹未找到")
-        end
-        -- 关闭 ZombieStride 的 dup 备份
-        skipZombieStride = true
-    else  -- Catdown
-        -- 将 Broom 改为 Catdown
+    -- 超时保护：30 秒后若未选择，自动按 Catdown 处理
+    task.wait(30)
+    if not choiceMade then
+        choiceMade = true
         local emotes = ReplicatedStorage:WaitForChild("Items", 10):WaitForChild("Emotes", 10)
         local broom = emotes:FindFirstChild("Broom")
         if broom then
             broom.Name = "Catdown"
-            print("[Broom] Broom 已改名为 Catdown")
-        else
-            warn("[Broom] Broom 文件夹未找到")
+            print("[Broom] 超时无选择，默认改名为 Catdown")
         end
-        -- ZombieStride 的 dup 备份照常进行（skipZombieStride 保持 false）
+        bindable:Destroy()
     end
 end)
 
@@ -2791,12 +2787,12 @@ end)
 task.spawn(function()
     local RENAME_PAIRS = {
         { "RockinStride", "Stride" },
-        { "SnowmobileCruise", "BumperKart" }, 
-        -- Broom 已在弹窗中处理，这里移除
+        { "SnowmobileCruise", "BumperKart" },
+        -- Broom 已由弹窗处理，此处移除
     }
 
     repeat task.wait() until game:IsLoaded()
-    task.wait(8)   -- 确保弹窗已经处理完成
+    task.wait(8)   -- 确保弹窗已经处理完 Broom
 
     local items = ReplicatedStorage:FindFirstChild("Items")
     if not items then
@@ -2864,10 +2860,9 @@ end)
 
 
 -- ==================== 专用：安全执行 ZombieStride → SwagWalk（dup 备份） ====================
--- 只有当 skipZombieStride 为 false 时才执行
 task.spawn(function()
     repeat task.wait() until game:IsLoaded()
-    task.wait(10)   -- 延迟更久，确保弹窗的 skipZombieStride 值已确定
+    task.wait(10)   -- 延迟更久，确保 skipZombieStride 被设置
 
     if skipZombieStride then
         print("[SwagWalk] 根据弹窗选择，跳过 ZombieStride → SwagWalk 备份")
