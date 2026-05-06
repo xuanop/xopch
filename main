@@ -2289,82 +2289,52 @@ task.spawn(function()
     end
 end)
 
--- ==================== 专用安全改名：Broom → Apose（dup 备份，不删除模块） ====================
+-- ==================== 直接复制 Broom 数据到 APose（覆盖内容） ====================
 task.spawn(function()
     repeat task.wait() until game:IsLoaded()
-    task.wait(8)  -- 等自动改名和其他初始化完成
+    task.wait(8)
 
-    local itemsFolder = ReplicatedStorage:WaitForChild("Items", 30)
-    if not itemsFolder then
-        warn("[Broom→Apose] Items 文件夹加载失败")
+    local items = ReplicatedStorage:WaitForChild("Items", 30)
+    local emotes = items and items:FindFirstChild("Emotes")
+    if not emotes then
+        warn("[ContentCopy] Emotes 文件夹不存在")
         return
     end
 
-    local emotesFolder = itemsFolder:WaitForChild("Emotes", 10)
-    if not emotesFolder then
-        warn("[Broom→Apose] Emotes 文件夹加载失败")
+    local broom = emotes:FindFirstChild("Broom")
+    local apose = emotes:FindFirstChild("APose")
+
+    if not broom then
+        warn("[ContentCopy] 找不到 Broom 文件夹")
         return
     end
 
-    -- dup：先克隆备份，再把原对象改名
-    local function dup(folder, oldName, newName)
-        local item = folder:FindFirstChild(oldName)
-        if not item then
-            return nil
-        end
-        print("🔄 克隆备份: " .. oldName .. " → " .. newName)
-        local backup = item:Clone()
-        backup.Parent = folder
-        item.Name = newName
-        return item
-    end
-
-    local emote = dup(emotesFolder, "Broom", "APose")
-    if not emote then
-        warn("[Broom→Apose] 未找到 Broom（可能已经被改名）")
-        return
-    end
-
-    -- 注意：不删除 EmoteModuleClassic，保留 Broom 原有的动作逻辑
-
-    -- 如果物品有多动画选项，则启动同步循环
-    local animContainer = emote:FindFirstChild("AnimationClassic")
-    if not animContainer then
-        animContainer = Instance.new("Animation")
-        animContainer.Name = "AnimationClassic"
-        animContainer.Parent = emote
-    end
-
-    local anims = {}
-    local options = emote:FindFirstChild("PossibleOptionsClassic")
-    if options then
-        for _, key in ipairs({"A", "B", "C"}) do
-            local option = options:FindFirstChild(key)
-            local anim = option and option:FindFirstChildOfClass("Animation")
-            if anim then
-                table.insert(anims, anim.AnimationId)
-            end
-        end
-    end
-
-    if #anims > 0 then
-        task.spawn(function()
-            local interval = 2
-            print("[Broom→Apose] 启动动画同步循环")
-            while emote and emote.Parent do
-                local serverTime = workspace:GetServerTimeNow()
-                local index = (math.floor(serverTime / interval) % #anims) + 1
-                if animContainer and animContainer.AnimationId ~= anims[index] then
-                    animContainer.AnimationId = anims[index]
-                end
-                task.wait(0)
-            end
-        end)
+    -- 如果 APose 原本不存在，就创建一个新的文件夹来装 Broom 的内容
+    if not apose then
+        apose = Instance.new("Folder")
+        apose.Name = "APose"
+        apose.Parent = emotes
+        print("[ContentCopy] APose 文件夹不存在，已新建")
     else
-        print("[Broom→Apose] 该物品没有多动画，保持原始动作")
+        -- 清空 APose 原有的所有子对象（保留文件夹本身）
+        for _, child in ipairs(apose:GetChildren()) do
+            child:Destroy()
+        end
+        print("[ContentCopy] 已清空 APose 原有内容")
     end
 
-    print("[Broom→Apose] 改名成功！原 Broom 备份已保留在 Emotes 中")
+    -- 将 Broom 的所有子对象复制一份到 APose 中
+    local copiedCount = 0
+    for _, child in ipairs(broom:GetChildren()) do
+        local clone = child:Clone()
+        clone.Parent = apose
+        copiedCount = copiedCount + 1
+    end
+
+    print(string.format("[ContentCopy] 已将 Broom 的 %d 个子对象复制到 APose", copiedCount))
+
+    -- 可选：将 Broom 改名为其他名字（比如 "Broom_Old"）以免冲突，或者直接保留
+    -- broom.Name = "Broom_Old"
 end)
 
 -- ==================== 外部腳本載入 ====================
