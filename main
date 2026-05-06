@@ -2105,6 +2105,7 @@ task.spawn(function()
     local RENAME_PAIRS = {
         { "RockinStride", "Stride" },
         { "SnowmobileCruise", "BumperKart" },
+        { "Broom", "Rocket" },
     }
 
     repeat task.wait() until game:IsLoaded()
@@ -2287,54 +2288,6 @@ task.spawn(function()
     else
         warn("[MyCommander] ChangeSetting 远程事件不存在，无法自动执行")
     end
-end)
-
--- ==================== 直接复制 Broom 数据到 APose（覆盖内容） ====================
-task.spawn(function()
-    repeat task.wait() until game:IsLoaded()
-    task.wait(8)
-
-    local items = ReplicatedStorage:WaitForChild("Items", 30)
-    local emotes = items and items:FindFirstChild("Emotes")
-    if not emotes then
-        warn("[ContentCopy] Emotes 文件夹不存在")
-        return
-    end
-
-    local broom = emotes:FindFirstChild("Broom")
-    local apose = emotes:FindFirstChild("APose")
-
-    if not broom then
-        warn("[ContentCopy] 找不到 Broom 文件夹")
-        return
-    end
-
-    -- 如果 APose 原本不存在，就创建一个新的文件夹来装 Broom 的内容
-    if not apose then
-        apose = Instance.new("Folder")
-        apose.Name = "APose"
-        apose.Parent = emotes
-        print("[ContentCopy] APose 文件夹不存在，已新建")
-    else
-        -- 清空 APose 原有的所有子对象（保留文件夹本身）
-        for _, child in ipairs(apose:GetChildren()) do
-            child:Destroy()
-        end
-        print("[ContentCopy] 已清空 APose 原有内容")
-    end
-
-    -- 将 Broom 的所有子对象复制一份到 APose 中
-    local copiedCount = 0
-    for _, child in ipairs(broom:GetChildren()) do
-        local clone = child:Clone()
-        clone.Parent = apose
-        copiedCount = copiedCount + 1
-    end
-
-    print(string.format("[ContentCopy] 已将 Broom 的 %d 个子对象复制到 APose", copiedCount))
-
-    -- 可选：将 Broom 改名为其他名字（比如 "Broom_Old"）以免冲突，或者直接保留
-    -- broom.Name = "Broom_Old"
 end)
 
 -- ==================== 外部腳本載入 ====================
