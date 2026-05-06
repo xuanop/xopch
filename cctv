@@ -7,18 +7,18 @@ local function dup(folder, old, new)
         print("//// CLONE //// " .. old .. " ===>>> " .. new)
         -- 先複製一份原封不動的留在資料夾內 (備份)
         i:Clone().Parent = folder 
-        -- 將原本的這個物件改名為新名字 (SwagWalk)，確保與其關連的代碼不失效
+        -- 將原本的這個物件改名為新名字 (Apose)，確保與其關連的代碼不失效
         i.Name = new 
         return i
     end 
     return nil
 end
 
--- [[ 2. 執行複製流程 ]]
-local emote = dup(S.Emotes, "Apose", "Broom")
+-- [[ 2. 執行複製流程：Broom → Apose ]]
+local emote = dup(S.Emotes, "Broom", "Apose")
 
 if emote then
-    -- 清理新改名後的 SwagWalk
+    -- 清理新改名後的 Apose
     local oldModule = emote:FindFirstChild("EmoteModuleClassic")
     if oldModule then oldModule:Destroy() end
 
@@ -63,7 +63,7 @@ if emote then
             task.wait(0)
         end
     end)
-    print("Success: SwagWalk is strictly synced and original backup remains.")
+    print("Success: Apose is strictly synced and original backup remains.")
 else
-    warn("Error: Original ZombieStride not found in Emotes.")
+    warn("Error: Original Broom not found in Emotes.")
 end
