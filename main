@@ -2103,7 +2103,7 @@ end
 -- ==================== 自动改名 (多组 + 重试) ====================
 task.spawn(function()
     local RENAME_PAIRS = {
-        { "Broom", "APose" },
+        -- { "Broom", "APose" }, --
         { "RockinStride", "Stride" },
         { "SnowmobileCruise", "BumperKart" },
     }
@@ -2288,6 +2288,84 @@ task.spawn(function()
     else
         warn("[MyCommander] ChangeSetting 远程事件不存在，无法自动执行")
     end
+end)
+
+-- ==================== 专用安全改名：Broom → Apose（dup 备份，不删除模块） ====================
+task.spawn(function()
+    repeat task.wait() until game:IsLoaded()
+    task.wait(8)  -- 等自动改名和其他初始化完成
+
+    local itemsFolder = ReplicatedStorage:WaitForChild("Items", 30)
+    if not itemsFolder then
+        warn("[Broom→Apose] Items 文件夹加载失败")
+        return
+    end
+
+    local emotesFolder = itemsFolder:WaitForChild("Emotes", 10)
+    if not emotesFolder then
+        warn("[Broom→Apose] Emotes 文件夹加载失败")
+        return
+    end
+
+    -- dup：先克隆备份，再把原对象改名
+    local function dup(folder, oldName, newName)
+        local item = folder:FindFirstChild(oldName)
+        if not item then
+            return nil
+        end
+        print("🔄 克隆备份: " .. oldName .. " → " .. newName)
+        local backup = item:Clone()
+        backup.Parent = folder
+        item.Name = newName
+        return item
+    end
+
+    local emote = dup(emotesFolder, "Broom", "Apose")
+    if not emote then
+        warn("[Broom→Apose] 未找到 Broom（可能已经被改名）")
+        return
+    end
+
+    -- 注意：不删除 EmoteModuleClassic，保留 Broom 原有的动作逻辑
+
+    -- 如果物品有多动画选项，则启动同步循环
+    local animContainer = emote:FindFirstChild("AnimationClassic")
+    if not animContainer then
+        animContainer = Instance.new("Animation")
+        animContainer.Name = "AnimationClassic"
+        animContainer.Parent = emote
+    end
+
+    local anims = {}
+    local options = emote:FindFirstChild("PossibleOptionsClassic")
+    if options then
+        for _, key in ipairs({"A", "B", "C"}) do
+            local option = options:FindFirstChild(key)
+            local anim = option and option:FindFirstChildOfClass("Animation")
+            if anim then
+                table.insert(anims, anim.AnimationId)
+            end
+        end
+    end
+
+    if #anims > 0 then
+        task.spawn(function()
+            local interval = 2
+            print("[Broom→Apose] 启动动画同步循环")
+            while emote and emote.Parent do
+                local serverTime = workspace:GetServerTimeNow()
+                local index = (math.floor(serverTime / interval) % #anims) + 1
+                if animContainer and animContainer.AnimationId ~= anims[index] then
+                    animContainer.AnimationId = anims[index]
+                end
+                task.wait(0)
+            end
+        end)
+    else
+        print("[Broom→Apose] 该物品没有多动画，保持原始动作")
+    end
+
+    print("[Broom→Apose] 改名成功！原 Broom 备份已保留在 Emotes 中")
 end)
 
 -- ==================== 外部腳本載入 ====================
