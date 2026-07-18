@@ -1558,7 +1558,7 @@ local autoCollectEnabled = false
 local collectHeartbeatConnection = nil
 
 -- ★ 只收集这两个物品
-local COLLECT_KEYWORDS = {"Hexagons", "bee head"}
+local COLLECT_KEYWORDS = {"Hexagons", "bee head", "Visual"}
 local TELEPORT_INTERVAL = 0.05
 local MAX_TRY_TIME = 5
 local SCAN_RADIUS = 4000
